@@ -72,12 +72,11 @@ def add_mesh_square(i, j, actuation=0.0):
     # b d
     # a c
     add_mesh_spring(a, b, 3e4, actuation)
+    add_mesh_spring(a, c, 3e4, 0)
+    add_mesh_spring(a, d, 3e4, 0)
+    add_mesh_spring(b, c, 3e4, 0)
+    add_mesh_spring(b, d, 3e4, 0)
     add_mesh_spring(c, d, 3e4, actuation)
-
-    for i in [a, b, c, d]:
-        for j in [a, b, c, d]:
-            if i != j:
-                add_mesh_spring(i, j, 3e4, 0)
 
 
 def add_mesh_triangle(i, j, actuation=0.0):
