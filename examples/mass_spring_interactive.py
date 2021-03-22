@@ -8,7 +8,7 @@ import math
 import numpy as np
 import os
 
-real = ti.f32
+real = ti.f64
 ti.init(default_fp=real)
 
 max_steps = 4096
