@@ -80,7 +80,7 @@ print(spring_omega)
 drag_damping = 0
 dashpot_damping = 0.2
 
-batch_size = 4
+batch_size = 1
 
 def n_input_states():
     return n_sin_waves + 4 * n_objects + 2 * duplicate_v + duplicate_h
@@ -120,83 +120,79 @@ def compute_center(t: ti.i32):
 
 @ti.kernel
 def nn1(t: ti.i32):
-    for k in range(batch_size):
-        for i in range(n_hidden):
-            actuation = 0.0
-            for j in ti.static(range(n_sin_waves)):
-                actuation += weights1[i, j] * ti.sin(spring_omega * t * dt + 2 * math.pi / n_sin_waves * j)
-            for j in ti.static(range(n_objects)):
-                offset = x[t, k, j] - center[t, k]
-                # use a smaller weight since there are too many of them
-                actuation += weights1[i, j * 4 + n_sin_waves] * offset[0] * 0.05
-                actuation += weights1[i, j * 4 + n_sin_waves + 1] * offset[1] * 0.05
-                actuation += weights1[i, j * 4 + n_sin_waves + 2] * v[t, k, j][0] * 0.05
-                actuation += weights1[i, j * 4 + n_sin_waves + 3] * v[t, k, j][1] * 0.05
-            if ti.static(duplicate_v > 0):
-                for j in ti.static(range(duplicate_v)):
-                    actuation += weights1[i, n_objects * 4 + n_sin_waves + j * 2] * target_v[t, k][0]
-                    actuation += weights1[i, n_objects * 4 + n_sin_waves + j * 2 + 1] * target_v[t, k][1]
-            if ti.static(duplicate_h > 0):
-                for j in ti.static(range(duplicate_h)):
-                    actuation += weights1[i, n_objects * 4 + n_sin_waves + duplicate_v * 2 + j] * target_h[t, k]
-            actuation += bias1[i]
-            actuation = ti.tanh(actuation)
-            hidden[t, k, i] = actuation
+    for k, i in ti.ndrange(batch_size, n_hidden):
+        actuation = 0.0
+        for j in ti.static(range(n_sin_waves)):
+            actuation += weights1[i, j] * ti.sin(spring_omega * t * dt + 2 * math.pi / n_sin_waves * j)
+        for j in ti.static(range(n_objects)):
+            offset = x[t, k, j] - center[t, k]
+            # use a smaller weight since there are too many of them
+            actuation += weights1[i, j * 4 + n_sin_waves] * offset[0] * 0.05
+            actuation += weights1[i, j * 4 + n_sin_waves + 1] * offset[1] * 0.05
+            actuation += weights1[i, j * 4 + n_sin_waves + 2] * v[t, k, j][0] * 0.05
+            actuation += weights1[i, j * 4 + n_sin_waves + 3] * v[t, k, j][1] * 0.05
+        if ti.static(duplicate_v > 0):
+            for j in ti.static(range(duplicate_v)):
+                actuation += weights1[i, n_objects * 4 + n_sin_waves + j * 2] * target_v[t, k][0]
+                actuation += weights1[i, n_objects * 4 + n_sin_waves + j * 2 + 1] * target_v[t, k][1]
+        if ti.static(duplicate_h > 0):
+            for j in ti.static(range(duplicate_h)):
+                actuation += weights1[i, n_objects * 4 + n_sin_waves + duplicate_v * 2 + j] * target_h[t, k]
+        actuation += bias1[i]
+        actuation = ti.tanh(actuation)
+        hidden[t, k, i] = actuation
 
 
 @ti.kernel
 def nn2(t: ti.i32):
-    for k in range(batch_size):
-        for i in range(n_springs):
-            actuation = 0.0
-            for j in ti.static(range(n_hidden)):
-                actuation += weights2[i, j] * hidden[t, k, j]
-            actuation += bias2[i]
-            actuation = ti.tanh(actuation)
-            act[t, k, i] = actuation
+    for k, i in ti.ndrange(batch_size, n_springs):
+        actuation = 0.0
+        for j in ti.static(range(n_hidden)):
+            actuation += weights2[i, j] * hidden[t, k, j]
+        actuation += bias2[i]
+        actuation = ti.tanh(actuation)
+        act[t, k, i] = actuation
 
 
 @ti.kernel
 def apply_spring_force(t: ti.i32):
-    for k in range(batch_size):
-        for i in range(n_springs):
-            a = spring_anchor_a[i]
-            b = spring_anchor_b[i]
-            pos_a = x[t, k, a]
-            pos_b = x[t, k, b]
-            dist = pos_a - pos_b
-            length = dist.norm(1e-8) + 1e-4
+    for k, i in ti.ndrange(batch_size, n_springs):
+        a = spring_anchor_a[i]
+        b = spring_anchor_b[i]
+        pos_a = x[t, k, a]
+        pos_b = x[t, k, b]
+        dist = pos_a - pos_b
+        length = dist.norm(1e-8) + 1e-4
 
-            target_length = spring_length[i] * (1.0 + spring_actuation[i] * act[t, k, i])
-            impulse = dt * (length - target_length) * spring_stiffness[i] / length * dist
+        target_length = spring_length[i] * (1.0 + spring_actuation[i] * act[t, k, i])
+        impulse = dt * (length - target_length) * spring_stiffness[i] / length * dist
 
-            # Dashpot damping
-            x_ij = x[t, k, a] - x[t, k, b]
-            d = x_ij.normalized()
-            v_rel = (v[t, k, a] - v[t, k, b]).dot(d)
-            impulse += dashpot_damping * v_rel * d
+        # Dashpot damping
+        x_ij = x[t, k, a] - x[t, k, b]
+        d = x_ij.normalized()
+        v_rel = (v[t, k, a] - v[t, k, b]).dot(d)
+        impulse += dashpot_damping * v_rel * d
 
-            ti.atomic_add(v_inc[t + 1, k, a], -impulse)
-            ti.atomic_add(v_inc[t + 1, k, b], impulse)
+        ti.atomic_add(v_inc[t + 1, k, a], -impulse)
+        ti.atomic_add(v_inc[t + 1, k, b], impulse)
 
 
 @ti.kernel
 def advance_toi(t: ti.i32):
-    for k in range(batch_size):
-        for i in range(n_objects):
-            s = math.exp(-dt * drag_damping)
-            old_v = s * v[t - 1, k, i] + dt * gravity * ti.Vector([0.0, 1.0]) + v_inc[t, k, i]
-            old_x = x[t - 1, k, i]
-            new_x = old_x + dt * old_v
-            toi = 0.0
-            new_v = old_v
-            if new_x[1] < ground_height and old_v[1] < -1e-4:
-                toi = -(old_x[1] - ground_height) / old_v[1]
-                new_v = ti.Vector([0.0, 0.0])
-            new_x = old_x + toi * old_v + (dt - toi) * new_v
+    for k, i in ti.ndrange(batch_size, n_objects):
+        s = math.exp(-dt * drag_damping)
+        old_v = s * v[t - 1, k, i] + dt * gravity * ti.Vector([0.0, 1.0]) + v_inc[t, k, i]
+        old_x = x[t - 1, k, i]
+        new_x = old_x + dt * old_v
+        toi = 0.0
+        new_v = old_v
+        if new_x[1] < ground_height and old_v[1] < -1e-4:
+            toi = -(old_x[1] - ground_height) / old_v[1]
+            new_v = ti.Vector([0.0, 0.0])
+        new_x = old_x + toi * old_v + (dt - toi) * new_v
 
-            v[t, k, i] = new_v
-            x[t, k, i] = new_x
+        v[t, k, i] = new_v
+        x[t, k, i] = new_x
 
 
 @ti.kernel
@@ -328,13 +324,11 @@ forward.cnt = 0
 
 @ti.kernel
 def clear_states():
-    for t in range(0, max_steps):
-        for k in range(batch_size):
-            for i in range(0, n_objects):
-                x.grad[t, k, i] = ti.Vector([0.0, 0.0])
-                v.grad[t, k, i] = ti.Vector([0.0, 0.0])
-                v_inc[t, k, i] = ti.Vector([0.0, 0.0])
-                v_inc.grad[t, k, i] = ti.Vector([0.0, 0.0])
+    for t, k, i in ti.ndrange(max_steps, batch_size, n_objects):
+        x.grad[t, k, i] = ti.Vector([0.0, 0.0])
+        v.grad[t, k, i] = ti.Vector([0.0, 0.0])
+        v_inc[t, k, i] = ti.Vector([0.0, 0.0])
+        v_inc.grad[t, k, i] = ti.Vector([0.0, 0.0])
 
 
 def clear():
