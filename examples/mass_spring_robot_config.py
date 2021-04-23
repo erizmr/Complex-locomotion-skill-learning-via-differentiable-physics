@@ -135,4 +135,45 @@ def robotD():
     return objects, springs
 
 
-robots = [robotA, robotB, robotC, robotD]
+def robotE():
+    add_mesh_square(0, 0, actuation=0.15)
+    add_mesh_square(0, 1, actuation=0.15)
+    add_mesh_square(0, 2, actuation=0.15)
+    add_mesh_square(0, 3, actuation=0.15)
+    add_mesh_square(0, 4, actuation=0.15)
+    add_mesh_square(1, 4, actuation=0.15)
+    add_mesh_square(2, 4, actuation=0.15)
+    add_mesh_square(2, 3, actuation=0.15)
+    add_mesh_square(2, 2, actuation=0.15)
+    add_mesh_square(2, 1, actuation=0.15)
+    add_mesh_square(2, 0, actuation=0.15)
+
+    return objects, springs
+
+
+def robotF():
+    # add_mesh_square(0, 0, actuation=0.15)
+    # add_mesh_square(0, 1, actuation=0.15)
+    # add_mesh_square(0, 2, actuation=0.15)
+    # add_mesh_square(1, 2, actuation=0.15)
+    # add_mesh_square(2, 2, actuation=0.15)
+    # add_mesh_square(3, 0, actuation=0.15)
+    # add_mesh_square(3, 1, actuation=0.15)
+    # add_mesh_square(3, 2, actuation=0.15)
+    # add_mesh_square(4, 2, actuation=0.15)
+    # add_mesh_square(5, 2, actuation=0.15)
+    # add_mesh_square(6, 0, actuation=0.15)
+    # add_mesh_square(6, 1, actuation=0.15)
+    # add_mesh_square(6, 2, actuation=0.15)
+
+    add_mesh_square(0, 0, actuation=0.2)
+    add_mesh_square(0, 1, actuation=0.2)
+    add_mesh_square(1, 1, actuation=0.2)
+    add_mesh_square(2, 1, actuation=0.2)
+    add_mesh_square(3, 0, actuation=0.2)
+    add_mesh_square(3, 1, actuation=0.2)
+
+    return objects, springs
+
+
+robots = [robotA, robotB, robotC, robotD, robotE, robotF ]
