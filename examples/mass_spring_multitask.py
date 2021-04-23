@@ -240,13 +240,9 @@ def forward(output=None, visualize=True):
     pool = [(random.random() - 0.5) * 2 for _ in range(100)]
     for i in range(total_steps):
         if output:
-            # target_v[i][0] = -0.03 if output < 0.04 else 0.03
-            target_v[i][0] = ((i // turn_period) % 2 * 2 - 1) * 0.03
+            target_v[i][0] = ((i // turn_period) % 2 * 2 - 1) * output
         else:
-            # target_v[i][0] = (pool[0] + 1) * 0.05
-            # target_v[i][0] = -0.03 if pool[i // turn_period] < 0 else 0.03
-            target_v[i][0] = -0.03 if pool[0] < 0 else 0.03
-        target_v[i][0] = 0.07
+            target_v[i][0] = pool[i // turn_period] * 0.07
     if output:
         target_h[None] = 0.5
     else:
@@ -258,9 +254,11 @@ def forward(output=None, visualize=True):
         nn2(t - 1)
         apply_spring_force(t - 1)
         advance_toi(t)
-        if duplicate_v > 0 and t - 1 > cycle_period and (t - 1) % cycle_period == 0:
-            loss_cnt += 1.
-            compute_loss(t - 1)
+        if duplicate_v > 0 and t - 1 > cycle_period:
+            if (t - 1) % cycle_period > 0.1 * cycle_period:
+                if (t - 1) % cycle_period < 0.9 * cycle_period:
+                    loss_cnt += 1.
+                    compute_loss(t - 1)
         # if duplicate_h > 0 and t % cycle_period == cycle_period // 2:
         #     compute_loss_h(t - 1)
         # output_target.append(target_v[t][0])
@@ -397,7 +395,7 @@ def optimize(visualize):
     b_1=0.9
     b_2=0.999
 
-    for iter in range(200):
+    for iter in range(2000):
         clear()
 
         import time
