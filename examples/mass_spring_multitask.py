@@ -33,14 +33,23 @@ v_inc = vec()
 head_id = 10
 goal = vec()
 
-n_objects = 0
 # target_ball = 0
 elasticity = 0.0
 ground_height = 0.1
 gravity = -1.8
 friction = 2.5
 
-n_springs = 0
+
+robot_id = 0
+if len(sys.argv) != 2:
+    print("Usage: python3 mass_spring_interactive.py [robot_id=0, 1, 2, ...]")
+    exit(0)
+else:
+    robot_id = int(sys.argv[1])
+objects, springs = robots[robot_id]()
+n_objects = len(objects)
+n_springs = len(springs)
+
 spring_anchor_a = ti.field(ti.i32)
 spring_anchor_b = ti.field(ti.i32)
 spring_length = scalar()
@@ -85,28 +94,25 @@ batch_size = 1
 def n_input_states():
     return n_sin_waves + 4 * n_objects + 2 * duplicate_v + duplicate_h
 
+ti.root.dense(ti.ijk, (max_steps, batch_size, n_objects)).place(x, v, v_inc)
+ti.root.dense(ti.i, n_springs).place(spring_anchor_a, spring_anchor_b,
+                                     spring_length, spring_stiffness,
+                                     spring_actuation)
+ti.root.dense(ti.ij, (n_hidden, n_input_states())).place(weights1)
+ti.root.dense(ti.i, n_hidden).place(bias1)
+ti.root.dense(ti.ij, (n_springs, n_hidden)).place(weights2)
+ti.root.dense(ti.i, n_springs).place(bias2)
 
-@ti.layout
-def place():
-    ti.root.dense(ti.ijk, (max_steps, batch_size, n_objects)).place(x, v, v_inc)
-    ti.root.dense(ti.i, n_springs).place(spring_anchor_a, spring_anchor_b,
-                                         spring_length, spring_stiffness,
-                                         spring_actuation)
-    ti.root.dense(ti.ij, (n_hidden, n_input_states())).place(weights1)
-    ti.root.dense(ti.i, n_hidden).place(bias1)
-    ti.root.dense(ti.ij, (n_springs, n_hidden)).place(weights2)
-    ti.root.dense(ti.i, n_springs).place(bias2)
+ti.root.dense(ti.ij, (n_hidden, n_input_states())).place(m_weights1, v_weights1)
+ti.root.dense(ti.i, n_hidden).place(m_bias1, v_bias1)
+ti.root.dense(ti.ij, (n_springs, n_hidden)).place(m_weights2, v_weights2)
+ti.root.dense(ti.i, n_springs).place(m_bias2, v_bias2)
 
-    ti.root.dense(ti.ij, (n_hidden, n_input_states())).place(m_weights1, v_weights1)
-    ti.root.dense(ti.i, n_hidden).place(m_bias1, v_bias1)
-    ti.root.dense(ti.ij, (n_springs, n_hidden)).place(m_weights2, v_weights2)
-    ti.root.dense(ti.i, n_springs).place(m_bias2, v_bias2)
-
-    ti.root.dense(ti.ijk, (max_steps, batch_size, n_hidden)).place(hidden)
-    ti.root.dense(ti.ijk, (max_steps, batch_size, n_springs)).place(act)
-    ti.root.dense(ti.ij, (max_steps, batch_size)).place(center, target_v, target_h)
-    ti.root.place(loss, goal)
-    ti.root.lazy_grad()
+ti.root.dense(ti.ijk, (max_steps, batch_size, n_hidden)).place(hidden)
+ti.root.dense(ti.ijk, (max_steps, batch_size, n_springs)).place(act)
+ti.root.dense(ti.ij, (max_steps, batch_size)).place(center, target_v, target_h)
+ti.root.place(loss, goal)
+ti.root.lazy_grad()
 
 
 @ti.kernel
@@ -343,11 +349,7 @@ def clear():
     v_bias2.fill(0)
 
 
-def setup_robot(objects, springs):
-    global n_objects, n_springs
-    n_objects = len(objects)
-    n_springs = len(springs)
-
+def setup_robot():
     print('n_objects=', n_objects, '   n_springs=', n_springs)
 
     for k in range(batch_size):
@@ -439,16 +441,8 @@ def optimize(visualize):
     return losses
 
 
-robot_id = 0
-if len(sys.argv) != 2:
-    print("Usage: python3 mass_spring_interactive.py [robot_id=0, 1, 2, ...]")
-    exit(0)
-else:
-    robot_id = int(sys.argv[1])
-
 if __name__ == '__main__':
-    setup_robot(*robots[robot_id]())
-
+    setup_robot()
     optimize(visualize=False)
     clear()
     forward(0.07)
