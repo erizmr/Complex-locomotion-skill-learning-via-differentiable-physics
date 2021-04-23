@@ -56,6 +56,11 @@ weights2 = scalar()
 bias2 = scalar()
 hidden = scalar()
 
+m_weights1, v_weights1 = scalar(), scalar()
+m_bias1, v_bias1 = scalar(), scalar()
+m_weights2, v_weights2 = scalar(), scalar()
+m_bias2, v_bias2 = scalar(), scalar()
+
 center = vec()
 duplicate_v = 1
 duplicate_h = 0
@@ -67,9 +72,7 @@ weight_h = 1.
 act = scalar()
 
 dt = 0.004
-learning_rate = 25
 
-gradient_clip = 1
 cycle_period = 100
 turn_period = 400
 spring_omega = 2 * math.pi / dt / cycle_period
@@ -92,6 +95,12 @@ def place():
     ti.root.dense(ti.i, n_hidden).place(bias1)
     ti.root.dense(ti.ij, (n_springs, n_hidden)).place(weights2)
     ti.root.dense(ti.i, n_springs).place(bias2)
+
+    ti.root.dense(ti.ij, (n_hidden, n_input_states())).place(m_weights1, v_weights1)
+    ti.root.dense(ti.i, n_hidden).place(m_bias1, v_bias1)
+    ti.root.dense(ti.ij, (n_springs, n_hidden)).place(m_weights2, v_weights2)
+    ti.root.dense(ti.i, n_springs).place(m_bias2, v_bias2)
+
     ti.root.dense(ti.ij, (max_steps, n_hidden)).place(hidden)
     ti.root.dense(ti.ij, (max_steps, n_springs)).place(act)
     ti.root.dense(ti.i, max_steps).place(center, target_v)
@@ -340,6 +349,14 @@ def clear_states():
 
 def clear():
     clear_states()
+    m_weights1.fill(0)
+    v_weights1.fill(0)
+    m_bias1.fill(0)
+    v_bias1.fill(0)
+    m_weights2.fill(0)
+    v_weights2.fill(0)
+    m_bias2.fill(0)
+    v_bias2.fill(0)
 
 
 def setup_robot(objects, springs):
@@ -375,6 +392,11 @@ def optimize(visualize):
 
     losses = []
     # forward('initial{}'.format(robot_id), visualize=visualize)
+
+    a = 0.01
+    b_1=0.9
+    b_2=0.999
+
     for iter in range(200):
         clear()
 
@@ -399,18 +421,31 @@ def optimize(visualize):
 
         print("TNS= ", total_norm_sqr)
 
-        # scale = learning_rate * min(1.0, gradient_clip / total_norm_sqr ** 0.5)
-        gradient_clip = 0.1
-        scale = gradient_clip / (total_norm_sqr**0.5 + 1e-6)
         for i in range(n_hidden):
             for j in range(n_input_states()):
-                weights1[i, j] -= scale * weights1.grad[i, j]
-            bias1[i] -= scale * bias1.grad[i]
+                m_weights1[i, j] = b_1 * m_weights1[i, j] + (1 - b_1) * weights1.grad[i, j]
+                v_weights1[i, j] = b_2 * v_weights1[i, j] + (1 - b_2) * weights1.grad[i, j] * weights1.grad[i, j]
+                m_cap = m_weights1[i, j] / (1 - b_1 ** (iter + 1))
+                v_cap = v_weights1[i, j] / (1 - b_2 ** (iter + 1))
+                weights1[i, j] -= (a * m_cap) / (math.sqrt(v_cap) + 1e-8)
+            m_bias1[i] = b_1 * m_bias1[i] + (1 - b_1) * bias1.grad[i]
+            v_bias1[i] = b_2 * v_bias1[i] + (1 - b_2) * bias1.grad[i] * bias1.grad[i]
+            m_cap = m_bias1[i] / (1 - b_1 ** (iter + 1))
+            v_cap = v_bias1[i] / (1 - b_2 ** (iter + 1))
+            bias1[i] -= (a * m_cap) / (math.sqrt(v_cap) + 1e-8)
 
         for i in range(n_springs):
             for j in range(n_hidden):
-                weights2[i, j] -= scale * weights2.grad[i, j]
-            bias2[i] -= scale * bias2.grad[i]
+                m_weights2[i, j] = b_1 * m_weights2[i, j] + (1 - b_1) * weights2.grad[i, j]
+                v_weights2[i, j] = b_2 * v_weights2[i, j] + (1 - b_2) * weights2.grad[i, j] * weights2.grad[i, j]
+                m_cap = m_weights2[i, j] / (1 - b_1 ** (iter + 1))
+                v_cap = v_weights2[i, j] / (1 - b_2 ** (iter + 1))
+                weights2[i, j] -= (a * m_cap) / (math.sqrt(v_cap) + 1e-8)
+            m_bias2[i] = b_1 * m_bias2[i] + (1 - b_1) * bias2.grad[i]
+            v_bias2[i] = b_2 * v_bias2[i] + (1 - b_2) * bias2.grad[i] * bias2.grad[i]
+            m_cap = m_bias2[i] / (1 - b_1 ** (iter + 1))
+            v_cap = v_bias2[i] / (1 - b_2 ** (iter + 1))
+            bias2[i] -= (a * m_cap) / (math.sqrt(v_cap) + 1e-8)
         losses.append(loss[None])
 
         # print(time.time() - t, ' 2')
