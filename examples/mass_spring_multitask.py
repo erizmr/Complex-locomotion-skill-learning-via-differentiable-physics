@@ -39,13 +39,7 @@ ground_height = 0.1
 gravity = -1.8
 friction = 2.5
 
-
-robot_id = 0
-if len(sys.argv) != 2:
-    print("Usage: python3 mass_spring_interactive.py [robot_id=0, 1, 2, ...]")
-    exit(0)
-else:
-    robot_id = int(sys.argv[1])
+robot_id = int(sys.argv[1])
 objects, springs = robots[robot_id]()
 n_objects = len(objects)
 n_springs = len(springs)
@@ -89,7 +83,7 @@ print(spring_omega)
 drag_damping = 0
 dashpot_damping = 0.2
 
-batch_size = 1
+batch_size = int(sys.argv[2])
 
 def n_input_states():
     return n_sin_waves + 4 * n_objects + 2 * duplicate_v + duplicate_h
@@ -213,7 +207,7 @@ def compute_loss_h(t: ti.i32):
     ti.atomic_add(loss[None], 0)
 
 
-gui = ti.GUI("Mass Spring Robot", (512, 512), background_color=0xFFFFFF)
+gui = ti.GUI(show_gui=False)
 
 
 def forward(output=None, visualize=True):
