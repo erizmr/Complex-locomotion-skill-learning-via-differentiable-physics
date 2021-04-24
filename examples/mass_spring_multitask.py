@@ -9,7 +9,7 @@ import numpy as np
 import os
 
 real = ti.f64
-ti.init(default_fp=real)
+ti.init(arch=ti.gpu, default_fp=real)
 
 max_steps = 4096
 vis_interval = 256
@@ -65,8 +65,9 @@ m_weights2, v_weights2 = scalar(), scalar()
 m_bias2, v_bias2 = scalar(), scalar()
 
 center = vec()
-duplicate_v = 1
-duplicate_h = 0
+height = scalar()
+duplicate_v = 0
+duplicate_h = 1
 target_v = vec()
 target_h = scalar()
 weight_v = 1.
@@ -104,7 +105,7 @@ ti.root.dense(ti.i, n_springs).place(m_bias2, v_bias2)
 
 ti.root.dense(ti.ijk, (max_steps, batch_size, n_hidden)).place(hidden)
 ti.root.dense(ti.ijk, (max_steps, batch_size, n_springs)).place(act)
-ti.root.dense(ti.ij, (max_steps, batch_size)).place(center, target_v, target_h)
+ti.root.dense(ti.ij, (max_steps, batch_size)).place(center, target_v, target_h, height)
 ti.root.place(loss, goal)
 ti.root.lazy_grad()
 
@@ -116,6 +117,18 @@ def compute_center(t: ti.i32):
         for i in ti.static(range(n_objects)):
             c += x[t, k, i]
         center[t, k] = (1.0 / n_objects) * c
+
+
+@ti.kernel
+def compute_height(t: ti.i32):
+    for k in range(batch_size):
+        h = 10.
+        for i in ti.static(range(n_objects)):
+            h = ti.min(h, x[t, k, i](1))
+        if t % cycle_period == 0:
+            height[t, k] = h
+        else:
+            height[t, k] = ti.max(height[t - 1, k], h)
 
 
 @ti.kernel
@@ -199,12 +212,14 @@ def advance_toi(t: ti.i32):
 def compute_loss(t: ti.i32, k: ti.i32):
     ti.atomic_add(loss[None], (center[t, k](0) - center[t - cycle_period, k](0) - target_v[t - cycle_period, k](0))**2 / batch_size)
     if k == 0:
-        print("Mark: ", center[t, 0](0) - center[t - cycle_period, 0](0), target_v[t - cycle_period, 0](0))
+        print("Mark run: ", center[t, 0](0) - center[t - cycle_period, 0](0), target_v[t - cycle_period, 0](0))
 
 
 @ti.kernel
-def compute_loss_h(t: ti.i32):
-    ti.atomic_add(loss[None], 0)
+def compute_loss_h(t: ti.i32, k: ti.i32):
+    ti.atomic_add(loss[None], (height[t, k] - target_h[t, k]) ** 2 / batch_size * 30.)
+    if k == 0:
+        print("Mark jump:", height[t, k], target_h[t, k])
 
 
 gui = ti.GUI(show_gui=False)
@@ -236,6 +251,7 @@ def forward(output=None, visualize=True):
     loss_cnt = 0.
     for t in range(1, total_steps):
         compute_center(t - 1)
+        compute_height(t - 1)
         nn1(t - 1)
         nn2(t - 1)
         apply_spring_force(t - 1)
@@ -246,8 +262,10 @@ def forward(output=None, visualize=True):
                     for k in range(batch_size):
                         loss_cnt += 1.
                         compute_loss(t - 1, k)
-        # if duplicate_h > 0 and t % cycle_period == cycle_period // 2:
-        #     compute_loss_h(t - 1)
+        if duplicate_h > 0 and (t - 1) % cycle_period == cycle_period - 1:
+            for k in range(batch_size):
+                loss_cnt += 1.
+                compute_loss_h(t - 1, k)
         # output_target.append(target_v[t][0])
         # output_sim.append(v[t, head_id][0])
         # output_target.append(target_h[None])
@@ -431,6 +449,14 @@ def optimize(visualize):
 
         # print(time.time() - t, ' 2')
 
+        if iter % 200 == 199:
+            clear()
+            forward(0.07)
+            clear()
+            forward(0.03)
+            clear()
+            forward(0.01)
+
     losses = gaussian_filter(losses, 10)
     return losses
 
@@ -438,9 +464,3 @@ def optimize(visualize):
 if __name__ == '__main__':
     setup_robot()
     optimize(visualize=False)
-    clear()
-    forward(0.07)
-    clear()
-    forward(0.03)
-    clear()
-    forward(0.01)
