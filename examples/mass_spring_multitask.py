@@ -15,6 +15,8 @@ max_steps = 4096
 vis_interval = 256
 output_vis_interval = 8
 steps = 2048 // 2
+train_steps = steps
+validate_steps = steps * 2
 output_target = []
 output_sim = []
 output_loss = []
@@ -109,6 +111,8 @@ ti.root.dense(ti.ijk, (max_steps, batch_size, n_springs)).place(act)
 ti.root.dense(ti.ij, (max_steps, batch_size)).place(center, target_v, target_h, height)
 ti.root.place(loss, goal)
 ti.root.lazy_grad()
+
+pool = ti.field(ti.f32, shape = (100 * batch_size))
 
 
 @ti.kernel
@@ -232,6 +236,19 @@ def compute_loss_pose(t: ti.i32, k: ti.i32):
 
 gui = ti.GUI(show_gui=False)
 
+@ti.kernel
+def initialize_validate(total_steps: ti.i32, output_v: ti.f32, output_h: ti.f32):
+    for t, k in ti.ndrange(total_steps, batch_size):
+        target_v[t, k][0] = ((t // turn_period) % 2 * 2 - 1) * output_v
+        target_h[t, k] = output_h
+
+@ti.kernel
+def initialize_train(total_steps: ti.i32):
+    for _ in pool:
+        pool[_] = (ti.random() - 0.5) * 2
+    for t, k in ti.ndrange(total_steps, batch_size):
+        target_v[t, k][0] = pool[t // turn_period + 100 * k] * 0.08
+        target_h[t, k] = ti.random() * 0.25 + 0.1
 
 def forward(output_v=None, output_h=None, visualize=True):
     if random.random() > 0.5:
@@ -246,8 +263,16 @@ def forward(output_v=None, output_h=None, visualize=True):
         output = str(output_v) + "_" + str(output_h)
         os.makedirs('mass_spring/{}/'.format(output), exist_ok=True)
 
-    total_steps = steps if output_v and output_h else steps * 2
+    # total_steps = steps if output_v and output_h else steps * 2
+    total_steps = train_steps if output_v and output_h else validate_steps
 
+    print("# start init!")
+    
+    if output_v and output_h:
+        initialize_validate(total_steps, output_v, output_h)
+    else:
+        initialize_train(total_steps)
+    '''
     # range (-1, 1)
     pool = [(random.random() - 0.5) * 2 for _ in range(100 * batch_size)]
     for t in range(total_steps):
@@ -258,76 +283,81 @@ def forward(output_v=None, output_h=None, visualize=True):
             else:
                 target_v[t, k][0] = pool[t // turn_period + 100 * k] * 0.08
                 target_h[t, k] = random.random() * 0.25 + 0.1
+    '''
+    print("# start simulate!")
     loss_cnt = 0.
-    for t in range(1, total_steps):
-        compute_center(t - 1)
-        compute_height(t - 1)
-        nn1(t - 1)
-        nn2(t - 1)
-        apply_spring_force(t - 1)
-        advance_toi(t)
-        if duplicate_v > 0 and t - 1 > run_period:
-            if (t - 1) % run_period > 0.1 * run_period:
-                if (t - 1) % run_period < 0.9 * run_period:
-                    for k in range(batch_size):
-                        loss_cnt += 1.
-                        compute_loss(t - 1, k)
-        if duplicate_h > 0 and (t - 1) % jump_period == jump_period - 1:
-            for k in range(batch_size):
-                loss_cnt += 1.
-                compute_loss_h(t - 1, k)
-                # compute_loss_pose(t - 1, k)
-        # output_target.append(target_v[t][0])
-        # output_sim.append(v[t, head_id][0])
-        # output_target.append(target_h[None])
-        # output_sim.append(x[t, head_id][1])
+    with ti.Tape(loss):
+        for t in range(1, total_steps):
+            compute_center(t - 1)
+            compute_height(t - 1)
+            nn1(t - 1)
+            nn2(t - 1)
+            apply_spring_force(t - 1)
+            advance_toi(t)
+            if duplicate_v > 0 and t - 1 > run_period:
+                if (t - 1) % run_period > 0.1 * run_period:
+                    if (t - 1) % run_period < 0.9 * run_period:
+                        for k in range(batch_size):
+                            loss_cnt += 1.
+                            compute_loss(t - 1, k)
+            if duplicate_h > 0 and (t - 1) % jump_period == jump_period - 1:
+                for k in range(batch_size):
+                    loss_cnt += 1.
+                    compute_loss_h(t - 1, k)
+                    # compute_loss_pose(t - 1, k)
+            # output_target.append(target_v[t][0])
+            # output_sim.append(v[t, head_id][0])
+            # output_target.append(target_h[None])
+            # output_sim.append(x[t, head_id][1])
 
-        if (t + 1) % interval == 0 and visualize:
-            gui.clear()
-            gui.line((0, ground_height), (1, ground_height),
-                     color=0x0,
-                     radius=3)
+            if (t + 1) % interval == 0 and visualize:
+                gui.clear()
+                gui.line((0, ground_height), (1, ground_height),
+                        color=0x0,
+                        radius=3)
 
-            def circle(x, y, color):
-                gui.circle((x, y), ti.rgb_to_hex(color), 7)
+                def circle(x, y, color):
+                    gui.circle((x, y), ti.rgb_to_hex(color), 7)
 
-            for i in range(n_springs):
+                for i in range(n_springs):
 
-                def get_pt(x):
-                    return (x[0], x[1])
+                    def get_pt(x):
+                        return (x[0], x[1])
 
-                a = act[t - 1, 0, i] * 0.5
-                r = 2
-                if spring_actuation[i] == 0:
-                    a = 0
-                    c = 0x222222
+                    a = act[t - 1, 0, i] * 0.5
+                    r = 2
+                    if spring_actuation[i] == 0:
+                        a = 0
+                        c = 0x222222
+                    else:
+                        r = 4
+                        c = ti.rgb_to_hex((0.5 + a, 0.5 - abs(a), 0.5 - a))
+                    gui.line(get_pt(x[t, 0, spring_anchor_a[i]]),
+                            get_pt(x[t, 0, spring_anchor_b[i]]),
+                            color=c,
+                            radius=r)
+
+                for i in range(n_objects):
+                    color = (0.4, 0.6, 0.6)
+                    if i == head_id:
+                        color = (0.8, 0.2, 0.3)
+                    circle(x[t, 0, i][0], x[t, 0, i][1], color)
+                # circle(goal[None][0], goal[None][1], (0.6, 0.2, 0.2))
+
+                if target_v[t, 0][0] > 0:
+                    circle(0.5, 0.5, (1, 0, 0))
+                    circle(0.6, 0.5, (1, 0, 0))
                 else:
-                    r = 4
-                    c = ti.rgb_to_hex((0.5 + a, 0.5 - abs(a), 0.5 - a))
-                gui.line(get_pt(x[t, 0, spring_anchor_a[i]]),
-                         get_pt(x[t, 0, spring_anchor_b[i]]),
-                         color=c,
-                         radius=r)
+                    circle(0.5, 0.5, (0, 0, 1))
+                    circle(0.4, 0.5, (0, 0, 1))
 
-            for i in range(n_objects):
-                color = (0.4, 0.6, 0.6)
-                if i == head_id:
-                    color = (0.8, 0.2, 0.3)
-                circle(x[t, 0, i][0], x[t, 0, i][1], color)
-            # circle(goal[None][0], goal[None][1], (0.6, 0.2, 0.2))
-
-            if target_v[t, 0][0] > 0:
-                circle(0.5, 0.5, (1, 0, 0))
-                circle(0.6, 0.5, (1, 0, 0))
-            else:
-                circle(0.5, 0.5, (0, 0, 1))
-                circle(0.4, 0.5, (0, 0, 1))
-
-            if output_v and output_h:
-                output = str(output_v) + "_" + str(output_h)
-                gui.show('mass_spring/{}/{:04d}.png'.format(output, t))
-            else:
-                gui.show()
+                if output_v and output_h:
+                    output = str(output_v) + "_" + str(output_h)
+                    gui.show('mass_spring/{}/{:04d}.png'.format(output, t))
+                else:
+                    gui.show()
+        print("# start backward!")
+    print("# end backward!")
     # print("Speed= ", math.sqrt(loss[None] / loss_cnt))
 
     if output_v is None and output_h is None:
@@ -409,12 +439,12 @@ def optimize(visualize):
     b_2=0.999
 
     for iter in range(1000):
+        print("-------------------- iter{} --------------------".format(iter))
         clear()
 
         import time
         t = time.time()
-        with ti.Tape(loss):
-            forward(visualize=iter % 10 == 0)
+        forward(visualize=iter % 10 == 0)
         # print(time.time() - t, ' 1')
 
         print('Iter=', iter, 'Loss=', loss[None])
