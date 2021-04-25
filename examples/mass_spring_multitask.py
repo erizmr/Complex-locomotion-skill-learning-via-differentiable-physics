@@ -66,7 +66,7 @@ m_bias2, v_bias2 = scalar(), scalar()
 
 center = vec()
 height = scalar()
-duplicate_v = 0
+duplicate_v = 30
 duplicate_h = 1
 target_v = vec()
 target_h = scalar()
@@ -77,9 +77,10 @@ act = scalar()
 
 dt = 0.004
 
-cycle_period = 100
+run_period = 100
+jump_period = 400
 turn_period = 400
-spring_omega = 2 * math.pi / dt / cycle_period
+spring_omega = 2 * math.pi / dt / jump_period
 print(spring_omega)
 drag_damping = 0
 dashpot_damping = 0.2
@@ -125,7 +126,7 @@ def compute_height(t: ti.i32):
         h = 10.
         for i in ti.static(range(n_objects)):
             h = ti.min(h, x[t, k, i](1))
-        if t % cycle_period == 0:
+        if t % jump_period == 0:
             height[t, k] = h
         else:
             height[t, k] = ti.max(height[t - 1, k], h)
@@ -210,22 +211,29 @@ def advance_toi(t: ti.i32):
 
 @ti.kernel
 def compute_loss(t: ti.i32, k: ti.i32):
-    ti.atomic_add(loss[None], (center[t, k](0) - center[t - cycle_period, k](0) - target_v[t - cycle_period, k](0))**2 / batch_size)
-    if k == 0:
-        print("Mark run: ", center[t, 0](0) - center[t - cycle_period, 0](0), target_v[t - cycle_period, 0](0))
+    ti.atomic_add(loss[None], (center[t, k](0) - center[t - run_period, k](0) - target_v[t - run_period, k](0))**2 / batch_size / 6)
+    # if k == 0:
+    #     print("Mark run: ", center[t, 0](0) - center[t - run_period, 0](0), target_v[t - run_period, 0](0))
 
 
 @ti.kernel
 def compute_loss_h(t: ti.i32, k: ti.i32):
-    ti.atomic_add(loss[None], (height[t, k] - target_h[t, k]) ** 2 / batch_size * 30.)
-    if k == 0:
-        print("Mark jump:", height[t, k], target_h[t, k])
+    ti.atomic_add(loss[None], (height[t, k] - target_h[t, k]) ** 2 / batch_size * 5.)
+    # if k == 0:
+    #     print("Mark jump:", height[t, k], target_h[t, k])
+
+
+@ti.kernel
+def compute_loss_pose(t: ti.i32, k: ti.i32):
+    for i in range(n_objects):
+        ti.atomic_add(loss[None], (x[t, k, i](0) - center[t, k](0) - x[0, k, i](0) + center[0, k](0)) ** 2)
+        ti.atomic_add(loss[None], (x[t, k, i](1) - center[t, k](1) - x[0, k, i](1) + center[0, k](1)) ** 2)
 
 
 gui = ti.GUI(show_gui=False)
 
 
-def forward(output=None, visualize=True):
+def forward(output_v=None, output_h=None, visualize=True):
     if random.random() > 0.5:
         goal[None] = [0.9, 0.2]
     else:
@@ -233,21 +241,23 @@ def forward(output=None, visualize=True):
     goal[None] = [0.9, 0.2]
 
     interval = vis_interval
-    if output:
+    if output_v and output_h:
         interval = output_vis_interval
+        output = str(output_v) + "_" + str(output_h)
         os.makedirs('mass_spring/{}/'.format(output), exist_ok=True)
 
-    total_steps = steps if not output else steps * 2
+    total_steps = steps if output_v and output_h else steps * 2
 
     # range (-1, 1)
     pool = [(random.random() - 0.5) * 2 for _ in range(100 * batch_size)]
     for t in range(total_steps):
         for k in range(batch_size):
-            if output:
-                target_v[t, k][0] = ((t // turn_period) % 2 * 2 - 1) * output
+            if output_v and output_h:
+                target_v[t, k][0] = ((t // turn_period) % 2 * 2 - 1) * output_v
+                target_h[t, k] = output_h
             else:
-                target_v[t, k][0] = pool[t // turn_period + 100 * k] * 0.07
-            target_h[t, k] = 0.5
+                target_v[t, k][0] = pool[t // turn_period + 100 * k] * 0.08
+                target_h[t, k] = random.random() * 0.25 + 0.1
     loss_cnt = 0.
     for t in range(1, total_steps):
         compute_center(t - 1)
@@ -256,16 +266,17 @@ def forward(output=None, visualize=True):
         nn2(t - 1)
         apply_spring_force(t - 1)
         advance_toi(t)
-        if duplicate_v > 0 and t - 1 > cycle_period:
-            if (t - 1) % cycle_period > 0.1 * cycle_period:
-                if (t - 1) % cycle_period < 0.9 * cycle_period:
+        if duplicate_v > 0 and t - 1 > run_period:
+            if (t - 1) % run_period > 0.1 * run_period:
+                if (t - 1) % run_period < 0.9 * run_period:
                     for k in range(batch_size):
                         loss_cnt += 1.
                         compute_loss(t - 1, k)
-        if duplicate_h > 0 and (t - 1) % cycle_period == cycle_period - 1:
+        if duplicate_h > 0 and (t - 1) % jump_period == jump_period - 1:
             for k in range(batch_size):
                 loss_cnt += 1.
                 compute_loss_h(t - 1, k)
+                # compute_loss_pose(t - 1, k)
         # output_target.append(target_v[t][0])
         # output_sim.append(v[t, head_id][0])
         # output_target.append(target_h[None])
@@ -312,13 +323,14 @@ def forward(output=None, visualize=True):
                 circle(0.5, 0.5, (0, 0, 1))
                 circle(0.4, 0.5, (0, 0, 1))
 
-            if output:
+            if output_v and output_h:
+                output = str(output_v) + "_" + str(output_h)
                 gui.show('mass_spring/{}/{:04d}.png'.format(output, t))
             else:
                 gui.show()
-    print("Speed= ", math.sqrt(loss[None] / loss_cnt))
+    # print("Speed= ", math.sqrt(loss[None] / loss_cnt))
 
-    if output is None:
+    if output_v is None and output_h is None:
         output_loss.append(loss[None])
         fig = plt.figure()
         temp_loss = gaussian_filter(output_loss, 10)
@@ -451,11 +463,23 @@ def optimize(visualize):
 
         if iter % 200 == 199:
             clear()
-            forward(0.07)
+            forward(0.07, 0.1)
             clear()
-            forward(0.03)
+            forward(0.07, 0.2)
             clear()
-            forward(0.01)
+            forward(0.07, 0.3)
+            clear()
+            forward(0.03, 0.1)
+            clear()
+            forward(0.03, 0.2)
+            clear()
+            forward(0.03, 0.3)
+            clear()
+            forward(0.01, 0.1)
+            clear()
+            forward(0.01, 0.2)
+            clear()
+            forward(0.01, 0.3)
 
     losses = gaussian_filter(losses, 10)
     return losses
