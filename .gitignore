@@ -3,4 +3,5 @@
 __pycache__
 plots/
 mass_spring/
-
+*.mp4
+*.gif
