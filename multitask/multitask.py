@@ -59,7 +59,7 @@ n_sin_waves = 10
 weights1 = scalar()
 bias1 = scalar()
 
-n_hidden = 32
+n_hidden = 64
 weights2 = scalar()
 bias2 = scalar()
 hidden = scalar()
@@ -92,8 +92,8 @@ dashpot_damping = 0.2
 
 batch_size = int(sys.argv[2])
 
-weight_decay = 0.01
-learning_rate = 3e-5
+#weight_decay = 0.001
+learning_rate = 0.01
 
 def n_input_states():
     return n_sin_waves + 4 * n_objects + 2 * duplicate_v + duplicate_h
@@ -353,6 +353,7 @@ def forward(train = True, prefix = None):
         nn2(t - 1)
         apply_spring_force(t - 1)
         advance_toi(t)
+    for t in range(1, total_steps):
         if duplicate_v > 0 and t - 1 > run_period:
             for k in range(batch_size):
                 loss_cnt += 1.
