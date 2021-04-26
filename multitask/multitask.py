@@ -85,12 +85,15 @@ dt = 0.004
 run_period = 100
 jump_period = 400
 turn_period = 400
-spring_omega = 2 * math.pi / dt / jump_period
+spring_omega = 2 * math.pi / dt / run_period
 print(spring_omega)
 drag_damping = 0
 dashpot_damping = 0.2
 
 batch_size = int(sys.argv[2])
+
+weight_decay = 0.01
+learning_rate = 3e-5
 
 def n_input_states():
     return n_sin_waves + 4 * n_objects + 2 * duplicate_v + duplicate_h
@@ -218,7 +221,7 @@ def advance_toi(t: ti.i32):
 
 @ti.kernel
 def compute_loss(t: ti.i32, k: ti.i32):
-    ti.atomic_add(loss[None], (center[t, k](0) - center[t - run_period, k](0) - target_v[t - run_period, k](0))**2 / batch_size / 6)
+    ti.atomic_add(loss[None], (center[t, k](0) - center[t - run_period, k](0) - target_v[t - run_period, k](0))**2 / batch_size)
     # if k == 0:
     #     print("Mark run: ", center[t, 0](0) - center[t - run_period, 0](0), target_v[t - run_period, 0](0))
 
@@ -235,6 +238,13 @@ def compute_loss_pose(t: ti.i32, k: ti.i32):
     for i in range(n_objects):
         ti.atomic_add(loss[None], (x[t, k, i](0) - center[t, k](0) - x[0, k, i](0) + center[0, k](0)) ** 2)
         ti.atomic_add(loss[None], (x[t, k, i](1) - center[t, k](1) - x[0, k, i](1) + center[0, k](1)) ** 2)
+
+@ti.kernel
+def compute_weight_decay():
+    for I in ti.grouped(weights1):
+        loss[None] += weight_decay * weights1[I] ** 2
+    for I in ti.grouped(weights2):
+        loss[None] += weight_decay * weights2[I] ** 2
 
 
 gui = ti.GUI(show_gui=False)
@@ -269,91 +279,92 @@ def init(output_v = None, output_h = None, visualize = False):
         initialize_train(total_steps)
 
 @debug
-def forward(train = True, prefix = None, visualize=True):
+def visualizer(train, prefix, visualize = True):
     total_steps = train_steps if train else validate_steps
-
-    loss_cnt = 0.
 
     interval = vis_interval
     if not train:
         interval = output_vis_interval
         os.makedirs('mass_spring/{}/'.format(prefix), exist_ok=True)
 
-    with ti.Tape(loss):
-        for t in range(1, total_steps):
-            compute_center(t - 1)
-            compute_height(t - 1)
-            nn1(t - 1)
-            nn2(t - 1)
-            apply_spring_force(t - 1)
-            advance_toi(t)
-            if duplicate_v > 0 and t - 1 > run_period:
-                if (t - 1) % run_period > 0.1 * run_period:
-                    if (t - 1) % run_period < 0.9 * run_period:
-                        for k in range(batch_size):
-                            loss_cnt += 1.
-                            compute_loss(t - 1, k)
-            if duplicate_h > 0 and (t - 1) % jump_period == jump_period - 1:
-                for k in range(batch_size):
-                    loss_cnt += 1.
-                    compute_loss_h(t - 1, k)
-                    # compute_loss_pose(t - 1, k)
-            # output_target.append(target_v[t][0])
-            # output_sim.append(v[t, head_id][0])
-            # output_target.append(target_h[None])
-            # output_sim.append(x[t, head_id][1])
+    for t in range(1, total_steps):
+        if (t + 1) % interval == 0 and visualize and not train:
+            gui.clear()
+            gui.line((0, ground_height), (1, ground_height),
+                    color=0x0,
+                    radius=3)
 
-            if (t + 1) % interval == 0 and visualize:
-                gui.clear()
-                gui.line((0, ground_height), (1, ground_height),
-                        color=0x0,
-                        radius=3)
+            def circle(x, y, color):
+                gui.circle((x, y), ti.rgb_to_hex(color), 7)
 
-                def circle(x, y, color):
-                    gui.circle((x, y), ti.rgb_to_hex(color), 7)
+            for i in range(n_springs):
 
-                for i in range(n_springs):
+                def get_pt(x):
+                    return (x[0], x[1])
 
-                    def get_pt(x):
-                        return (x[0], x[1])
-
-                    a = act[t - 1, 0, i] * 0.5
-                    r = 2
-                    if spring_actuation[i] == 0:
-                        a = 0
-                        c = 0x222222
-                    else:
-                        r = 4
-                        c = ti.rgb_to_hex((0.5 + a, 0.5 - abs(a), 0.5 - a))
-                    gui.line(get_pt(x[t, 0, spring_anchor_a[i]]),
-                            get_pt(x[t, 0, spring_anchor_b[i]]),
-                            color=c,
-                            radius=r)
-
-                for i in range(n_objects):
-                    color = (0.4, 0.6, 0.6)
-                    if i == head_id:
-                        color = (0.8, 0.2, 0.3)
-                    circle(x[t, 0, i][0], x[t, 0, i][1], color)
-                # circle(goal[None][0], goal[None][1], (0.6, 0.2, 0.2))
-
-                if target_v[t, 0][0] > 0:
-                    circle(0.5, 0.5, (1, 0, 0))
-                    circle(0.6, 0.5, (1, 0, 0))
+                a = act[t - 1, 0, i] * 0.5
+                r = 2
+                if spring_actuation[i] == 0:
+                    a = 0
+                    c = 0x222222
                 else:
-                    circle(0.5, 0.5, (0, 0, 1))
-                    circle(0.4, 0.5, (0, 0, 1))
+                    r = 4
+                    c = ti.rgb_to_hex((0.5 + a, 0.5 - abs(a), 0.5 - a))
+                gui.line(get_pt(x[t, 0, spring_anchor_a[i]]),
+                        get_pt(x[t, 0, spring_anchor_b[i]]),
+                        color=c,
+                        radius=r)
 
-                if not train:
-                    gui.show('mass_spring/{}/{:04d}.png'.format(prefix, t))
-                else:
-                    gui.show()
-    # print("Speed= ", math.sqrt(loss[None] / loss_cnt))
+            for i in range(n_objects):
+                color = (0.4, 0.6, 0.6)
+                if i == head_id:
+                    color = (0.8, 0.2, 0.3)
+                circle(x[t, 0, i][0], x[t, 0, i][1], color)
+            # circle(goal[None][0], goal[None][1], (0.6, 0.2, 0.2))
+
+            if target_v[t, 0][0] > 0:
+                circle(0.5, 0.5, (1, 0, 0))
+                circle(0.6, 0.5, (1, 0, 0))
+            else:
+                circle(0.5, 0.5, (0, 0, 1))
+                circle(0.4, 0.5, (0, 0, 1))
+
+            if not train:
+                gui.show('mass_spring/{}/{:04d}.png'.format(prefix, t))
+            else:
+                gui.show()
 
     if train:
         output_loss.append(loss[None])
         utils.plot_curve(output_loss, "training_curve.png")
         utils.plot_curve(output_loss[-200:], "training_curve_last_200.png")
+
+
+@debug
+def forward(train = True, prefix = None):
+    total_steps = train_steps if train else validate_steps
+
+    loss_cnt = 0.
+
+    for t in range(1, total_steps):
+        compute_center(t - 1)
+        compute_height(t - 1)
+        nn1(t - 1)
+        nn2(t - 1)
+        apply_spring_force(t - 1)
+        advance_toi(t)
+        if duplicate_v > 0 and t - 1 > run_period:
+            for k in range(batch_size):
+                loss_cnt += 1.
+                compute_loss(t - 1, k)
+        if duplicate_h > 0 and (t - 1) % jump_period == jump_period - 1:
+            for k in range(batch_size):
+                loss_cnt += 1.
+                compute_loss_h(t - 1, k)
+                # compute_loss_pose(t - 1, k)
+
+    # print("Speed= ", math.sqrt(loss[None] / loss_cnt))
+    #compute_weight_decay()
 
 
 @ti.kernel
@@ -376,14 +387,21 @@ def clear():
     m_bias2.fill(0)
     v_bias2.fill(0)
 
+@debug
 def simulate(output_v=None, output_h=None, visualize=True):
     clear()
     train = not (output_v and output_h)
     prefix = None
-    if train:
+    if not train:
         prefix = str(output_v) + "_" + str(output_h)
     init(output_v, output_h, visualize)
-    forward(train = train, prefix = prefix, visualize = visualize)
+    if train:
+        with ti.Tape(loss):
+            forward()
+    else:
+        forward(train = train, prefix = prefix)
+    
+    visualizer(train = train, prefix = prefix, visualize = visualize)
 
 simulate.cnt = 0
 
@@ -418,7 +436,7 @@ def optimize(visualize):
     losses = []
     # simulate('initial{}'.format(robot_id), visualize=visualize)
 
-    a = 0.01
+    a = learning_rate
     b_1=0.9
     b_2=0.999
 
