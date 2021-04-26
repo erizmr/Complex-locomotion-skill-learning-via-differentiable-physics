@@ -166,12 +166,12 @@ def robotF():
     # add_mesh_square(6, 1, actuation=0.15)
     # add_mesh_square(6, 2, actuation=0.15)
 
-    add_mesh_square(0, 0, actuation=0.3)
-    add_mesh_square(0, 1, actuation=0.3)
-    add_mesh_square(1, 1, actuation=0.3)
-    add_mesh_square(2, 1, actuation=0.3)
-    add_mesh_square(3, 0, actuation=0.3)
-    add_mesh_square(3, 1, actuation=0.3)
+    add_mesh_square(0, 0, actuation=0.2)
+    add_mesh_square(0, 1, actuation=0.2)
+    add_mesh_square(1, 1, actuation=0.2)
+    add_mesh_square(2, 1, actuation=0.2)
+    add_mesh_square(3, 0, actuation=0.2)
+    add_mesh_square(3, 1, actuation=0.2)
 
     return objects, springs
 

@@ -69,7 +69,7 @@ m_bias2, v_bias2 = scalar(), scalar()
 center = vec()
 height = scalar()
 duplicate_v = 30
-duplicate_h = 1
+duplicate_h = 0
 target_v = vec()
 target_h = scalar()
 weight_v = 1.
@@ -82,7 +82,7 @@ dt = 0.004
 run_period = 100
 jump_period = 400
 turn_period = 400
-spring_omega = 2 * math.pi / dt / jump_period
+spring_omega = 2 * math.pi / dt / run_period
 print(spring_omega)
 drag_damping = 0
 dashpot_damping = 0.2
@@ -215,7 +215,7 @@ def advance_toi(t: ti.i32):
 
 @ti.kernel
 def compute_loss(t: ti.i32, k: ti.i32):
-    ti.atomic_add(loss[None], (center[t, k](0) - center[t - run_period, k](0) - target_v[t - run_period, k](0))**2 / batch_size / 6)
+    ti.atomic_add(loss[None], (center[t, k](0) - center[t - run_period, k](0) - target_v[t - run_period, k](0))**2 / batch_size)
     # if k == 0:
     #     print("Mark run: ", center[t, 0](0) - center[t - run_period, 0](0), target_v[t - run_period, 0](0))
 
@@ -247,7 +247,7 @@ def initialize_train(total_steps: ti.i32):
     for _ in pool:
         pool[_] = (ti.random() - 0.5) * 2
     for t, k in ti.ndrange(total_steps, batch_size):
-        target_v[t, k][0] = pool[t // turn_period + 100 * k] * 0.08
+        target_v[t, k][0] = pool[t // turn_period + 100 * k] * 0.07
         target_h[t, k] = ti.random() * 0.25 + 0.1
 
 def forward(output_v=None, output_h=None, visualize=True):
@@ -264,7 +264,7 @@ def forward(output_v=None, output_h=None, visualize=True):
         os.makedirs('mass_spring/{}/'.format(output), exist_ok=True)
 
     # total_steps = steps if output_v and output_h else steps * 2
-    total_steps = train_steps if output_v and output_h else validate_steps
+    total_steps = validate_steps if output_v and output_h else train_steps
 
     print("# start init!")
     
