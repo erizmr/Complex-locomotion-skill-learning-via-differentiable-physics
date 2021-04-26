@@ -1,12 +1,15 @@
-from mass_spring_robot_config import robots
+from robot_config import robots
+import utils
+
 import random
 import sys
-from scipy.ndimage.filters import gaussian_filter
 import matplotlib.pyplot as plt
 import taichi as ti
 import math
 import numpy as np
 import os
+
+debug = utils.Debug(True)
 
 real = ti.f64
 ti.init(arch=ti.gpu, default_fp=real)
@@ -69,7 +72,7 @@ m_bias2, v_bias2 = scalar(), scalar()
 center = vec()
 height = scalar()
 duplicate_v = 30
-duplicate_h = 1
+duplicate_h = 0
 target_v = vec()
 target_h = scalar()
 weight_v = 1.
@@ -250,42 +253,32 @@ def initialize_train(total_steps: ti.i32):
         target_v[t, k][0] = pool[t // turn_period + 100 * k] * 0.08
         target_h[t, k] = ti.random() * 0.25 + 0.1
 
-def forward(output_v=None, output_h=None, visualize=True):
+@debug
+def init(output_v = None, output_h = None, visualize = False):
     if random.random() > 0.5:
         goal[None] = [0.9, 0.2]
     else:
         goal[None] = [0.1, 0.2]
     goal[None] = [0.9, 0.2]
 
-    interval = vis_interval
-    if output_v and output_h:
-        interval = output_vis_interval
-        output = str(output_v) + "_" + str(output_h)
-        os.makedirs('mass_spring/{}/'.format(output), exist_ok=True)
-
-    # total_steps = steps if output_v and output_h else steps * 2
-    total_steps = train_steps if output_v and output_h else validate_steps
-
-    print("# start init!")
+    total_steps = validate_steps if output_v and output_h else train_steps
     
     if output_v and output_h:
         initialize_validate(total_steps, output_v, output_h)
     else:
         initialize_train(total_steps)
-    '''
-    # range (-1, 1)
-    pool = [(random.random() - 0.5) * 2 for _ in range(100 * batch_size)]
-    for t in range(total_steps):
-        for k in range(batch_size):
-            if output_v and output_h:
-                target_v[t, k][0] = ((t // turn_period) % 2 * 2 - 1) * output_v
-                target_h[t, k] = output_h
-            else:
-                target_v[t, k][0] = pool[t // turn_period + 100 * k] * 0.08
-                target_h[t, k] = random.random() * 0.25 + 0.1
-    '''
-    print("# start simulate!")
+
+@debug
+def forward(train = True, prefix = None, visualize=True):
+    total_steps = train_steps if train else validate_steps
+
     loss_cnt = 0.
+
+    interval = vis_interval
+    if not train:
+        interval = output_vis_interval
+        os.makedirs('mass_spring/{}/'.format(prefix), exist_ok=True)
+
     with ti.Tape(loss):
         for t in range(1, total_steps):
             compute_center(t - 1)
@@ -351,35 +344,16 @@ def forward(output_v=None, output_h=None, visualize=True):
                     circle(0.5, 0.5, (0, 0, 1))
                     circle(0.4, 0.5, (0, 0, 1))
 
-                if output_v and output_h:
-                    output = str(output_v) + "_" + str(output_h)
-                    gui.show('mass_spring/{}/{:04d}.png'.format(output, t))
+                if not train:
+                    gui.show('mass_spring/{}/{:04d}.png'.format(prefix, t))
                 else:
                     gui.show()
-        print("# start backward!")
-    print("# end backward!")
     # print("Speed= ", math.sqrt(loss[None] / loss_cnt))
 
-    if output_v is None and output_h is None:
+    if train:
         output_loss.append(loss[None])
-        fig = plt.figure()
-        temp_loss = gaussian_filter(output_loss, 10)
-        plt.plot(temp_loss)
-        fig.savefig('plots/' + str(forward.cnt) + '.png', dpi=fig.dpi)
-        plt.close(fig)
-
-    # fig = plt.figure()
-    # plt.plot(range(len(output_target)), output_target, 'o', markersize=2, label="target")
-    # plt.plot(range(len(output_sim)), output_sim, 'o', markersize=2, label="train")
-    # output_target.clear()
-    # output_sim.clear()
-    # plt.legend()
-    # forward.cnt += 1
-    # fig.savefig('plots/' + str(forward.cnt) + '.png', dpi=fig.dpi)
-    # plt.close(fig)
-
-
-forward.cnt = 0
+        utils.plot_curve(output_loss, "training_curve.png")
+        utils.plot_curve(output_loss[-200:], "training_curve_last_200.png")
 
 
 @ti.kernel
@@ -402,6 +376,17 @@ def clear():
     m_bias2.fill(0)
     v_bias2.fill(0)
 
+def simulate(output_v=None, output_h=None, visualize=True):
+    clear()
+    train = not (output_v and output_h)
+    prefix = None
+    if train:
+        prefix = str(output_v) + "_" + str(output_h)
+    init(output_v, output_h, visualize)
+    forward(train = train, prefix = prefix, visualize = visualize)
+
+simulate.cnt = 0
+
 
 def setup_robot():
     print('n_objects=', n_objects, '   n_springs=', n_springs)
@@ -418,7 +403,6 @@ def setup_robot():
         spring_stiffness[i] = s[3] / 10
         spring_actuation[i] = s[4]
 
-
 def optimize(visualize):
     for i in range(n_hidden):
         for j in range(n_input_states()):
@@ -432,20 +416,16 @@ def optimize(visualize):
                 2 / (n_hidden + n_springs)) * 3
 
     losses = []
-    # forward('initial{}'.format(robot_id), visualize=visualize)
+    # simulate('initial{}'.format(robot_id), visualize=visualize)
 
     a = 0.01
     b_1=0.9
     b_2=0.999
 
     for iter in range(1000):
-        print("-------------------- iter{} --------------------".format(iter))
-        clear()
+        print("-------------------- iter #{} --------------------".format(iter))
 
-        import time
-        t = time.time()
-        forward(visualize=iter % 10 == 0)
-        # print(time.time() - t, ' 1')
+        simulate(visualize=iter % 10 == 0)
 
         print('Iter=', iter, 'Loss=', loss[None])
 
@@ -492,26 +472,16 @@ def optimize(visualize):
         # print(time.time() - t, ' 2')
 
         if iter % 200 == 199:
-            clear()
-            forward(0.07, 0.1)
-            clear()
-            forward(0.07, 0.2)
-            clear()
-            forward(0.07, 0.3)
-            clear()
-            forward(0.03, 0.1)
-            clear()
-            forward(0.03, 0.2)
-            clear()
-            forward(0.03, 0.3)
-            clear()
-            forward(0.01, 0.1)
-            clear()
-            forward(0.01, 0.2)
-            clear()
-            forward(0.01, 0.3)
+            simulate(0.07, 0.1)
+            simulate(0.07, 0.2)
+            simulate(0.07, 0.3)
+            simulate(0.03, 0.1)
+            simulate(0.03, 0.2)
+            simulate(0.03, 0.3)
+            simulate(0.01, 0.1)
+            simulate(0.01, 0.2)
+            simulate(0.01, 0.3)
 
-    losses = gaussian_filter(losses, 10)
     return losses
 
 
