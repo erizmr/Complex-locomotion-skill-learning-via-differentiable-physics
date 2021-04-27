@@ -472,6 +472,8 @@ def optimize():
     # simulate('initial{}'.format(robot_id), visualize=visualize)
     best = 1e+15
 
+    os.makedirs("weights", exist_ok=True)
+
     for iter in range(10000):
         print("-------------------- iter #{} --------------------".format(iter))
 
