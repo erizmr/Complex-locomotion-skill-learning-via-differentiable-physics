@@ -224,22 +224,24 @@ def advance_toi(t: ti.i32):
 
 
 @ti.kernel
-def compute_loss(t: ti.i32, k: ti.i32):
-    ti.atomic_add(loss[None], (center[t, k](0) - center[t - run_period, k](0) - target_v[t - run_period, k](0))**2 / batch_size)
+def compute_loss(t: ti.i32):
+    for k in range(batch_size):
+        loss[None] += (center[t, k](0) - center[t - run_period, k](0) - target_v[t - run_period, k](0))**2 / batch_size
     # if k == 0:
     #     print("Mark run: ", center[t, 0](0) - center[t - run_period, 0](0), target_v[t - run_period, 0](0))
 
 
 @ti.kernel
-def compute_loss_h(t: ti.i32, k: ti.i32):
-    ti.atomic_add(loss[None], (height[t, k] - target_h[t, k]) ** 2 / batch_size * 5.)
+def compute_loss_h(t: ti.i32):
+    for k in range(batch_size):
+        loss[None] += (height[t, k] - target_h[t, k]) ** 2 / batch_size * 5.
     # if k == 0:
     #     print("Mark jump:", height[t, k], target_h[t, k])
 
 
 @ti.kernel
-def compute_loss_pose(t: ti.i32, k: ti.i32):
-    for i in range(n_objects):
+def compute_loss_pose(t: ti.i32):
+    for k, i in ti.ndrange(batch_size, n_objects):
         ti.atomic_add(loss[None], (x[t, k, i](0) - center[t, k](0) - x[0, k, i](0) + center[0, k](0)) ** 2 / batch_size)
         ti.atomic_add(loss[None], (x[t, k, i](1) - center[t, k](1) - x[0, k, i](1) + center[0, k](1)) ** 2 / batch_size)
 
@@ -317,12 +319,11 @@ def forward(train = True, prefix = None):
         advance_toi(t)
     for t in range(1, total_steps):
         if duplicate_v > 0 and (t - 1) % turn_period > run_period:
-            for k in range(batch_size):
-                compute_loss(t - 1, k)
+            compute_loss(t - 1)
         if duplicate_h > 0 and (t - 1) % jump_period == jump_period - 1:
             for k in range(batch_size):
-                compute_loss_h(t - 1, k)
-                # compute_loss_pose(t - 1, k)
+                compute_loss_h(t - 1)
+                # compute_loss_pose(t - 1)
 
     # print("Speed= ", math.sqrt(loss[None] / loss_cnt))
     #compute_weight_decay()
@@ -380,10 +381,10 @@ def visualizer(train, prefix, visualize = True):
                         circle(0.4, 0.5, (0, 0, 1))
 
                     gui.show('mass_spring/{}/{:04d}.png'.format(prefix, t))
-                        
 
-    if train:
-        output_loss.append(loss[None])
+    output_loss.append(loss[None])
+
+    if visualize:
         utils.plot_curve(output_loss, "training_curve.png")
         utils.plot_curve(output_loss[-200:], "training_curve_last_200.png")
 
