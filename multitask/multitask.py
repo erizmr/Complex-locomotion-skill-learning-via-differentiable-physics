@@ -382,7 +382,8 @@ def visualizer(train, prefix, visualize = True):
 
                     gui.show('mass_spring/{}/{:04d}.png'.format(prefix, t))
 
-    output_loss.append(loss[None])
+    if train:
+        output_loss.append(loss[None])
 
     if visualize:
         utils.plot_curve(output_loss, "training_curve.png")
@@ -430,7 +431,7 @@ def adam_update(w: ti.template(), m: ti.template(), v: ti.template(), iter: ti.i
         v_cap = v[I] / (1 - adam_b2 ** (iter + 1))
         w[I] -= (adam_a * m_cap) / (ti.sqrt(v_cap) + 1e-8)
 
-def optimize(visualize):
+def optimize():
     for i in range(n_hidden):
         for j in range(n_input_states()):
             weights1[i, j] = np.random.randn() * math.sqrt(
@@ -483,4 +484,4 @@ def optimize(visualize):
 
 if __name__ == '__main__':
     setup_robot()
-    optimize(visualize=False)
+    optimize()
