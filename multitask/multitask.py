@@ -46,7 +46,7 @@ ground_height = 0.1
 gravity = -1.8
 friction = 2.5
 
-robot_id = int(sys.argv[1])
+robot_id = 5
 objects, springs = robots[robot_id]()
 n_objects = len(objects)
 n_springs = len(springs)
@@ -92,7 +92,7 @@ print(spring_omega)
 drag_damping = 0
 dashpot_damping = 0.2
 
-batch_size = int(sys.argv[2])
+batch_size = 256
 
 #weight_decay = 0.001
 learning_rate = 3e-4
@@ -140,7 +140,7 @@ def load_weights(name = "save.pkl"):
     #print('# Load from {}'.format(name))
     w_val = pkl.load(open(name, 'rb'))
     for w, val in zip(weights, w_val):
-        w.from_numpy(w_val)
+        w.from_numpy(val)
     #print("# Done!")
 
 @ti.kernel
@@ -422,6 +422,11 @@ def simulate(output_v=None, output_h=None, visualize=True):
     
     visualizer(train = train, prefix = prefix, visualize = visualize)
 
+def validate():
+    simulate(0.07, 0)
+    simulate(0.03, 0)
+    simulate(0.01, 0)
+
 simulate.cnt = 0
 
 
@@ -448,6 +453,8 @@ def adam_update(w: ti.template(), m: ti.template(), v: ti.template(), iter: ti.i
         m_cap = m[I] / (1 - adam_b1 ** (iter + 1))
         v_cap = v[I] / (1 - adam_b2 ** (iter + 1))
         w[I] -= (adam_a * m_cap) / (ti.sqrt(v_cap) + 1e-8)
+
+
 
 def optimize():
     for i in range(n_hidden):
@@ -502,10 +509,8 @@ def optimize():
 
         # print(time.time() - t, ' 2')
 
-        if (iter + 1) % 200 == 199:
-            simulate(0.07, 0)
-            simulate(0.03, 0)
-            simulate(0.01, 0)
+        if (iter + 1) % 200 == 0:
+            validate()
 
     return losses
 
