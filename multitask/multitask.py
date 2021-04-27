@@ -456,7 +456,9 @@ def adam_update(w: ti.template(), m: ti.template(), v: ti.template(), iter: ti.i
 
 
 
-def optimize():
+def optimize(output_log = "training.log"):
+    log_file = open(output_log, 'w')
+    log_file.close()
     for i in range(n_hidden):
         for j in range(n_input_states()):
             weights1[i, j] = np.random.randn() * math.sqrt(
@@ -488,8 +490,6 @@ def optimize():
         if iter % 50 == 0:
             dump_weights("weights/iter{}.pkl".format(iter))
 
-        print('Iter=', iter, 'Loss=', loss[None], 'Best=', best)
-
         total_norm_sqr = 0
         for i in range(n_hidden):
             for j in range(n_input_states()):
@@ -501,7 +501,12 @@ def optimize():
                 total_norm_sqr += weights2.grad[i, j]**2
             total_norm_sqr += bias2.grad[i]**2
 
+        print('Iter=', iter, 'Loss=', loss[None], 'Best=', best)
         print("TNS= ", total_norm_sqr)
+        log_file = open(output_log, "a")
+        print('Iter=', iter, 'Loss=', loss[None], 'Best=', best, file = log_file)
+        print("TNS= ", total_norm_sqr, file = log_file)
+        log_file.close()
 
         adam_update(weights1, m_weights1, v_weights1, iter)
         adam_update(bias1, m_bias1, v_bias1, iter)
