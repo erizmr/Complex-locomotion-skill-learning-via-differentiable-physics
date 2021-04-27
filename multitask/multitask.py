@@ -71,7 +71,7 @@ m_bias2, v_bias2 = scalar(), scalar()
 
 center = vec()
 height = scalar()
-duplicate_v = 30
+duplicate_v = 15
 duplicate_h = 0
 target_v = vec()
 target_h = scalar()
@@ -83,8 +83,8 @@ act = scalar()
 dt = 0.004
 
 run_period = 100
-jump_period = 400
-turn_period = 400
+jump_period = 500
+turn_period = 500
 spring_omega = 2 * math.pi / dt / run_period
 print(spring_omega)
 drag_damping = 0
@@ -93,7 +93,7 @@ dashpot_damping = 0.2
 batch_size = int(sys.argv[2])
 
 #weight_decay = 0.001
-learning_rate = 0.01
+learning_rate = 3e-4
 
 def n_input_states():
     return n_sin_waves + 4 * n_objects + 2 * duplicate_v + duplicate_h
@@ -236,8 +236,8 @@ def compute_loss_h(t: ti.i32, k: ti.i32):
 @ti.kernel
 def compute_loss_pose(t: ti.i32, k: ti.i32):
     for i in range(n_objects):
-        ti.atomic_add(loss[None], (x[t, k, i](0) - center[t, k](0) - x[0, k, i](0) + center[0, k](0)) ** 2)
-        ti.atomic_add(loss[None], (x[t, k, i](1) - center[t, k](1) - x[0, k, i](1) + center[0, k](1)) ** 2)
+        ti.atomic_add(loss[None], (x[t, k, i](0) - center[t, k](0) - x[0, k, i](0) + center[0, k](0)) ** 2 / batch_size)
+        ti.atomic_add(loss[None], (x[t, k, i](1) - center[t, k](1) - x[0, k, i](1) + center[0, k](1)) ** 2 / batch_size)
 
 @ti.kernel
 def compute_weight_decay():
@@ -304,9 +304,6 @@ def init(output_v = None, output_h = None, visualize = False):
 @debug
 def forward(train = True, prefix = None):
     total_steps = train_steps if train else validate_steps
-
-    loss_cnt = 0.
-
     for t in range(1, total_steps):
         compute_center(t - 1)
         compute_height(t - 1)
@@ -317,11 +314,9 @@ def forward(train = True, prefix = None):
     for t in range(1, total_steps):
         if duplicate_v > 0 and t - 1 > run_period:
             for k in range(batch_size):
-                loss_cnt += 1.
                 compute_loss(t - 1, k)
         if duplicate_h > 0 and (t - 1) % jump_period == jump_period - 1:
             for k in range(batch_size):
-                loss_cnt += 1.
                 compute_loss_h(t - 1, k)
                 # compute_loss_pose(t - 1, k)
 
@@ -390,7 +385,7 @@ def visualizer(train, prefix, visualize = True):
 
 @debug
 def simulate(output_v=None, output_h=None, visualize=True):
-    train = not (output_v and output_h)
+    train = output_v is None and output_h is None
     prefix = None
     if not train:
         prefix = str(output_v) + "_" + str(output_h)
