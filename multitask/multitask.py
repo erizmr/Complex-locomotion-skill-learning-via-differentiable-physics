@@ -163,7 +163,7 @@ def nn1(t: ti.i32):
             for j in ti.static(range(duplicate_h)):
                 actuation += weights1[i, n_objects * 4 + n_sin_waves + duplicate_v * 2 + j] * target_h[t, k]
         actuation += bias1[i]
-        actuation = ti.tanh(actuation)
+        actuation = ti.sin(actuation)
         hidden[t, k, i] = actuation
 
 
@@ -174,7 +174,7 @@ def nn2(t: ti.i32):
         for j in ti.static(range(n_hidden)):
             actuation += weights2[i, j] * hidden[t, k, j]
         actuation += bias2[i]
-        actuation = ti.tanh(actuation)
+        actuation = ti.sin(actuation)
         act[t, k, i] = actuation
 
 
