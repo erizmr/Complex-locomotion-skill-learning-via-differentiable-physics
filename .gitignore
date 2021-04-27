@@ -3,5 +3,6 @@
 __pycache__
 plots/
 mass_spring/
+weights/
 *.mp4
 *.gif

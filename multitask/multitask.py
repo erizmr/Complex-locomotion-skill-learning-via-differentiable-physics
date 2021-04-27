@@ -9,7 +9,9 @@ import math
 import numpy as np
 import os
 
-debug = utils.Debug(True)
+import pickle as pkl
+
+debug = utils.Debug(False)
 
 real = ti.f64
 ti.init(arch=ti.gpu, default_fp=real)
@@ -124,6 +126,22 @@ ti.root.lazy_grad()
 
 pool = ti.field(ti.f32, shape = (100 * batch_size))
 
+weights = [weights1, weights2, bias1, bias2]
+
+def dump_weights(name = "save.pkl"):
+    #print("# Save to {}".format(name))
+    w_val = []
+    for w in weights:
+        w_val.append(w.to_numpy())
+    pkl.dump(w_val, open(name, "wb"))
+    #print("# Done!")
+
+def load_weights(name = "save.pkl"):
+    #print('# Load from {}'.format(name))
+    w_val = pkl.load(open(name, 'rb'))
+    for w, val in zip(weights, w_val):
+        w.from_numpy(w_val)
+    #print("# Done!")
 
 @ti.kernel
 def compute_center(t: ti.i32):
@@ -445,13 +463,23 @@ def optimize():
 
     losses = []
     # simulate('initial{}'.format(robot_id), visualize=visualize)
+    best = 1e+15
 
-    for iter in range(1000):
+    for iter in range(10000):
         print("-------------------- iter #{} --------------------".format(iter))
 
         simulate(visualize=iter % 10 == 0)
 
-        print('Iter=', iter, 'Loss=', loss[None])
+        if loss[None] < best:
+            best = loss[None]
+            dump_weights("weights/best.pkl")
+
+        dump_weights("weights/last.pkl")
+
+        if iter % 50 == 0:
+            dump_weights("weights/iter{}.pkl".format(iter))
+
+        print('Iter=', iter, 'Loss=', loss[None], 'Best=', best)
 
         total_norm_sqr = 0
         for i in range(n_hidden):
@@ -474,7 +502,7 @@ def optimize():
 
         # print(time.time() - t, ' 2')
 
-        if iter % 200 == 199:
+        if (iter + 1) % 200 == 199:
             simulate(0.07, 0)
             simulate(0.03, 0)
             simulate(0.01, 0)

@@ -26,7 +26,7 @@ class Debug():
             return ret
         if self.debug:
             return wrapper
-        return lambda x: x
+        return func
 
 if __name__ == "__main__":
     debug = Debug(True)
