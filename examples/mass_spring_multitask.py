@@ -68,7 +68,7 @@ m_bias2, v_bias2 = scalar(), scalar()
 
 center = vec()
 height = scalar()
-duplicate_v = 30
+duplicate_v = 15
 duplicate_h = 0
 target_v = vec()
 target_h = scalar()
@@ -80,8 +80,8 @@ act = scalar()
 dt = 0.004
 
 run_period = 100
-jump_period = 400
-turn_period = 400
+jump_period = 500
+turn_period = 500
 spring_omega = 2 * math.pi / dt / run_period
 print(spring_omega)
 drag_damping = 0
@@ -152,12 +152,12 @@ def nn1(t: ti.i32):
         if ti.static(duplicate_v > 0):
             for j in ti.static(range(duplicate_v)):
                 actuation += weights1[i, n_objects * 4 + n_sin_waves + j * 2] * target_v[t, k][0]
-                actuation += weights1[i, n_objects * 4 + n_sin_waves + j * 2 + 1] * target_v[t, k][1]
+                actuation += weights1[i, n_objects * 4 + n_sin_waves + j * 2 + 1] * target_v[t, k][0]
         if ti.static(duplicate_h > 0):
             for j in ti.static(range(duplicate_h)):
                 actuation += weights1[i, n_objects * 4 + n_sin_waves + duplicate_v * 2 + j] * target_h[t, k]
         actuation += bias1[i]
-        actuation = ti.tanh(actuation)
+        actuation = ti.sin(actuation)
         hidden[t, k, i] = actuation
 
 
@@ -215,7 +215,7 @@ def advance_toi(t: ti.i32):
 
 @ti.kernel
 def compute_loss(t: ti.i32, k: ti.i32):
-    ti.atomic_add(loss[None], (center[t, k](0) - center[t - run_period, k](0) - target_v[t - run_period, k](0))**2 / batch_size)
+    ti.atomic_add(loss[None], (center[t, k](0) - center[t - run_period, k](0) - target_v[t - run_period, k](0))**2 / batch_size / 5)
     # if k == 0:
     #     print("Mark run: ", center[t, 0](0) - center[t - run_period, 0](0), target_v[t - run_period, 0](0))
 
@@ -230,8 +230,8 @@ def compute_loss_h(t: ti.i32, k: ti.i32):
 @ti.kernel
 def compute_loss_pose(t: ti.i32, k: ti.i32):
     for i in range(n_objects):
-        ti.atomic_add(loss[None], (x[t, k, i](0) - center[t, k](0) - x[0, k, i](0) + center[0, k](0)) ** 2)
-        ti.atomic_add(loss[None], (x[t, k, i](1) - center[t, k](1) - x[0, k, i](1) + center[0, k](1)) ** 2)
+        ti.atomic_add(loss[None], (x[t, k, i](0) - center[t, k](0) - x[0, k, i](0) + center[0, k](0)) ** 2 / batch_size)
+        ti.atomic_add(loss[None], (x[t, k, i](1) - center[t, k](1) - x[0, k, i](1) + center[0, k](1)) ** 2 / batch_size)
 
 
 gui = ti.GUI(show_gui=False)
@@ -247,10 +247,20 @@ def initialize_train(total_steps: ti.i32):
     for _ in pool:
         pool[_] = (ti.random() - 0.5) * 2
     for t, k in ti.ndrange(total_steps, batch_size):
-        target_v[t, k][0] = pool[t // turn_period + 100 * k] * 0.07
+        target_v[t, k][0] = pool[t // turn_period + 100 * k] * 0.08
         target_h[t, k] = ti.random() * 0.25 + 0.1
 
-def forward(output_v=None, output_h=None, visualize=True):
+def forward(output_v=None, output_h=None, visualize=True, warm_start=0):
+    if warm_start % 2 == 1:
+        for k in range(batch_size):
+            for i in range(n_objects):
+                for d in range(2):
+                    x[0, k, i][d] = x[1000, k, i][d]
+    else:
+        for k in range(batch_size):
+            for i in range(n_objects):
+                x[0, k, i] = [objects[i][0] + 0.4, objects[i][1]]
+
     if random.random() > 0.5:
         goal[None] = [0.9, 0.2]
     else:
@@ -295,11 +305,16 @@ def forward(output_v=None, output_h=None, visualize=True):
             apply_spring_force(t - 1)
             advance_toi(t)
             if duplicate_v > 0 and t - 1 > run_period:
+                # if (t - 1) % run_period == 0:
+                #     for k in range(batch_size):
+                #         loss_cnt += 1.
+                #         compute_loss_pose(t - 1, k)
                 if (t - 1) % run_period > 0.1 * run_period:
                     if (t - 1) % run_period < 0.9 * run_period:
-                        for k in range(batch_size):
-                            loss_cnt += 1.
-                            compute_loss(t - 1, k)
+                        if target_v[t - 1][0] == target_v[t - 1 - run_period][0]:
+                            for k in range(batch_size):
+                                loss_cnt += 1.
+                                compute_loss(t - 1, k)
             if duplicate_h > 0 and (t - 1) % jump_period == jump_period - 1:
                 for k in range(batch_size):
                     loss_cnt += 1.
@@ -364,6 +379,7 @@ def forward(output_v=None, output_h=None, visualize=True):
         output_loss.append(loss[None])
         fig = plt.figure()
         temp_loss = gaussian_filter(output_loss, 10)
+        plt.plot(output_loss)
         plt.plot(temp_loss)
         fig.savefig('plots/' + str(forward.cnt) + '.png', dpi=fig.dpi)
         plt.close(fig)
@@ -438,13 +454,13 @@ def optimize(visualize):
     b_1=0.9
     b_2=0.999
 
-    for iter in range(1000):
+    for iter in range(10000):
         print("-------------------- iter{} --------------------".format(iter))
         clear()
 
         import time
         t = time.time()
-        forward(visualize=iter % 10 == 0)
+        forward(visualize=iter % 10 == 0, warm_start=iter)
         # print(time.time() - t, ' 1')
 
         print('Iter=', iter, 'Loss=', loss[None])
@@ -461,6 +477,7 @@ def optimize(visualize):
             total_norm_sqr += bias2.grad[i]**2
 
         print("TNS= ", total_norm_sqr)
+        scale = 0.1 / (total_norm_sqr**0.5 + 1e-6)
 
         for i in range(n_hidden):
             for j in range(n_input_states()):
@@ -468,12 +485,12 @@ def optimize(visualize):
                 v_weights1[i, j] = b_2 * v_weights1[i, j] + (1 - b_2) * weights1.grad[i, j] * weights1.grad[i, j]
                 m_cap = m_weights1[i, j] / (1 - b_1 ** (iter + 1))
                 v_cap = v_weights1[i, j] / (1 - b_2 ** (iter + 1))
-                weights1[i, j] -= (a * m_cap) / (math.sqrt(v_cap) + 1e-8)
+                weights1[i, j] -= (a * m_cap) / (math.sqrt(v_cap) + 1e-8) * scale
             m_bias1[i] = b_1 * m_bias1[i] + (1 - b_1) * bias1.grad[i]
             v_bias1[i] = b_2 * v_bias1[i] + (1 - b_2) * bias1.grad[i] * bias1.grad[i]
             m_cap = m_bias1[i] / (1 - b_1 ** (iter + 1))
             v_cap = v_bias1[i] / (1 - b_2 ** (iter + 1))
-            bias1[i] -= (a * m_cap) / (math.sqrt(v_cap) + 1e-8)
+            bias1[i] -= (a * m_cap) / (math.sqrt(v_cap) + 1e-8) * scale
 
         for i in range(n_springs):
             for j in range(n_hidden):
@@ -481,12 +498,12 @@ def optimize(visualize):
                 v_weights2[i, j] = b_2 * v_weights2[i, j] + (1 - b_2) * weights2.grad[i, j] * weights2.grad[i, j]
                 m_cap = m_weights2[i, j] / (1 - b_1 ** (iter + 1))
                 v_cap = v_weights2[i, j] / (1 - b_2 ** (iter + 1))
-                weights2[i, j] -= (a * m_cap) / (math.sqrt(v_cap) + 1e-8)
+                weights2[i, j] -= (a * m_cap) / (math.sqrt(v_cap) + 1e-8) * scale
             m_bias2[i] = b_1 * m_bias2[i] + (1 - b_1) * bias2.grad[i]
             v_bias2[i] = b_2 * v_bias2[i] + (1 - b_2) * bias2.grad[i] * bias2.grad[i]
             m_cap = m_bias2[i] / (1 - b_1 ** (iter + 1))
             v_cap = v_bias2[i] / (1 - b_2 ** (iter + 1))
-            bias2[i] -= (a * m_cap) / (math.sqrt(v_cap) + 1e-8)
+            bias2[i] -= (a * m_cap) / (math.sqrt(v_cap) + 1e-8) * scale
         losses.append(loss[None])
 
         # print(time.time() - t, ' 2')
