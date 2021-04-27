@@ -95,6 +95,10 @@ batch_size = int(sys.argv[2])
 #weight_decay = 0.001
 learning_rate = 3e-4
 
+adam_a = learning_rate
+adam_b1=0.9
+adam_b2=0.999
+
 def n_input_states():
     return n_sin_waves + 4 * n_objects + 2 * duplicate_v + duplicate_h
 
@@ -416,6 +420,15 @@ def setup_robot():
         spring_stiffness[i] = s[3] / 10
         spring_actuation[i] = s[4]
 
+@ti.kernel
+def adam_update(w: ti.template(), m: ti.template(), v: ti.template(), iter: ti.i32):
+    for I in ti.grouped(w):
+        m[I] = adam_b1 * m[I] + (1 - adam_b1) * w.grad[I]
+        v[I] = adam_b2 * v[I] + (1 - adam_b2) * w.grad[I] * w.grad[I]
+        m_cap = m[I] / (1 - adam_b1 ** (iter + 1))
+        v_cap = v[I] / (1 - adam_b2 ** (iter + 1))
+        w[I] -= (adam_a * m_cap) / (ti.sqrt(v_cap) + 1e-8)
+
 def optimize(visualize):
     for i in range(n_hidden):
         for j in range(n_input_states()):
@@ -430,10 +443,6 @@ def optimize(visualize):
 
     losses = []
     # simulate('initial{}'.format(robot_id), visualize=visualize)
-
-    adam_a = learning_rate
-    adam_b1=0.9
-    adam_b2=0.999
 
     for iter in range(1000):
         print("-------------------- iter #{} --------------------".format(iter))
@@ -455,31 +464,10 @@ def optimize(visualize):
 
         print("TNS= ", total_norm_sqr)
 
-        for i in range(n_hidden):
-            for j in range(n_input_states()):
-                m_weights1[i, j] = adam_b1 * m_weights1[i, j] + (1 - adam_b1) * weights1.grad[i, j]
-                v_weights1[i, j] = adam_b2 * v_weights1[i, j] + (1 - adam_b2) * weights1.grad[i, j] * weights1.grad[i, j]
-                m_cap = m_weights1[i, j] / (1 - adam_b1 ** (iter + 1))
-                v_cap = v_weights1[i, j] / (1 - adam_b2 ** (iter + 1))
-                weights1[i, j] -= (adam_a * m_cap) / (math.sqrt(v_cap) + 1e-8)
-            m_bias1[i] = adam_b1 * m_bias1[i] + (1 - adam_b1) * bias1.grad[i]
-            v_bias1[i] = adam_b2 * v_bias1[i] + (1 - adam_b2) * bias1.grad[i] * bias1.grad[i]
-            m_cap = m_bias1[i] / (1 - adam_b1 ** (iter + 1))
-            v_cap = v_bias1[i] / (1 - adam_b2 ** (iter + 1))
-            bias1[i] -= (adam_a * m_cap) / (math.sqrt(v_cap) + 1e-8)
-
-        for i in range(n_springs):
-            for j in range(n_hidden):
-                m_weights2[i, j] = adam_b1 * m_weights2[i, j] + (1 - adam_b1) * weights2.grad[i, j]
-                v_weights2[i, j] = adam_b2 * v_weights2[i, j] + (1 - adam_b2) * weights2.grad[i, j] * weights2.grad[i, j]
-                m_cap = m_weights2[i, j] / (1 - adam_b1 ** (iter + 1))
-                v_cap = v_weights2[i, j] / (1 - adam_b2 ** (iter + 1))
-                weights2[i, j] -= (adam_a * m_cap) / (math.sqrt(v_cap) + 1e-8)
-            m_bias2[i] = adam_b1 * m_bias2[i] + (1 - adam_b1) * bias2.grad[i]
-            v_bias2[i] = adam_b2 * v_bias2[i] + (1 - adam_b2) * bias2.grad[i] * bias2.grad[i]
-            m_cap = m_bias2[i] / (1 - adam_b1 ** (iter + 1))
-            v_cap = v_bias2[i] / (1 - adam_b2 ** (iter + 1))
-            bias2[i] -= (adam_a * m_cap) / (math.sqrt(v_cap) + 1e-8)
+        adam_update(weights1, m_weights1, v_weights1, iter)
+        adam_update(bias1, m_bias1, v_bias1, iter)
+        adam_update(weights2, m_weights2, v_weights2, iter)
+        adam_update(bias2, m_bias2, v_bias2, iter)
         losses.append(loss[None])
 
         # print(time.time() - t, ' 2')
