@@ -263,8 +263,31 @@ def initialize_train(total_steps: ti.i32):
         target_v[t, k][0] = pool[t // turn_period + 100 * k] * 0.08
         target_h[t, k] = ti.random() * 0.25 + 0.1
 
+
+
+@ti.kernel
+def clear_states():
+    for t, k, i in ti.ndrange(max_steps, batch_size, n_objects):
+        x.grad[t, k, i] = ti.Vector([0.0, 0.0])
+        v.grad[t, k, i] = ti.Vector([0.0, 0.0])
+        v_inc[t, k, i] = ti.Vector([0.0, 0.0])
+        v_inc.grad[t, k, i] = ti.Vector([0.0, 0.0])
+
+
+def clear():
+    clear_states()
+    m_weights1.fill(0)
+    v_weights1.fill(0)
+    m_bias1.fill(0)
+    v_bias1.fill(0)
+    m_weights2.fill(0)
+    v_weights2.fill(0)
+    m_bias2.fill(0)
+    v_bias2.fill(0)
+    
 @debug
 def init(output_v = None, output_h = None, visualize = False):
+    clear()
     if random.random() > 0.5:
         goal[None] = [0.9, 0.2]
     else:
@@ -277,68 +300,6 @@ def init(output_v = None, output_h = None, visualize = False):
         initialize_validate(total_steps, output_v, output_h)
     else:
         initialize_train(total_steps)
-
-@debug
-def visualizer(train, prefix, visualize = True):
-    total_steps = train_steps if train else validate_steps
-
-    interval = vis_interval
-    if not train:
-        interval = output_vis_interval
-        os.makedirs('mass_spring/{}/'.format(prefix), exist_ok=True)
-
-    for t in range(1, total_steps):
-        if (t + 1) % interval == 0 and visualize and not train:
-            gui.clear()
-            gui.line((0, ground_height), (1, ground_height),
-                    color=0x0,
-                    radius=3)
-
-            def circle(x, y, color):
-                gui.circle((x, y), ti.rgb_to_hex(color), 7)
-
-            for i in range(n_springs):
-
-                def get_pt(x):
-                    return (x[0], x[1])
-
-                a = act[t - 1, 0, i] * 0.5
-                r = 2
-                if spring_actuation[i] == 0:
-                    a = 0
-                    c = 0x222222
-                else:
-                    r = 4
-                    c = ti.rgb_to_hex((0.5 + a, 0.5 - abs(a), 0.5 - a))
-                gui.line(get_pt(x[t, 0, spring_anchor_a[i]]),
-                        get_pt(x[t, 0, spring_anchor_b[i]]),
-                        color=c,
-                        radius=r)
-
-            for i in range(n_objects):
-                color = (0.4, 0.6, 0.6)
-                if i == head_id:
-                    color = (0.8, 0.2, 0.3)
-                circle(x[t, 0, i][0], x[t, 0, i][1], color)
-            # circle(goal[None][0], goal[None][1], (0.6, 0.2, 0.2))
-
-            if target_v[t, 0][0] > 0:
-                circle(0.5, 0.5, (1, 0, 0))
-                circle(0.6, 0.5, (1, 0, 0))
-            else:
-                circle(0.5, 0.5, (0, 0, 1))
-                circle(0.4, 0.5, (0, 0, 1))
-
-            if not train:
-                gui.show('mass_spring/{}/{:04d}.png'.format(prefix, t))
-            else:
-                gui.show()
-
-    if train:
-        output_loss.append(loss[None])
-        utils.plot_curve(output_loss, "training_curve.png")
-        utils.plot_curve(output_loss[-200:], "training_curve_last_200.png")
-
 
 @debug
 def forward(train = True, prefix = None):
@@ -367,30 +328,68 @@ def forward(train = True, prefix = None):
     # print("Speed= ", math.sqrt(loss[None] / loss_cnt))
     #compute_weight_decay()
 
+@debug
+def visualizer(train, prefix, visualize = True):
+    total_steps = train_steps if train else validate_steps
 
-@ti.kernel
-def clear_states():
-    for t, k, i in ti.ndrange(max_steps, batch_size, n_objects):
-        x.grad[t, k, i] = ti.Vector([0.0, 0.0])
-        v.grad[t, k, i] = ti.Vector([0.0, 0.0])
-        v_inc[t, k, i] = ti.Vector([0.0, 0.0])
-        v_inc.grad[t, k, i] = ti.Vector([0.0, 0.0])
+    interval = vis_interval
+    if not train:
+        interval = output_vis_interval
+        os.makedirs('mass_spring/{}/'.format(prefix), exist_ok=True)
 
+        if visualize:
+            for t in range(1, total_steps):
+                if (t + 1) % interval == 0:
+                    gui.clear()
+                    gui.line((0, ground_height), (1, ground_height),
+                            color=0x0,
+                            radius=3)
 
-def clear():
-    clear_states()
-    m_weights1.fill(0)
-    v_weights1.fill(0)
-    m_bias1.fill(0)
-    v_bias1.fill(0)
-    m_weights2.fill(0)
-    v_weights2.fill(0)
-    m_bias2.fill(0)
-    v_bias2.fill(0)
+                    def circle(x, y, color):
+                        gui.circle((x, y), ti.rgb_to_hex(color), 7)
+
+                    for i in range(n_springs):
+
+                        def get_pt(x):
+                            return (x[0], x[1])
+
+                        a = act[t - 1, 0, i] * 0.5
+                        r = 2
+                        if spring_actuation[i] == 0:
+                            a = 0
+                            c = 0x222222
+                        else:
+                            r = 4
+                            c = ti.rgb_to_hex((0.5 + a, 0.5 - abs(a), 0.5 - a))
+                        gui.line(get_pt(x[t, 0, spring_anchor_a[i]]),
+                                get_pt(x[t, 0, spring_anchor_b[i]]),
+                                color=c,
+                                radius=r)
+
+                    for i in range(n_objects):
+                        color = (0.4, 0.6, 0.6)
+                        if i == head_id:
+                            color = (0.8, 0.2, 0.3)
+                        circle(x[t, 0, i][0], x[t, 0, i][1], color)
+                    # circle(goal[None][0], goal[None][1], (0.6, 0.2, 0.2))
+
+                    if target_v[t, 0][0] > 0:
+                        circle(0.5, 0.5, (1, 0, 0))
+                        circle(0.6, 0.5, (1, 0, 0))
+                    else:
+                        circle(0.5, 0.5, (0, 0, 1))
+                        circle(0.4, 0.5, (0, 0, 1))
+
+                    gui.show('mass_spring/{}/{:04d}.png'.format(prefix, t))
+                        
+
+    if train:
+        output_loss.append(loss[None])
+        utils.plot_curve(output_loss, "training_curve.png")
+        utils.plot_curve(output_loss[-200:], "training_curve_last_200.png")
 
 @debug
 def simulate(output_v=None, output_h=None, visualize=True):
-    clear()
     train = not (output_v and output_h)
     prefix = None
     if not train:
@@ -491,15 +490,9 @@ def optimize(visualize):
         # print(time.time() - t, ' 2')
 
         if iter % 200 == 199:
-            simulate(0.07, 0.1)
-            simulate(0.07, 0.2)
-            simulate(0.07, 0.3)
-            simulate(0.03, 0.1)
-            simulate(0.03, 0.2)
-            simulate(0.03, 0.3)
-            simulate(0.01, 0.1)
-            simulate(0.01, 0.2)
-            simulate(0.01, 0.3)
+            simulate(0.07, 0)
+            simulate(0.03, 0)
+            simulate(0.01, 0)
 
     return losses
 
