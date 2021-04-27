@@ -286,7 +286,7 @@ def clear():
     v_bias2.fill(0)
     
 @debug
-def init(output_v = None, output_h = None, visualize = False):
+def init(train, output_v = None, output_h = None):
     clear()
     if random.random() > 0.5:
         goal[None] = [0.9, 0.2]
@@ -294,12 +294,12 @@ def init(output_v = None, output_h = None, visualize = False):
         goal[None] = [0.1, 0.2]
     goal[None] = [0.9, 0.2]
 
-    total_steps = validate_steps if output_v and output_h else train_steps
+    total_steps = train_steps if train else validate_steps
     
-    if output_v and output_h:
-        initialize_validate(total_steps, output_v, output_h)
-    else:
+    if train:
         initialize_train(total_steps)
+    else:
+        initialize_validate(total_steps, output_v, output_h)
 
 @debug
 def forward(train = True, prefix = None):
@@ -389,7 +389,7 @@ def simulate(output_v=None, output_h=None, visualize=True):
     prefix = None
     if not train:
         prefix = str(output_v) + "_" + str(output_h)
-    init(output_v, output_h, visualize)
+    init(train, output_v, output_h)
     if train:
         with ti.Tape(loss):
             forward()
