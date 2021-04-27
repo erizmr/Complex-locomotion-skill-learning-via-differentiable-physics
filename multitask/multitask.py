@@ -312,7 +312,7 @@ def forward(train = True, prefix = None):
         apply_spring_force(t - 1)
         advance_toi(t)
     for t in range(1, total_steps):
-        if duplicate_v > 0 and t - 1 > run_period:
+        if duplicate_v > 0 and (t - 1) % turn_period > run_period:
             for k in range(batch_size):
                 compute_loss(t - 1, k)
         if duplicate_h > 0 and (t - 1) % jump_period == jump_period - 1:
@@ -431,9 +431,9 @@ def optimize(visualize):
     losses = []
     # simulate('initial{}'.format(robot_id), visualize=visualize)
 
-    a = learning_rate
-    b_1=0.9
-    b_2=0.999
+    adam_a = learning_rate
+    adam_b1=0.9
+    adam_b2=0.999
 
     for iter in range(1000):
         print("-------------------- iter #{} --------------------".format(iter))
@@ -457,29 +457,29 @@ def optimize(visualize):
 
         for i in range(n_hidden):
             for j in range(n_input_states()):
-                m_weights1[i, j] = b_1 * m_weights1[i, j] + (1 - b_1) * weights1.grad[i, j]
-                v_weights1[i, j] = b_2 * v_weights1[i, j] + (1 - b_2) * weights1.grad[i, j] * weights1.grad[i, j]
-                m_cap = m_weights1[i, j] / (1 - b_1 ** (iter + 1))
-                v_cap = v_weights1[i, j] / (1 - b_2 ** (iter + 1))
-                weights1[i, j] -= (a * m_cap) / (math.sqrt(v_cap) + 1e-8)
-            m_bias1[i] = b_1 * m_bias1[i] + (1 - b_1) * bias1.grad[i]
-            v_bias1[i] = b_2 * v_bias1[i] + (1 - b_2) * bias1.grad[i] * bias1.grad[i]
-            m_cap = m_bias1[i] / (1 - b_1 ** (iter + 1))
-            v_cap = v_bias1[i] / (1 - b_2 ** (iter + 1))
-            bias1[i] -= (a * m_cap) / (math.sqrt(v_cap) + 1e-8)
+                m_weights1[i, j] = adam_b1 * m_weights1[i, j] + (1 - adam_b1) * weights1.grad[i, j]
+                v_weights1[i, j] = adam_b2 * v_weights1[i, j] + (1 - adam_b2) * weights1.grad[i, j] * weights1.grad[i, j]
+                m_cap = m_weights1[i, j] / (1 - adam_b1 ** (iter + 1))
+                v_cap = v_weights1[i, j] / (1 - adam_b2 ** (iter + 1))
+                weights1[i, j] -= (adam_a * m_cap) / (math.sqrt(v_cap) + 1e-8)
+            m_bias1[i] = adam_b1 * m_bias1[i] + (1 - adam_b1) * bias1.grad[i]
+            v_bias1[i] = adam_b2 * v_bias1[i] + (1 - adam_b2) * bias1.grad[i] * bias1.grad[i]
+            m_cap = m_bias1[i] / (1 - adam_b1 ** (iter + 1))
+            v_cap = v_bias1[i] / (1 - adam_b2 ** (iter + 1))
+            bias1[i] -= (adam_a * m_cap) / (math.sqrt(v_cap) + 1e-8)
 
         for i in range(n_springs):
             for j in range(n_hidden):
-                m_weights2[i, j] = b_1 * m_weights2[i, j] + (1 - b_1) * weights2.grad[i, j]
-                v_weights2[i, j] = b_2 * v_weights2[i, j] + (1 - b_2) * weights2.grad[i, j] * weights2.grad[i, j]
-                m_cap = m_weights2[i, j] / (1 - b_1 ** (iter + 1))
-                v_cap = v_weights2[i, j] / (1 - b_2 ** (iter + 1))
-                weights2[i, j] -= (a * m_cap) / (math.sqrt(v_cap) + 1e-8)
-            m_bias2[i] = b_1 * m_bias2[i] + (1 - b_1) * bias2.grad[i]
-            v_bias2[i] = b_2 * v_bias2[i] + (1 - b_2) * bias2.grad[i] * bias2.grad[i]
-            m_cap = m_bias2[i] / (1 - b_1 ** (iter + 1))
-            v_cap = v_bias2[i] / (1 - b_2 ** (iter + 1))
-            bias2[i] -= (a * m_cap) / (math.sqrt(v_cap) + 1e-8)
+                m_weights2[i, j] = adam_b1 * m_weights2[i, j] + (1 - adam_b1) * weights2.grad[i, j]
+                v_weights2[i, j] = adam_b2 * v_weights2[i, j] + (1 - adam_b2) * weights2.grad[i, j] * weights2.grad[i, j]
+                m_cap = m_weights2[i, j] / (1 - adam_b1 ** (iter + 1))
+                v_cap = v_weights2[i, j] / (1 - adam_b2 ** (iter + 1))
+                weights2[i, j] -= (adam_a * m_cap) / (math.sqrt(v_cap) + 1e-8)
+            m_bias2[i] = adam_b1 * m_bias2[i] + (1 - adam_b1) * bias2.grad[i]
+            v_bias2[i] = adam_b2 * v_bias2[i] + (1 - adam_b2) * bias2.grad[i] * bias2.grad[i]
+            m_cap = m_bias2[i] / (1 - adam_b1 ** (iter + 1))
+            v_cap = v_bias2[i] / (1 - adam_b2 ** (iter + 1))
+            bias2[i] -= (adam_a * m_cap) / (math.sqrt(v_cap) + 1e-8)
         losses.append(loss[None])
 
         # print(time.time() - t, ' 2')
