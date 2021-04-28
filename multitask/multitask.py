@@ -263,7 +263,7 @@ def compute_loss_velocity(t: ti.i32):
 def compute_loss_height(t: ti.i32):
     for k in range(batch_size):
         loss_height[None] += (height[t, k] - target_h[t, k]) ** 2 / \
-            (batch_size * (train_steps // jump_period)) / 2
+            (batch_size * (train_steps // jump_period)) / 4
     # if k == 0:
     #     print("Mark jump:", height[t, k], target_h[t, k])
 
@@ -273,7 +273,7 @@ def compute_loss_pose(t: ti.i32):
     for k, i in ti.ndrange(batch_size, n_objects):
         loss_pose[None] += ((x[t, k, i](0) - center[t, k](0) - x[0, k, i](0) + center[0, k](0)) ** 2 + \
             (x[t, k, i](1) - center[t, k](1) - x[0, k, i](1) + center[0, k](1)) ** 2) ** 0.5 / \
-            (batch_size * n_objects  * (train_steps // jump_period))
+            (batch_size * n_objects  * (train_steps // jump_period)) / 2
 
 @ti.kernel
 def compute_weight_decay():
@@ -383,11 +383,13 @@ def visualizer(train, prefix, visualize = True):
                 if (t + 1) % interval == 0:
                     gui.clear()
                     gui.line((0, ground_height), (1, ground_height),
-                            color=0x0,
+                            color=0x000022,
                             radius=3)
+                    gui.line((0, target_h[t] + ground_height), (1, target_h[t] + ground_height), color = 0x002200)
 
                     def circle(x, y, color):
                         gui.circle((x, y), ti.rgb_to_hex(color), 7)
+                        
 
                     for i in range(n_springs):
 
