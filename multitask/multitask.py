@@ -32,6 +32,17 @@ scalar = lambda: ti.field(dtype=real)
 vec = lambda: ti.Vector.field(2, dtype=real)
 
 loss = scalar()
+loss_velocity = scalar()
+loss_height = scalar()
+loss_pose = scalar()
+loss_weight = scalar()
+loss_dict = {'loss_v': loss_velocity,
+             'loss_h': loss_height,
+             'loss_p': loss_pose,
+             'loss_w': loss_weight}
+losses = loss_dict.values()
+
+total_norm_sqr = scalar()
 
 x = vec()
 v = vec()
@@ -121,7 +132,8 @@ ti.root.dense(ti.i, n_springs).place(m_bias2, v_bias2)
 ti.root.dense(ti.ijk, (max_steps, batch_size, n_hidden)).place(hidden)
 ti.root.dense(ti.ijk, (max_steps, batch_size, n_springs)).place(act)
 ti.root.dense(ti.ij, (max_steps, batch_size)).place(center, target_v, target_h, height)
-ti.root.place(loss, goal)
+ti.root.place(loss, goal, total_norm_sqr)
+ti.root.place(*losses)
 ti.root.lazy_grad()
 
 pool = ti.field(ti.f32, shape = (100 * batch_size))
@@ -242,17 +254,17 @@ def advance_toi(t: ti.i32):
 
 
 @ti.kernel
-def compute_loss(t: ti.i32):
+def compute_loss_velocity(t: ti.i32):
     for k in range(batch_size):
-        loss[None] += (center[t, k](0) - center[t - run_period, k](0) - target_v[t - run_period, k](0))**2 / batch_size
+        loss_velocity[None] += (center[t, k](0) - center[t - run_period, k](0) - target_v[t - run_period, k](0))**2 / batch_size
     # if k == 0:
     #     print("Mark run: ", center[t, 0](0) - center[t - run_period, 0](0), target_v[t - run_period, 0](0))
 
 
 @ti.kernel
-def compute_loss_h(t: ti.i32):
+def compute_loss_height(t: ti.i32):
     for k in range(batch_size):
-        loss[None] += (height[t, k] - target_h[t, k]) ** 2 / batch_size * 5.
+        loss_height[None] += (height[t, k] - target_h[t, k]) ** 2 / batch_size * 5.
     # if k == 0:
     #     print("Mark jump:", height[t, k], target_h[t, k])
 
@@ -260,8 +272,8 @@ def compute_loss_h(t: ti.i32):
 @ti.kernel
 def compute_loss_pose(t: ti.i32):
     for k, i in ti.ndrange(batch_size, n_objects):
-        ti.atomic_add(loss[None], (x[t, k, i](0) - center[t, k](0) - x[0, k, i](0) + center[0, k](0)) ** 2 / batch_size)
-        ti.atomic_add(loss[None], (x[t, k, i](1) - center[t, k](1) - x[0, k, i](1) + center[0, k](1)) ** 2 / batch_size)
+        loss_pose[None] += ((x[t, k, i](0) - center[t, k](0) - x[0, k, i](0) + center[0, k](0)) ** 2 + \
+            (x[t, k, i](1) - center[t, k](1) - x[0, k, i](1) + center[0, k](1)) ** 2) ** 0.5 / batch_size
 
 @ti.kernel
 def compute_weight_decay():
@@ -325,6 +337,14 @@ def init(train, output_v = None, output_h = None):
     else:
         initialize_validate(total_steps, output_v, output_h)
 
+    loss[None] = 0.
+    for l in losses:
+        l[None] = 0.
+
+@ti.kernel
+def compute_loss_final(l: ti.template()):
+    loss[None] += l[None]
+
 @debug
 def forward(train = True, prefix = None):
     total_steps = train_steps if train else validate_steps
@@ -337,11 +357,14 @@ def forward(train = True, prefix = None):
         advance_toi(t)
     for t in range(1, total_steps):
         if duplicate_v > 0 and (t - 1) % turn_period > run_period:
-            compute_loss(t - 1)
+            compute_loss_velocity(t - 1)
         if duplicate_h > 0 and (t - 1) % jump_period == jump_period - 1:
             for k in range(batch_size):
-                compute_loss_h(t - 1)
+                compute_loss_height(t - 1)
                 # compute_loss_pose(t - 1)
+
+    for l in losses:
+        compute_loss_final(l)
 
     # print("Speed= ", math.sqrt(loss[None] / loss_cnt))
     #compute_weight_decay()
@@ -454,7 +477,10 @@ def adam_update(w: ti.template(), m: ti.template(), v: ti.template(), iter: ti.i
         v_cap = v[I] / (1 - adam_b2 ** (iter + 1))
         w[I] -= (adam_a * m_cap) / (ti.sqrt(v_cap) + 1e-8)
 
-
+@ti.kernel
+def compute_TNS(w: ti.template()):
+    for I in ti.grouped(w):
+        total_norm_sqr[None] += w.grad[I] ** 2
 
 def optimize(output_log = "training.log"):
     log_file = open(output_log, 'w')
@@ -490,22 +516,19 @@ def optimize(output_log = "training.log"):
         if iter % 50 == 0:
             dump_weights("weights/iter{}.pkl".format(iter))
 
-        total_norm_sqr = 0
-        for i in range(n_hidden):
-            for j in range(n_input_states()):
-                total_norm_sqr += weights1.grad[i, j]**2
-            total_norm_sqr += bias1.grad[i]**2
-
-        for i in range(n_springs):
-            for j in range(n_hidden):
-                total_norm_sqr += weights2.grad[i, j]**2
-            total_norm_sqr += bias2.grad[i]**2
+        total_norm_sqr[None] = 0.
+        compute_TNS(weights1)
+        compute_TNS(bias1)
+        compute_TNS(weights2)
+        compute_TNS(bias2)
 
         print('Iter=', iter, 'Loss=', loss[None], 'Best=', best)
-        print("TNS= ", total_norm_sqr)
+        print("TNS= ", total_norm_sqr[None])
+        for name, l in loss_dict.items():
+            print("{}={}".format(name, l[None]))
         log_file = open(output_log, "a")
         print('Iter=', iter, 'Loss=', loss[None], 'Best=', best, file = log_file)
-        print("TNS= ", total_norm_sqr, file = log_file)
+        print("TNS= ", total_norm_sqr[None], file = log_file)
         log_file.close()
 
         adam_update(weights1, m_weights1, v_weights1, iter)
