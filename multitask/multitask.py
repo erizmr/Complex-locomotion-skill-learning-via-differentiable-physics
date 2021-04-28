@@ -19,14 +19,12 @@ ti.init(arch=ti.gpu, default_fp=real)
 max_steps = 4096
 vis_interval = 256
 output_vis_interval = 8
-steps = 2048 // 2
-train_steps = steps
-validate_steps = steps * 2
+train_steps = 1024
+validate_steps = 2048
 output_target = []
 output_sim = []
 output_loss = []
 
-assert steps * 2 <= max_steps
 
 scalar = lambda: ti.field(dtype=real)
 vec = lambda: ti.Vector.field(2, dtype=real)
@@ -84,8 +82,8 @@ m_bias2, v_bias2 = scalar(), scalar()
 
 center = vec()
 height = scalar()
-duplicate_v = 15
-duplicate_h = 0
+duplicate_v = 0
+duplicate_h = 15
 target_v = vec()
 target_h = scalar()
 weight_v = 1.
@@ -96,7 +94,7 @@ act = scalar()
 dt = 0.004
 
 run_period = 100
-jump_period = 500
+jump_period = 250
 turn_period = 500
 spring_omega = 2 * math.pi / dt / run_period
 print(spring_omega)
@@ -264,7 +262,8 @@ def compute_loss_velocity(t: ti.i32):
 @ti.kernel
 def compute_loss_height(t: ti.i32):
     for k in range(batch_size):
-        loss_height[None] += (height[t, k] - target_h[t, k]) ** 2 / batch_size * 5.
+        loss_height[None] += (height[t, k] - target_h[t, k]) ** 2 / \
+            (batch_size * (train_steps // jump_period)) / 2
     # if k == 0:
     #     print("Mark jump:", height[t, k], target_h[t, k])
 
@@ -273,7 +272,8 @@ def compute_loss_height(t: ti.i32):
 def compute_loss_pose(t: ti.i32):
     for k, i in ti.ndrange(batch_size, n_objects):
         loss_pose[None] += ((x[t, k, i](0) - center[t, k](0) - x[0, k, i](0) + center[0, k](0)) ** 2 + \
-            (x[t, k, i](1) - center[t, k](1) - x[0, k, i](1) + center[0, k](1)) ** 2) ** 0.5 / batch_size
+            (x[t, k, i](1) - center[t, k](1) - x[0, k, i](1) + center[0, k](1)) ** 2) ** 0.5 / \
+            (batch_size * n_objects  * (train_steps // jump_period))
 
 @ti.kernel
 def compute_weight_decay():
@@ -361,7 +361,7 @@ def forward(train = True, prefix = None):
         if duplicate_h > 0 and (t - 1) % jump_period == jump_period - 1:
             for k in range(batch_size):
                 compute_loss_height(t - 1)
-                # compute_loss_pose(t - 1)
+                compute_loss_pose(t - 1)
 
     for l in losses:
         compute_loss_final(l)
@@ -426,9 +426,9 @@ def visualizer(train, prefix, visualize = True):
     if train:
         output_loss.append(loss[None])
 
-    if visualize:
-        utils.plot_curve(output_loss, "training_curve.png")
-        utils.plot_curve(output_loss[-200:], "training_curve_last_200.png")
+        if visualize:
+            utils.plot_curve(output_loss, "training_curve.png")
+            utils.plot_curve(output_loss[-200:], "training_curve_last_200.png")
 
 @debug
 def simulate(output_v=None, output_h=None, visualize=True):
@@ -446,9 +446,13 @@ def simulate(output_v=None, output_h=None, visualize=True):
     visualizer(train = train, prefix = prefix, visualize = visualize)
 
 def validate():
-    simulate(0.07, 0)
-    simulate(0.03, 0)
-    simulate(0.01, 0)
+    #simulate(0.07, 0)
+    #simulate(0.03, 0)
+    #simulate(0.01, 0)
+
+    simulate(0, 0.1)
+    simulate(0, 0.2)
+    simulate(0, 0.3)
 
 simulate.cnt = 0
 
