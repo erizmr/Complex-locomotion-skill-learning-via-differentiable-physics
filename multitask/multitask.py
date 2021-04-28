@@ -145,11 +145,11 @@ def load_weights(name = "save.pkl"):
 
 @ti.kernel
 def compute_center(t: ti.i32):
+    n = ti.static(n_objects)
     for k in range(batch_size):
-        c = ti.Vector([0.0, 0.0])
-        for i in ti.static(range(n_objects)):
-            c += x[t, k, i]
-        center[t, k] = (1.0 / n_objects) * c
+        center[t, k] = ti.Vector([0.0, 0.0])
+    for k, i in ti.ndrange(batch_size, n):
+            center[t, k] += x[t, k, i] / n
 
 
 @ti.kernel
