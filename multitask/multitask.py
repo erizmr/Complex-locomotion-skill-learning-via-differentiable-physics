@@ -19,8 +19,8 @@ ti.init(arch=ti.gpu, default_fp=real)
 max_steps = 4096
 vis_interval = 256
 output_vis_interval = 8
-train_steps = 1024
-validate_steps = 2048
+train_steps = 2048
+validate_steps = 4096
 output_target = []
 output_sim = []
 output_loss = []
@@ -94,14 +94,14 @@ act = scalar()
 dt = 0.004
 
 run_period = 100
-jump_period = 250
+jump_period = 500
 turn_period = 500
 spring_omega = 2 * math.pi / dt / run_period
 print(spring_omega)
 drag_damping = 0
 dashpot_damping = 0.2
 
-batch_size = 256
+batch_size = 64
 
 #weight_decay = 0.001
 learning_rate = 3e-4
@@ -195,7 +195,7 @@ def nn1(t: ti.i32):
             for j in ti.static(range(duplicate_h)):
                 actuation += weights1[i, n_objects * 4 + n_sin_waves + duplicate_v * 2 + j] * target_h[t, k]
         actuation += bias1[i]
-        actuation = ti.sin(actuation)
+        actuation = ti.tanh(actuation)
         hidden[t, k, i] = actuation
 
 
@@ -206,7 +206,7 @@ def nn2(t: ti.i32):
         for j in ti.static(range(n_hidden)):
             actuation += weights2[i, j] * hidden[t, k, j]
         actuation += bias2[i]
-        actuation = ti.sin(actuation)
+        actuation = ti.tanh(actuation)
         act[t, k, i] = actuation
 
 
@@ -263,7 +263,7 @@ def compute_loss_velocity(t: ti.i32):
 def compute_loss_height(t: ti.i32):
     for k in range(batch_size):
         loss_height[None] += (height[t, k] - target_h[t, k]) ** 2 / \
-            (batch_size * (train_steps // jump_period)) / 4
+            (batch_size * (train_steps // jump_period))
     # if k == 0:
     #     print("Mark jump:", height[t, k], target_h[t, k])
 
@@ -273,7 +273,7 @@ def compute_loss_pose(t: ti.i32):
     for k, i in ti.ndrange(batch_size, n_objects):
         loss_pose[None] += ((x[t, k, i](0) - center[t, k](0) - x[0, k, i](0) + center[0, k](0)) ** 2 + \
             (x[t, k, i](1) - center[t, k](1) - x[0, k, i](1) + center[0, k](1)) ** 2) ** 0.5 / \
-            (batch_size * n_objects  * (train_steps // jump_period)) / 2
+            (batch_size * n_objects  * (train_steps // jump_period))
 
 @ti.kernel
 def compute_weight_decay():
@@ -297,7 +297,7 @@ def initialize_train(total_steps: ti.i32):
         pool[_] = (ti.random() - 0.5) * 2
     for t, k in ti.ndrange(total_steps, batch_size):
         target_v[t, k][0] = pool[t // turn_period + 100 * k] * 0.08
-        target_h[t, k] = ti.random() * 0.25 + 0.1
+        target_h[t, k] = ti.random() * 0.2 + 0.1
 
 
 
@@ -385,7 +385,7 @@ def visualizer(train, prefix, visualize = True):
                     gui.line((0, ground_height), (1, ground_height),
                             color=0x000022,
                             radius=3)
-                    gui.line((0, target_h[t] + ground_height), (1, target_h[t] + ground_height), color = 0x002200)
+                    gui.line((0, target_h[t]), (1, target_h[t]), color = 0x002200)
 
                     def circle(x, y, color):
                         gui.circle((x, y), ti.rgb_to_hex(color), 7)
@@ -453,8 +453,8 @@ def validate():
     #simulate(0.01, 0)
 
     simulate(0, 0.1)
+    simulate(0, 0.15)
     simulate(0, 0.2)
-    simulate(0, 0.3)
 
 simulate.cnt = 0
 
