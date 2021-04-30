@@ -34,8 +34,8 @@ vec = lambda: ti.Vector.field(dim, dtype=real)
 max_steps = 4096
 vis_interval = 256
 output_vis_interval = 8
-train_steps = 2048
-validate_steps = 4096
+train_steps = 512
+validate_steps = 1024
 output_target = []
 output_sim = []
 output_loss = []
@@ -104,7 +104,7 @@ turn_period = 500
 spring_omega = 2 * math.pi / dt / run_period
 print(spring_omega)
 drag_damping = 0
-dashpot_damping = 0.2 if dim == 2 else 0.1
+dashpot_damping = 0.1 if dim == 2 else 0.1
 
 batch_size = 64
 
@@ -275,8 +275,7 @@ def compute_loss_velocity(t: ti.i32):
 @ti.kernel
 def compute_loss_height(t: ti.i32):
     for k in range(batch_size):
-        loss_height[None] += (height[t, k] - target_h[t, k]) ** 2 / \
-            (batch_size * (train_steps // jump_period))
+        loss_height[None] += (height[t, k] - target_h[t, k]) ** 2 / batch_size
     # if k == 0:
     #     print("Mark jump:", height[t, k], target_h[t, k])
 
@@ -288,7 +287,7 @@ def compute_loss_pose(t: ti.i32):
         dist2 = 0.0
         for d in ti.static(range(dim)):
             dist2 += (x[t, k, i](d) - center[t, k](d) - x[0, k, i](d) + center[0, k](d)) ** 2
-        loss_pose[None] += dist2 ** 0.5 / (batch_size * n_objects  * (train_steps // jump_period))
+        loss_pose[None] += dist2 / batch_size / 25
 
 @ti.kernel
 def compute_weight_decay():
@@ -298,7 +297,7 @@ def compute_weight_decay():
         loss[None] += weight_decay * weights2[I] ** 2
 
 
-gui = ti.GUI(show_gui=False)
+gui = ti.GUI(show_gui=False, background_color=0xFFFFFF)
 
 @ti.kernel
 def initialize_validate(total_steps: ti.i32, output_v: ti.f32, output_h: ti.f32):
@@ -320,7 +319,7 @@ def initialize_train(total_steps: ti.i32):
         else:
             target_v[t, k][0] = pool[t // turn_period + 100 * k] * 0.08
             target_v[t, k][2] = pool[t // turn_period + 100 * (k + batch_size)] * 0.08
-        target_h[t, k] = ti.random() * 0.2 + 0.1
+        target_h[t, k] = ti.random() * 0.1 + 0.2
 
 
 
@@ -483,9 +482,11 @@ def validate():
     #simulate(0.03, 0)
     #simulate(0.01, 0)
 
-    simulate(0, 0.1)
-    simulate(0, 0.15)
+    # simulate(0, 0.1)
+    # simulate(0, 0.15)
     simulate(0, 0.2)
+    simulate(0, 0.25)
+    simulate(0, 0.3)
 
 simulate.cnt = 0
 
