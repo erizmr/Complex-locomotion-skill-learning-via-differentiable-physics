@@ -193,12 +193,11 @@ def nn1(t: ti.i32):
                 actuation += weights1[i, j * 4 + n_sin_waves + dim + d] * v[t, k, j][d] * 0.05
         if ti.static(duplicate_v > 0):
             for j in ti.static(range(duplicate_v)):
-                actuation += weights1[i, n_objects * 4 + n_sin_waves + j * (dim - 1)] * target_v[t, k][0]
                 if ti.static(dim == 2):
                     actuation += weights1[i, n_objects * 4 + n_sin_waves + j * (dim - 1)] * target_v[t, k][0]
                 else:
                     actuation += weights1[i, n_objects * 4 + n_sin_waves + j * (dim - 1)] * target_v[t, k][0]
-                    actuation += weights1[i, n_objects * 4 + n_sin_waves + j * (dim - 1) + 1] * target_v[t, k][1]
+                    actuation += weights1[i, n_objects * 4 + n_sin_waves + j * (dim - 1) + 1] * target_v[t, k][2]
         if ti.static(duplicate_h > 0):
             for j in ti.static(range(duplicate_h)):
                 actuation += weights1[i, n_objects * 4 + n_sin_waves + duplicate_v * (dim - 1) + j] * target_h[t, k]
@@ -284,6 +283,7 @@ def compute_loss_height(t: ti.i32):
 
 @ti.kernel
 def compute_loss_pose(t: ti.i32):
+    # TODO: This doesn't work for 3D
     for k, i in ti.ndrange(batch_size, n_objects):
         dist2 = 0.0
         for d in ti.static(range(dim)):
