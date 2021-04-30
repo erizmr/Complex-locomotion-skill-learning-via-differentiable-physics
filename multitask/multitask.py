@@ -1,4 +1,6 @@
 from robot_config import robots
+from robot3d_config import robots3d
+import threading
 import utils
 
 import random
@@ -16,6 +18,19 @@ debug = utils.Debug(False)
 real = ti.f64
 ti.init(arch=ti.gpu, default_fp=real)
 
+robot_id = 5
+if robot_id < 100:
+    dim = 2
+    objects, springs = robots[robot_id]()
+else:
+    dim = 3
+    objects, springs, faces = robots3d[robot_id - 100]()
+n_objects = len(objects)
+n_springs = len(springs)
+
+scalar = lambda: ti.field(dtype=real)
+vec = lambda: ti.Vector.field(dim, dtype=real)
+
 max_steps = 4096
 vis_interval = 256
 output_vis_interval = 8
@@ -24,10 +39,6 @@ validate_steps = 4096
 output_target = []
 output_sim = []
 output_loss = []
-
-dim = 2
-scalar = lambda: ti.field(dtype=real)
-vec = lambda: ti.Vector.field(dim, dtype=real)
 
 loss = scalar()
 loss_velocity = scalar()
@@ -53,11 +64,6 @@ elasticity = 0.0
 ground_height = 0.1
 gravity = -1.8
 friction = 2.5
-
-robot_id = 5
-objects, springs = robots[robot_id]()
-n_objects = len(objects)
-n_springs = len(springs)
 
 spring_anchor_a = ti.field(ti.i32)
 spring_anchor_b = ti.field(ti.i32)
@@ -98,7 +104,7 @@ turn_period = 500
 spring_omega = 2 * math.pi / dt / run_period
 print(spring_omega)
 drag_damping = 0
-dashpot_damping = 0.2
+dashpot_damping = 0.2 if dim == 2 else 0.1
 
 batch_size = 64
 
@@ -443,6 +449,16 @@ def visualizer(train, prefix, visualize = True):
             utils.plot_curve(output_loss, "training_curve.png")
             utils.plot_curve(output_loss[-200:], "training_curve_last_200.png")
 
+def output_mesh(x_, fn):
+    os.makedirs(fn + '_objs', exist_ok=True)
+    for t in range(1, train_steps):
+        f = open(fn + f'_objs/{t:06d}.obj', 'w')
+        for i in range(n_objects):
+            f.write('v %.6f %.6f %.6f\n' % (x_[t, 0, i, 0], x_[t, 0, i, 1], x_[t, 0, i, 2]))
+        for [p0, p1, p2] in faces:
+            f.write('f %d %d %d\n' % (p0 + 1, p1 + 1, p2 + 1))
+        f.close()
+
 @debug
 def simulate(output_v=None, output_h=None, visualize=True):
     train = output_v is None and output_h is None
@@ -455,7 +471,11 @@ def simulate(output_v=None, output_h=None, visualize=True):
             forward()
     else:
         forward(train = train, prefix = prefix)
-    
+        if dim == 3:
+            x_ = x.to_numpy()
+            t = threading.Thread(target=output_mesh,args=(x_, str(output_v) + '_' + str(output_h)))
+            t.start()
+
     visualizer(train = train, prefix = prefix, visualize = visualize)
 
 def validate():
