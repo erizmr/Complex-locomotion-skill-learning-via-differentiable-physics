@@ -19,6 +19,9 @@ real = ti.f64
 ti.init(arch=ti.gpu, default_fp=real)
 
 robot_id = 5
+if len(sys.argv) == 2:
+    robot_id = int(sys.argv[1])
+    print("Run robot", robot_id)
 if robot_id < 100:
     dim = 2
     objects, springs = robots[robot_id]()
@@ -34,8 +37,8 @@ vec = lambda: ti.Vector.field(dim, dtype=real)
 max_steps = 4096
 vis_interval = 256
 output_vis_interval = 8
-train_steps = 512
-validate_steps = 1024
+train_steps = 1024
+validate_steps = 2048
 output_target = []
 output_sim = []
 output_loss = []
@@ -373,6 +376,8 @@ def forward(train = True, prefix = None):
         apply_spring_force(t - 1)
         advance_toi(t)
     for t in range(1, total_steps):
+        if (t - 1) % run_period == run_period - 1:
+            print("Veclocity: {:.5f} {:.5f}".format(center[t, 0][0] - center[t - run_period, 0][0], target_v[t - run_period, 0][0]))
         if duplicate_v > 0 and (t - 1) % turn_period > run_period:
             compute_loss_velocity(t - 1)
         if duplicate_h > 0 and (t - 1) % jump_period == jump_period - 1:
@@ -450,7 +455,7 @@ def visualizer(train, prefix, visualize = True):
 
 def output_mesh(x_, fn):
     os.makedirs(fn + '_objs', exist_ok=True)
-    for t in range(1, train_steps):
+    for t in range(1, validate_steps):
         f = open(fn + f'_objs/{t:06d}.obj', 'w')
         for i in range(n_objects):
             f.write('v %.6f %.6f %.6f\n' % (x_[t, 0, i, 0], x_[t, 0, i, 1], x_[t, 0, i, 2]))
