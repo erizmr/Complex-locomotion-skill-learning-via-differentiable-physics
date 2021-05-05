@@ -119,7 +119,7 @@ adam_b1=0.9
 adam_b2=0.999
 
 def n_input_states():
-    return n_sin_waves + 4 * n_objects + duplicate_v * (dim - 1) + duplicate_h
+    return n_sin_waves + dim * 2 * n_objects + duplicate_v * (dim - 1) + duplicate_h
 
 ti.root.dense(ti.ijk, (max_steps, batch_size, n_objects)).place(x, v, v_inc)
 ti.root.dense(ti.i, n_springs).place(spring_anchor_a, spring_anchor_b,
@@ -192,18 +192,18 @@ def nn1(t: ti.i32):
             offset = x[t, k, j] - center[t, k]
             # use a smaller weight since there are too many of them
             for d in ti.static(range(dim)):
-                actuation += weights1[i, j * 4 + n_sin_waves + d] * offset[d] * 0.05
-                actuation += weights1[i, j * 4 + n_sin_waves + dim + d] * v[t, k, j][d] * 0.05
+                actuation += weights1[i, j * dim * 2 + n_sin_waves + d] * offset[d] * 0.05
+                actuation += weights1[i, j * dim * 2 + n_sin_waves + dim + d] * v[t, k, j][d] * 0.05
         if ti.static(duplicate_v > 0):
             for j in ti.static(range(duplicate_v)):
                 if ti.static(dim == 2):
-                    actuation += weights1[i, n_objects * 4 + n_sin_waves + j * (dim - 1)] * target_v[t, k][0]
+                    actuation += weights1[i, n_objects * dim * 2 + n_sin_waves + j * (dim - 1)] * target_v[t, k][0]
                 else:
-                    actuation += weights1[i, n_objects * 4 + n_sin_waves + j * (dim - 1)] * target_v[t, k][0]
-                    actuation += weights1[i, n_objects * 4 + n_sin_waves + j * (dim - 1) + 1] * target_v[t, k][2]
+                    actuation += weights1[i, n_objects * dim * 2 + n_sin_waves + j * (dim - 1)] * target_v[t, k][0]
+                    actuation += weights1[i, n_objects * dim * 2 + n_sin_waves + j * (dim - 1) + 1] * target_v[t, k][2]
         if ti.static(duplicate_h > 0):
             for j in ti.static(range(duplicate_h)):
-                actuation += weights1[i, n_objects * 4 + n_sin_waves + duplicate_v * (dim - 1) + j] * target_h[t, k]
+                actuation += weights1[i, n_objects * dim * 2 + n_sin_waves + duplicate_v * (dim - 1) + j] * target_h[t, k]
         actuation += bias1[i]
         actuation = ti.tanh(actuation)
         hidden[t, k, i] = actuation
