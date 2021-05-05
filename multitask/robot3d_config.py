@@ -69,11 +69,19 @@ def add_mesh_square(i, j, k, actuation=0.0):
 
 def robotA():
     add_mesh_square(0, 0, 0, actuation=0.3)
-    add_mesh_square(0, 1, 0, actuation=0.3)
-    add_mesh_square(1, 1, 0, actuation=0.3)
-    add_mesh_square(2, 1, 0, actuation=0.3)
-    add_mesh_square(3, 0, 0, actuation=0.3)
-    add_mesh_square(3, 1, 0, actuation=0.3)
+    add_mesh_square(2, 0, 2, actuation=0.3)
+    add_mesh_square(0, 0, 2, actuation=0.3)
+    add_mesh_square(2, 0, 0, actuation=0.3)
+
+    add_mesh_square(0, 1, 0, actuation=0)
+    add_mesh_square(0, 1, 1, actuation=0)
+    add_mesh_square(0, 1, 2, actuation=0)
+    add_mesh_square(1, 1, 0, actuation=0)
+    add_mesh_square(1, 1, 1, actuation=0)
+    add_mesh_square(1, 1, 2, actuation=0)
+    add_mesh_square(2, 1, 0, actuation=0)
+    add_mesh_square(2, 1, 1, actuation=0)
+    add_mesh_square(2, 1, 2, actuation=0)
 
     return objects, springs, faces
 
