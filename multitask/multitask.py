@@ -1,5 +1,6 @@
 from robot_config import robots
 from robot3d_config import robots3d
+from robot_mpm import robots_mpm
 import threading
 import utils
 
@@ -22,19 +23,28 @@ robot_id = 5
 if len(sys.argv) == 2:
     robot_id = int(sys.argv[1])
     print("Run robot", robot_id)
-if robot_id < 100:
+simulator = ""
+if robot_id >= 10000:
+    simulator = "mpm"
     dim = 2
-    objects, springs = robots[robot_id]()
+    objects, springs, n_springs = robots_mpm[robot_id - 10000]()
+    n_objects = len(objects)
 else:
-    dim = 3
-    objects, springs, faces = robots3d[robot_id - 100]()
-n_objects = len(objects)
-n_springs = len(springs)
+    simulator = "mass_spring"
+    if robot_id < 100:
+        dim = 2
+        objects, springs = robots[robot_id]()
+    else:
+        dim = 3
+        objects, springs, faces = robots3d[robot_id - 100]()
+    n_objects = len(objects)
+    n_springs = len(springs)
 
 scalar = lambda: ti.field(dtype=real)
 vec = lambda: ti.Vector.field(dim, dtype=real)
+mat = lambda: ti.Matrix.field(dim, dim, dtype=real)
 
-max_steps = 4096
+max_steps = 2048
 vis_interval = 256
 output_vis_interval = 8
 train_steps = 1024
@@ -90,8 +100,8 @@ m_bias2, v_bias2 = scalar(), scalar()
 
 center = vec()
 height = scalar()
-duplicate_v = 0
-duplicate_h = 30
+duplicate_v = 30
+duplicate_h = 0
 target_v = vec()
 target_h = scalar()
 weight_v = 1.
@@ -99,7 +109,7 @@ weight_h = 1.
 
 act = scalar()
 
-dt = 0.004
+dt = 0.004 if simulator == "mass_spring" else 0.002
 
 run_period = 100
 jump_period = 500
@@ -109,7 +119,7 @@ print(spring_omega)
 drag_damping = 0
 dashpot_damping = 0.1 if dim == 2 else 0.1
 
-batch_size = 64
+batch_size = 1
 
 #weight_decay = 0.001
 learning_rate = 3e-4
@@ -125,6 +135,24 @@ ti.root.dense(ti.ijk, (max_steps, batch_size, n_objects)).place(x, v, v_inc)
 ti.root.dense(ti.i, n_springs).place(spring_anchor_a, spring_anchor_b,
                                      spring_length, spring_stiffness,
                                      spring_actuation)
+
+n_particles = n_objects
+n_grid = 64
+dx = 1 / n_grid
+inv_dx = 1 / dx
+p_vol = 1
+E, mu, la = 10, 10, 10
+act_strength = 4
+
+actuator_id = ti.field(ti.i32)
+particle_type = ti.field(ti.i32)
+grid_v_in, grid_m_in = vec(), scalar()
+grid_v_out = vec()
+C, F = mat(), mat()
+ti.root.dense(ti.ij, (batch_size, n_particles)).place(actuator_id, particle_type)
+ti.root.dense(ti.ijk, (max_steps, batch_size, n_particles)).place(C, F)
+ti.root.dense(ti.ijk, (batch_size, n_grid, n_grid)).place(grid_v_in, grid_m_in, grid_v_out)
+
 ti.root.dense(ti.ij, (n_hidden, n_input_states())).place(weights1)
 ti.root.dense(ti.i, n_hidden).place(bias1)
 ti.root.dense(ti.ij, (n_springs, n_hidden)).place(weights2)
@@ -183,17 +211,27 @@ def compute_height(t: ti.i32):
 
 
 @ti.kernel
+def nn0(t: ti.i32):
+    for k, i, j in ti.ndrange(batch_size, n_hidden, n_objects):
+        offset = x[t, k, j] - center[t, k]
+        # use a smaller weight since there are too many of them
+        for d in ti.static(range(dim)):
+            hidden[t, k, i] += weights1[i, j * dim * 2 + n_sin_waves + d] * offset[d] * 0.05
+            hidden[t, k, i] += weights1[i, j * dim * 2 + n_sin_waves + dim + d] * v[t, k, j][d] * 0.05
+
+
+@ti.kernel
 def nn1(t: ti.i32):
     for k, i in ti.ndrange(batch_size, n_hidden):
-        actuation = 0.0
+        actuation = hidden[t, k, i]
         for j in ti.static(range(n_sin_waves)):
             actuation += weights1[i, j] * ti.sin(spring_omega * t * dt + 2 * math.pi / n_sin_waves * j)
-        for j in ti.static(range(n_objects)):
-            offset = x[t, k, j] - center[t, k]
-            # use a smaller weight since there are too many of them
-            for d in ti.static(range(dim)):
-                actuation += weights1[i, j * dim * 2 + n_sin_waves + d] * offset[d] * 0.05
-                actuation += weights1[i, j * dim * 2 + n_sin_waves + dim + d] * v[t, k, j][d] * 0.05
+        # for j in ti.static(range(n_objects)):
+        #     offset = x[t, k, j] - center[t, k]
+        #     # use a smaller weight since there are too many of them
+        #     for d in ti.static(range(dim)):
+        #         actuation += weights1[i, j * dim * 2 + n_sin_waves + d] * offset[d] * 0.05
+        #         actuation += weights1[i, j * dim * 2 + n_sin_waves + dim + d] * v[t, k, j][d] * 0.05
         if ti.static(duplicate_v > 0):
             for j in ti.static(range(duplicate_v)):
                 if ti.static(dim == 2):
@@ -264,6 +302,108 @@ def advance_toi(t: ti.i32):
 
 
 @ti.kernel
+def clear_grid():
+    for k, i, j in ti.ndrange(batch_size, n_grid, n_grid):
+        grid_v_in[k, i, j] = ti.Matrix.zero(real, dim, 1)
+        grid_m_in[k, i, j] = 0
+        grid_v_out[k, i, j] = ti.Matrix.zero(real, dim, 1)
+        grid_v_in.grad[k, i, j] = ti.Matrix.zero(real, dim, 1)
+        grid_m_in.grad[k, i, j] = 0
+        grid_v_out.grad[k, i, j] = ti.Matrix.zero(real, dim, 1)
+
+
+@ti.kernel
+def p2g(f: ti.i32):
+    for k, p in ti.ndrange(batch_size, n_particles):
+        base = ti.cast(x[f, k, p] * inv_dx - 0.5, ti.i32)
+        fx = x[f, k, p] * inv_dx - ti.cast(base, ti.i32)
+        w = [0.5 * (1.5 - fx)**2, 0.75 - (fx - 1)**2, 0.5 * (fx - 0.5)**2]
+        new_F = (ti.Matrix.diag(dim=2, val=1) + dt * C[f, k, p]) @ F[f, k, p]
+        J = (new_F).determinant()
+        if particle_type[k, p] == 0:  # fluid
+            sqrtJ = ti.sqrt(J)
+            new_F = ti.Matrix([[sqrtJ, 0], [0, sqrtJ]])
+
+        F[f + 1, k, p] = new_F
+        r, s = ti.polar_decompose(new_F)
+
+        act_id = actuator_id[k, p]
+
+        act_applied = act[f, k, ti.max(0, act_id)] * act_strength
+        if act_id == -1:
+            act_applied = 0.0
+        # ti.print(act)
+
+        A = ti.Matrix([[0.0, 0.0], [0.0, 1.0]]) * act_applied
+        cauchy = ti.Matrix([[0.0, 0.0], [0.0, 0.0]])
+        mass = 0.0
+        if particle_type[k, p] == 0:
+            mass = 4
+            cauchy = ti.Matrix([[1.0, 0.0], [0.0, 0.1]]) * (J - 1) * E
+        else:
+            mass = 1
+            cauchy = 2 * mu * (new_F - r) @ new_F.transpose() + \
+                     ti.Matrix.diag(2, la * (J - 1) * J)
+        cauchy += new_F @ A @ new_F.transpose()
+        stress = -(dt * p_vol * 4 * inv_dx * inv_dx) * cauchy
+        affine = stress + mass * C[f, k, p]
+        for i in ti.static(range(3)):
+            for j in ti.static(range(3)):
+                offset = ti.Vector([i, j])
+                dpos = (ti.cast(ti.Vector([i, j]), real) - fx) * dx
+                weight = w[i](0) * w[j](1)
+                grid_v_in[k, base + offset] += weight * (mass * v[f, k, p] + affine @ dpos)
+                grid_m_in[k, base + offset] += weight * mass
+
+
+bound = 3
+coeff = 0.5
+
+
+@ti.kernel
+def grid_op():
+    for k, i, j in grid_m_in:
+        inv_m = 1 / (grid_m_in[k, i, j] + 1e-10)
+        v_out = inv_m * grid_v_in[k, i, j]
+        v_out[1] += dt * gravity
+        if i < bound:
+            v_out[0] = 0
+            v_out[1] = 0
+        if i > n_grid - bound:
+            v_out[0] = 0
+            v_out[1] = 0
+        if j < bound:
+            v_out[0] = 0
+            v_out[1] = 0
+        if j > n_grid - bound:
+            v_out[0] = 0
+            v_out[1] = 0
+        grid_v_out[k, i, j] = v_out
+
+
+@ti.kernel
+def g2p(f: ti.i32):
+    for k, p in ti.ndrange(batch_size, n_particles):
+        base = ti.cast(x[f, k, p] * inv_dx - 0.5, ti.i32)
+        fx = x[f, k, p] * inv_dx - ti.cast(base, real)
+        w = [0.5 * (1.5 - fx)**2, 0.75 - (fx - 1.0)**2, 0.5 * (fx - 0.5)**2]
+        new_v = ti.Vector([0.0, 0.0])
+        new_C = ti.Matrix([[0.0, 0.0], [0.0, 0.0]])
+
+        for i in ti.static(range(3)):
+            for j in ti.static(range(3)):
+                dpos = ti.cast(ti.Vector([i, j]), real) - fx
+                g_v = grid_v_out[k, base(0) + i, base(1) + j]
+                weight = w[i](0) * w[j](1)
+                new_v += weight * g_v
+                new_C += 4 * weight * g_v.outer_product(dpos) * inv_dx
+
+        v[f + 1, k, p] = new_v
+        x[f + 1, k, p] = x[f, k, p] + dt * v[f + 1, k, p]
+        C[f + 1, k, p] = new_C
+
+
+@ti.kernel
 def compute_loss_velocity(t: ti.i32):
     for k in range(batch_size):
         if ti.static(dim == 2):
@@ -307,6 +447,7 @@ def initialize_validate(total_steps: ti.i32, output_v: ti.f32, output_h: ti.f32)
     for t, k in ti.ndrange(total_steps, batch_size):
         if ti.static(dim == 2):
             target_v[t, k][0] = ((t // turn_period) % 2 * 2 - 1) * output_v
+            target_v[t, k][0] = 0.05
         else:
             target_v[t, k][0] = ((t // turn_period) % 2 * 2 - 1) * output_v
             target_v[t, k][2] = ((t // turn_period) % 2 * 2 - 1) * output_v
@@ -319,6 +460,7 @@ def initialize_train(total_steps: ti.i32):
     for t, k in ti.ndrange(total_steps, batch_size):
         if ti.static(dim == 2):
             target_v[t, k][0] = pool[t // turn_period + 100 * k] * 0.08
+            target_v[t, k][0] = 0.05
         else:
             target_v[t, k][0] = pool[t // turn_period + 100 * k] * 0.08
             target_v[t, k][2] = pool[t // turn_period + 100 * (k + batch_size)] * 0.08
@@ -333,6 +475,17 @@ def clear_states():
         v.grad[t, k, i] = ti.Matrix.zero(real, dim, 1)
         v_inc[t, k, i] = ti.Matrix.zero(real, dim, 1)
         v_inc.grad[t, k, i] = ti.Matrix.zero(real, dim, 1)
+    for t, k, i in ti.ndrange(max_steps, batch_size, n_particles):
+        C[t, k, i] = ti.Matrix.zero(real, dim, dim)
+        C.grad[t, k, i] = ti.Matrix.zero(real, dim, dim)
+        if ti.static(dim == 2):
+            F[t, k, i] = [[1., 0.], [0., 1.]]
+        else:
+            F[t, k, i] = [[1., 0., 0.], [0., 1., 0.], [0., 0., 1.]]
+        F.grad[t, k, i] = ti.Matrix.zero(real, dim, dim)
+    for t, k, i in ti.ndrange(max_steps, batch_size, n_hidden):
+        hidden[t, k, i] = 0.
+        hidden.grad[t, k, i] = 0.
 
 
 def clear():
@@ -345,13 +498,13 @@ def clear():
     v_weights2.fill(0)
     m_bias2.fill(0)
     v_bias2.fill(0)
-    
+
 @debug
 def init(train, output_v = None, output_h = None):
     clear()
 
     total_steps = train_steps if train else validate_steps
-    
+
     if train:
         initialize_train(total_steps)
     else:
@@ -371,10 +524,17 @@ def forward(train = True, prefix = None):
     for t in range(1, total_steps):
         compute_center(t - 1)
         compute_height(t - 1)
+        nn0(t - 1)
         nn1(t - 1)
         nn2(t - 1)
-        apply_spring_force(t - 1)
-        advance_toi(t)
+        if simulator == "mpm":
+            clear_grid()
+            p2g(t - 1)
+            grid_op()
+            g2p(t - 1)
+        else:
+            apply_spring_force(t - 1)
+            advance_toi(t)
     for t in range(1, total_steps):
         if (t - 1) % run_period == run_period - 1:
             print("Veclocity: {:.5f} {:.5f}".format(center[t, 0][0] - center[t - run_period, 0][0], target_v[t - run_period, 0][0]))
@@ -410,31 +570,36 @@ def visualizer(train, prefix, visualize = True):
                     gui.line((0, target_h[t]), (1, target_h[t]), color = 0x002200)
 
                     def circle(x, y, color):
-                        gui.circle((x, y), ti.rgb_to_hex(color), 7)
-                        
-
-                    for i in range(n_springs):
-
-                        def get_pt(x):
-                            return (x[0], x[1])
-
-                        a = act[t - 1, 0, i] * 0.5
-                        r = 2
-                        if spring_actuation[i] == 0:
-                            a = 0
-                            c = 0x222222
+                        if simulator == "mass_spring":
+                            gui.circle((x, y), ti.rgb_to_hex(color), 7)
                         else:
-                            r = 4
-                            c = ti.rgb_to_hex((0.5 + a, 0.5 - abs(a), 0.5 - a))
-                        gui.line(get_pt(x[t, 0, spring_anchor_a[i]]),
-                                get_pt(x[t, 0, spring_anchor_b[i]]),
-                                color=c,
-                                radius=r)
+                            gui.circle((x, y + 0.1 - dx * bound), ti.rgb_to_hex(color), 2)
+                        
+                    if simulator == "mass_spring":
+                        for i in range(n_springs):
 
+                            def get_pt(x):
+                                return (x[0], x[1])
+
+                            a = act[t - 1, 0, i] * 0.5
+                            r = 2
+                            if spring_actuation[i] == 0:
+                                a = 0
+                                c = 0x222222
+                            else:
+                                r = 4
+                                c = ti.rgb_to_hex((0.5 + a, 0.5 - abs(a), 0.5 - a))
+                            gui.line(get_pt(x[t, 0, spring_anchor_a[i]]),
+                                    get_pt(x[t, 0, spring_anchor_b[i]]),
+                                    color=c,
+                                    radius=r)
+
+                    aid = actuator_id.to_numpy()
                     for i in range(n_objects):
-                        color = (0.4, 0.6, 0.6)
-                        if i == head_id:
-                            color = (0.8, 0.2, 0.3)
+                        color = (0.06640625, 0.06640625, 0.06640625)
+                        if simulator == "mpm" and aid[0, i] != -1:
+                            act_applied = act[t - 1, 0, aid[0, i]]
+                            color = (0.5 - act_applied, 0.5 - abs(act_applied), 0.5 + act_applied)
                         circle(x[t, 0, i][0], x[t, 0, i][1], color)
 
                     if target_v[t, 0][0] > 0:
@@ -489,9 +654,10 @@ def validate():
 
     # simulate(0, 0.1)
     # simulate(0, 0.15)
-    simulate(0, 0.2)
-    simulate(0, 0.25)
-    simulate(0, 0.3)
+    # simulate(0, 0.2)
+    # simulate(0, 0.25)
+    # simulate(0, 0.3)
+    simulate(0, 0)
 
 simulate.cnt = 0
 
@@ -499,18 +665,26 @@ simulate.cnt = 0
 def setup_robot():
     print('n_objects=', n_objects, '   n_springs=', n_springs)
 
-    for k in range(batch_size):
-        for i in range(n_objects):
-            x[0, k, i] = objects[i]
-            x[0, k, i][0] += 0.4
+    if simulator == "mpm":
+        for k in range(batch_size):
+            for i in range(n_objects):
+                x[0, k, i] = objects[i]
+                x[0, k, i][0] += 0.4
+                actuator_id[k, i] = springs[i]
+        particle_type.fill(1)
+    else:
+        for k in range(batch_size):
+            for i in range(n_objects):
+                x[0, k, i] = objects[i]
+                x[0, k, i][0] += 0.4
 
-    for i in range(n_springs):
-        s = springs[i]
-        spring_anchor_a[i] = s[0]
-        spring_anchor_b[i] = s[1]
-        spring_length[i] = s[2]
-        spring_stiffness[i] = s[3] / 10
-        spring_actuation[i] = s[4]
+        for i in range(n_springs):
+            s = springs[i]
+            spring_anchor_a[i] = s[0]
+            spring_anchor_b[i] = s[1]
+            spring_length[i] = s[2]
+            spring_stiffness[i] = s[3] / 10
+            spring_actuation[i] = s[4]
 
 @ti.kernel
 def adam_update(w: ti.template(), m: ti.template(), v: ti.template(), iter: ti.i32):
