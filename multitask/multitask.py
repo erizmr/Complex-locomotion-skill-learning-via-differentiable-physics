@@ -518,6 +518,26 @@ def init(train, output_v = None, output_h = None):
 def compute_loss_final(l: ti.template()):
     loss[None] += l[None]
 
+
+@ti.complex_kernel
+def advance_mpm(s):
+    clear_grid()
+    p2g(s)
+    grid_op()
+    g2p(s)
+
+
+@ti.complex_kernel_grad(advance_mpm)
+def advance_mpm_grad(s):
+    clear_grid()
+    p2g(s)
+    grid_op()
+
+    g2p.grad(s)
+    grid_op.grad()
+    p2g.grad(s)
+
+
 @debug
 def forward(train = True, prefix = None):
     total_steps = train_steps if train else validate_steps
@@ -528,10 +548,7 @@ def forward(train = True, prefix = None):
         nn1(t - 1)
         nn2(t - 1)
         if simulator == "mpm":
-            clear_grid()
-            p2g(t - 1)
-            grid_op()
-            g2p(t - 1)
+            advance_mpm(t - 1)
         else:
             apply_spring_force(t - 1)
             advance_toi(t)
