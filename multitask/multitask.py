@@ -91,6 +91,7 @@ bias1 = scalar()
 n_hidden = 64
 weights2 = scalar()
 bias2 = scalar()
+hidden_act = scalar()
 hidden = scalar()
 
 m_weights1, v_weights1 = scalar(), scalar()
@@ -163,7 +164,7 @@ ti.root.dense(ti.i, n_hidden).place(m_bias1, v_bias1)
 ti.root.dense(ti.ij, (n_springs, n_hidden)).place(m_weights2, v_weights2)
 ti.root.dense(ti.i, n_springs).place(m_bias2, v_bias2)
 
-ti.root.dense(ti.ijk, (max_steps, batch_size, n_hidden)).place(hidden)
+ti.root.dense(ti.ijk, (max_steps, batch_size, n_hidden)).place(hidden_act, hidden)
 ti.root.dense(ti.ijk, (max_steps, batch_size, n_springs)).place(act)
 ti.root.dense(ti.ij, (max_steps, batch_size)).place(center, target_v, target_h, height)
 ti.root.place(loss, total_norm_sqr)
@@ -211,40 +212,35 @@ def compute_height(t: ti.i32):
 
 
 @ti.kernel
-def nn0(t: ti.i32):
+def nn1(t: ti.i32):
     for k, i, j in ti.ndrange(batch_size, n_hidden, n_objects):
         offset = x[t, k, j] - center[t, k]
-        # use a smaller weight since there are too many of them
         for d in ti.static(range(dim)):
             hidden[t, k, i] += weights1[i, j * dim * 2 + n_sin_waves + d] * offset[d] * 0.05
             hidden[t, k, i] += weights1[i, j * dim * 2 + n_sin_waves + dim + d] * v[t, k, j][d] * 0.05
-
-
-@ti.kernel
-def nn1(t: ti.i32):
-    for k, i in ti.ndrange(batch_size, n_hidden):
-        actuation = hidden[t, k, i]
-        for j in ti.static(range(n_sin_waves)):
-            actuation += weights1[i, j] * ti.sin(spring_omega * t * dt + 2 * math.pi / n_sin_waves * j)
+    for k, i, j in ti.ndrange(batch_size, n_hidden, n_sin_waves):
+        hidden[t, k, i] += weights1[i, j] * ti.sin(spring_omega * t * dt + 2 * math.pi / n_sin_waves * j)
         # for j in ti.static(range(n_objects)):
         #     offset = x[t, k, j] - center[t, k]
         #     # use a smaller weight since there are too many of them
         #     for d in ti.static(range(dim)):
         #         actuation += weights1[i, j * dim * 2 + n_sin_waves + d] * offset[d] * 0.05
         #         actuation += weights1[i, j * dim * 2 + n_sin_waves + dim + d] * v[t, k, j][d] * 0.05
-        if ti.static(duplicate_v > 0):
-            for j in ti.static(range(duplicate_v)):
-                if ti.static(dim == 2):
-                    actuation += weights1[i, n_objects * dim * 2 + n_sin_waves + j * (dim - 1)] * target_v[t, k][0]
-                else:
-                    actuation += weights1[i, n_objects * dim * 2 + n_sin_waves + j * (dim - 1)] * target_v[t, k][0]
-                    actuation += weights1[i, n_objects * dim * 2 + n_sin_waves + j * (dim - 1) + 1] * target_v[t, k][2]
-        if ti.static(duplicate_h > 0):
-            for j in ti.static(range(duplicate_h)):
-                actuation += weights1[i, n_objects * dim * 2 + n_sin_waves + duplicate_v * (dim - 1) + j] * target_h[t, k]
-        actuation += bias1[i]
-        actuation = ti.tanh(actuation)
-        hidden[t, k, i] = actuation
+    if ti.static(duplicate_v > 0):
+        if ti.static(dim == 2):
+            for k, i, j in ti.ndrange(batch_size, n_hidden, duplicate_v):
+                hidden[t, k, i] += weights1[i, n_objects * dim * 2 + n_sin_waves + j * (dim - 1)] * target_v[t, k][0]
+        else:
+            for k, i, j in ti.ndrange(batch_size, n_hidden, duplicate_v):
+                hidden[t, k, i] += weights1[i, n_objects * dim * 2 + n_sin_waves + j * (dim - 1)] * target_v[t, k][0]
+                hidden[t, k, i] += weights1[i, n_objects * dim * 2 + n_sin_waves + j * (dim - 1) + 1] * target_v[t, k][2]
+    if ti.static(duplicate_h > 0):
+        for k, i, j in ti.ndrange(batch_size, n_hidden, duplicate_h):
+            hidden[t, k, i] += weights1[i, n_objects * dim * 2 + n_sin_waves + duplicate_v * (dim - 1) + j] * target_h[t, k]
+
+    for k, i in ti.ndrange(batch_size, n_hidden):
+        hidden[t, k, i] += bias1[i]
+        hidden_act[t, k, i] = ti.tanh(hidden[t, k, i])
 
 
 @ti.kernel
@@ -252,7 +248,7 @@ def nn2(t: ti.i32):
     for k, i in ti.ndrange(batch_size, n_springs):
         actuation = 0.0
         for j in ti.static(range(n_hidden)):
-            actuation += weights2[i, j] * hidden[t, k, j]
+            actuation += weights2[i, j] * hidden_act[t, k, j]
         actuation += bias2[i]
         actuation = ti.tanh(actuation)
         act[t, k, i] = actuation
@@ -484,8 +480,8 @@ def clear_states():
             F[t, k, i] = [[1., 0., 0.], [0., 1., 0.], [0., 0., 1.]]
         F.grad[t, k, i] = ti.Matrix.zero(real, dim, dim)
     for t, k, i in ti.ndrange(max_steps, batch_size, n_hidden):
-        hidden[t, k, i] = 0.
-        hidden.grad[t, k, i] = 0.
+        hidden_act[t, k, i] = 0.
+        hidden_act.grad[t, k, i] = 0.
 
 
 def clear():
@@ -544,7 +540,6 @@ def forward(train = True, prefix = None):
     for t in range(1, total_steps):
         compute_center(t - 1)
         compute_height(t - 1)
-        nn0(t - 1)
         nn1(t - 1)
         nn2(t - 1)
         if simulator == "mpm":
@@ -553,8 +548,8 @@ def forward(train = True, prefix = None):
             apply_spring_force(t - 1)
             advance_toi(t)
     for t in range(1, total_steps):
-        if (t - 1) % run_period == run_period - 1:
-            print("Veclocity: {:.5f} {:.5f}".format(center[t, 0][0] - center[t - run_period, 0][0], target_v[t - run_period, 0][0]))
+        #if (t - 1) % run_period == run_period - 1:
+        #    print("Veclocity: {:.5f} {:.5f}".format(center[t, 0][0] - center[t - run_period, 0][0], target_v[t - run_period, 0][0]))
         if duplicate_v > 0 and (t - 1) % turn_period > run_period:
             compute_loss_velocity(t - 1)
         if duplicate_h > 0 and (t - 1) % jump_period == jump_period - 1:
