@@ -121,7 +121,7 @@ turn_period = 500
 spring_omega = 2 * math.pi / dt / run_period
 print(spring_omega)
 drag_damping = 0
-dashpot_damping = 0.1 if dim == 2 else 0.1
+dashpot_damping = 0.2 if dim == 2 else 0.1
 
 batch_size = 128
 
@@ -130,7 +130,7 @@ learning_rate = 3e-4
 
 adam_a = learning_rate
 adam_b1=0.9
-adam_b2=0.999
+adam_b2=0.9
 
 def get_input_states():
     return n_sin_waves + dim * 2 * n_objects + duplicate_v * (dim - 1) + duplicate_h
@@ -245,7 +245,7 @@ def nn1(t: ti.i32):
         hidden[t, k, i] += weights1[i, j] * input_state[t, k, j]
 
     for k, i in ti.ndrange(batch_size, n_hidden):
-        hidden_act[t, k, i] = ti.tanh(hidden[t, k, i] + bias1[i])
+        hidden_act[t, k, i] = ti.sin(hidden[t, k, i] + bias1[i])
 
 
 @ti.kernel
@@ -253,7 +253,7 @@ def nn2(t: ti.i32):
     for k, i, j in ti.ndrange(batch_size, n_springs, n_hidden):
         act[t, k, i] += weights2[i, j] * hidden_act[t, k, j]
     for k, i in ti.ndrange(batch_size, n_springs):
-        act_act[t, k, i] = ti.tanh(act[t, k, i] + bias2[i])
+        act_act[t, k, i] = ti.sin(act[t, k, i] + bias2[i])
 
 
 @ti.kernel
@@ -498,7 +498,7 @@ def clear():
 
 @debug
 def init(train, output_v = None, output_h = None):
-    clear()
+    clear_states()
 
     total_steps = train_steps if train else validate_steps
 
@@ -701,7 +701,11 @@ def setup_robot():
             spring_actuation[i] = s[4]
 
 @ti.kernel
-def adam_update(w: ti.template(), m: ti.template(), v: ti.template(), iter: ti.i32):
+def gradient_update(w: ti.template(), m: ti.template(), v: ti.template(), iter: ti.i32):
+    '''
+    for I in ti.grouped(w):
+        w[I] -= w.grad[I] * learning_rate
+    '''
     for I in ti.grouped(w):
         m[I] = adam_b1 * m[I] + (1 - adam_b1) * w.grad[I]
         v[I] = adam_b2 * v[I] + (1 - adam_b2) * w.grad[I] * w.grad[I]
@@ -763,10 +767,10 @@ def optimize(output_log = "training.log"):
         print("TNS= ", total_norm_sqr[None], file = log_file)
         log_file.close()
 
-        adam_update(weights1, m_weights1, v_weights1, iter)
-        adam_update(bias1, m_bias1, v_bias1, iter)
-        adam_update(weights2, m_weights2, v_weights2, iter)
-        adam_update(bias2, m_bias2, v_bias2, iter)
+        gradient_update(weights1, m_weights1, v_weights1, iter)
+        gradient_update(bias1, m_bias1, v_bias1, iter)
+        gradient_update(weights2, m_weights2, v_weights2, iter)
+        gradient_update(bias2, m_bias2, v_bias2, iter)
         losses.append(loss[None])
 
         # print(time.time() - t, ' 2')
