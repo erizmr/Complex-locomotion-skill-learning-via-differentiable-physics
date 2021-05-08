@@ -44,11 +44,11 @@ scalar = lambda: ti.field(dtype=real)
 vec = lambda: ti.Vector.field(dim, dtype=real)
 mat = lambda: ti.Matrix.field(dim, dim, dtype=real)
 
-max_steps = 2048
+max_steps = 4005
 vis_interval = 256
 output_vis_interval = 8
-train_steps = 1024
-validate_steps = 2048
+train_steps = 1000
+validate_steps = 4000
 output_target = []
 output_sim = []
 output_loss = []
@@ -124,6 +124,8 @@ drag_damping = 0
 dashpot_damping = 0.2 if dim == 2 else 0.1
 
 batch_size = 128
+
+reset_step = 16
 
 #weight_decay = 0.001
 learning_rate = 3e-4
@@ -453,10 +455,10 @@ def initialize_validate(total_steps: ti.i32, output_v: ti.f32, output_h: ti.f32)
 @ti.kernel
 def initialize_train(total_steps: ti.i32):
     for _ in pool:
-        pool[_] = (ti.random() - 0.5) * 2
+        pool[_] = (ti.random()) * 2. - 1
     for t, k in ti.ndrange(total_steps, batch_size):
         if ti.static(dim == 2):
-            target_v[t, k][0] = pool[t // turn_period + 100 * k] * 0.08
+            target_v[t, k][0] = pool[t // turn_period + 100 * k] * 0.07
         else:
             target_v[t, k][0] = pool[t // turn_period + 100 * k] * 0.08
             target_v[t, k][2] = pool[t // turn_period + 100 * (k + batch_size)] * 0.08
@@ -538,32 +540,31 @@ def advance_mpm_grad(s):
 @debug
 def forward(train = True, prefix = None):
     total_steps = train_steps if train else validate_steps
-    for t in range(1, total_steps):
-        compute_center(t - 1)
-        compute_height(t - 1)
-        nn_input(t - 1)
-        nn1(t - 1)
-        nn2(t - 1)
+    for t in range(total_steps):
+        compute_center(t)
+        compute_height(t)
+        nn_input(t)
+        nn1(t)
+        nn2(t)
         if simulator == "mpm":
-            advance_mpm(t - 1)
+            advance_mpm(t)
         else:
-            apply_spring_force(t - 1)
-            advance_toi(t)
-    for t in range(1, total_steps):
-        #if (t - 1) % run_period == run_period - 1:
-        #    print("Veclocity: {:.5f} {:.5f}".format(center[t, 0][0] - center[t - run_period, 0][0], target_v[t - run_period, 0][0]))
-        if duplicate_v > 0 and (t - 1) % turn_period > run_period:
-            compute_loss_velocity(t - 1)
-        if duplicate_h > 0 and (t - 1) % jump_period == jump_period - 1:
-            for k in range(batch_size):
-                compute_loss_height(t - 1)
-                compute_loss_pose(t - 1)
+            apply_spring_force(t)
+            advance_toi(t + 1)
+
+    compute_center(total_steps)
+    compute_height(total_steps)
+    
+    for t in range(1, total_steps + 1):
+        if duplicate_v > 0 and t % turn_period > run_period:
+            compute_loss_velocity(t)
+        if duplicate_h > 0 and t % jump_period == jump_period - 1:
+            compute_loss_height(t)
+        if duplicate_h > 0 and t % jump_period == 0:
+            compute_loss_pose(t)
 
     for l in losses:
         compute_loss_final(l)
-
-    # print("Speed= ", math.sqrt(loss[None] / loss_cnt))
-    #compute_weight_decay()
 
 @debug
 def visualizer(train, prefix, visualize = True):
@@ -662,9 +663,11 @@ def simulate(output_v=None, output_h=None, visualize=True):
     visualizer(train = train, prefix = prefix, visualize = visualize)
 
 def validate():
-    simulate(0.07, 0)
-    simulate(0.03, 0)
-    simulate(0.01, 0)
+    simulate(0.08, 0)
+    simulate(0.06, 0)
+    simulate(0.04, 0)
+    simulate(0.02, 0)
+    simulate(0., 0)
 
     # simulate(0, 0.1)
     # simulate(0, 0.15)
@@ -674,6 +677,20 @@ def validate():
     # simulate(0, 0)
 
 simulate.cnt = 0
+
+@ti.kernel
+def copy_robot():
+    for k, i in ti.ndrange(batch_size, n_objects):
+        x[0, k, i] = x[train_steps, k, i]
+    for k, i in ti.ndrange(batch_size, n_objects):
+        x[0, k, i] = x[train_steps, k, i]
+        v[0, k, i] = v[train_steps, k, i]
+
+def reset_robot(start = 0, step = 1):
+    for k in range(start, batch_size, step):
+        for i in range(n_objects):
+            x[0, k, i] = objects[i]
+            x[0, k, i][0] += 0.4
 
 
 def setup_robot():
@@ -687,11 +704,7 @@ def setup_robot():
                 actuator_id[k, i] = springs[i]
         particle_type.fill(1)
     else:
-        for k in range(batch_size):
-            for i in range(n_objects):
-                x[0, k, i] = objects[i]
-                x[0, k, i][0] += 0.4
-
+        reset_robot()
         for i in range(n_springs):
             s = springs[i]
             spring_anchor_a[i] = s[0]
@@ -699,6 +712,10 @@ def setup_robot():
             spring_length[i] = s[2]
             spring_stiffness[i] = s[3] / 10
             spring_actuation[i] = s[4]
+
+def rounded_train(iter):
+    copy_robot()
+    reset_robot(iter % reset_step, reset_step)
 
 @ti.kernel
 def gradient_update(w: ti.template(), m: ti.template(), v: ti.template(), iter: ti.i32):
@@ -730,7 +747,7 @@ def optimize(output_log = "training.log"):
         for j in range(n_hidden):
             # TODO: n_springs should be n_actuators
             weights2[i, j] = np.random.randn() * math.sqrt(
-                2 / (n_hidden + n_springs)) * 3
+                2 / (n_hidden + n_springs)) * 2
 
     losses = []
     # simulate('initial{}'.format(robot_id), visualize=visualize)
@@ -739,6 +756,9 @@ def optimize(output_log = "training.log"):
     os.makedirs("weights", exist_ok=True)
 
     for iter in range(10000):
+        if iter > 500:
+            rounded_train(iter)
+            
         print("-------------------- iter #{} --------------------".format(iter))
 
         simulate(visualize=iter % 10 == 0)
