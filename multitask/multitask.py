@@ -40,7 +40,6 @@ else:
     n_objects = len(objects)
     n_springs = len(springs)
 
-
 scalar = lambda: ti.field(dtype=real)
 vec = lambda: ti.Vector.field(dim, dtype=real)
 mat = lambda: ti.Matrix.field(dim, dim, dtype=real)
@@ -59,10 +58,12 @@ loss_velocity = scalar()
 loss_height = scalar()
 loss_pose = scalar()
 loss_weight = scalar()
+loss_act = scalar()
 loss_dict = {'loss_v': loss_velocity,
              'loss_h': loss_height,
              'loss_p': loss_pose,
-             'loss_w': loss_weight}
+             'loss_w': loss_weight,
+             'loss_a': loss_act}
 losses = loss_dict.values()
 
 total_norm_sqr = scalar()
@@ -86,6 +87,7 @@ spring_stiffness = scalar()
 spring_actuation = scalar()
 
 initial_objects = vec()
+initial_center = vec()
 
 input_state = scalar()
 
@@ -177,6 +179,7 @@ ti.root.dense(ti.i, n_springs).place(m_bias2, v_bias2)
 ti.root.dense(ti.ijk, (max_steps, batch_size, n_input_states)).place(input_state)
 
 ti.root.dense(ti.i, n_objects).place(initial_objects)
+ti.root.place(initial_center)
 
 ti.root.dense(ti.ijk, (max_steps, batch_size, n_hidden)).place(hidden_act, hidden)
 ti.root.dense(ti.ijk, (max_steps, batch_size, n_springs)).place(act_act, act)
@@ -211,7 +214,6 @@ def compute_center(t: ti.i32):
         center[t, k] = ti.Matrix.zero(real, dim, 1)
     for k, i in ti.ndrange(batch_size, n):
             center[t, k] += x[t, k, i] / n
-
 
 @ti.kernel
 def compute_height(t: ti.i32):
@@ -433,14 +435,14 @@ def compute_loss_height(t: ti.i32):
 def compute_loss_pose(t: ti.i32):
     # TODO: This doesn't work for 3D
     for k, i in ti.ndrange(batch_size, n_objects):
-        dist2 = 0.0
-        for d in ti.static(range(dim)):
-            dist2 += (x[t, k, i](d) - center[t, k](d) - x[0, k, i](d) + center[0, k](d)) ** 2
+        dist2 = sum((x[t, k, i] - center[t, k] - initial_objects[i] + initial_center[None]) ** 2)
         loss_pose[None] += dist2 / batch_size / 25
-'''
-def compute_loss_stop(t: ti.i32):
-    for k, i in ti.ndrange(batch_size, n_objects):
-'''
+
+@ti.kernel
+def compute_loss_actuation(t: ti.i32):
+    for t, k, i in ti.ndrange(train_steps, batch_size, n_springs):
+        loss_act[None] += act_act[t, k, i] ** 2 / n_springs / batch_size / train_steps * 1e-2
+
 
 @ti.kernel
 def compute_weight_decay():
@@ -572,6 +574,7 @@ def forward(train = True, prefix = None):
             compute_loss_height(t)
         if duplicate_h > 0 and t % jump_period == 0:
             compute_loss_pose(t)
+    compute_loss_actuation(t)
 
     for l in losses:
         compute_loss_final(l)
@@ -706,6 +709,12 @@ def setup_robot():
     print('n_objects=', n_objects, '   n_springs=', n_springs)
 
     initial_objects.from_numpy(np.array(objects))
+    @ti.kernel
+    def get_center():
+        for I in ti.grouped(initial_objects):
+            initial_center[None] += initial_objects[I] / n_objects
+
+    get_center()
 
     if simulator == "mpm":
         reset_robot(0, 1, n_objects)
