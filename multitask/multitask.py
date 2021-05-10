@@ -441,7 +441,7 @@ def compute_loss_pose(t: ti.i32):
 @ti.kernel
 def compute_loss_actuation():
     for t, k, i in ti.ndrange(train_steps, batch_size, n_springs):
-        loss_act[None] += ti.max(ti.abs(act_act[t, k, i]) - ti.abs(target_v[t, k][0]) / 0.08, 0.) / n_springs / batch_size / train_steps
+        loss_act[None] += ti.max(ti.abs(act_act[t, k, i]) - (ti.abs(target_v[t, k][0]) / 0.08) ** 0.5, 0.) / n_springs / batch_size / train_steps * 10
 
 
 @ti.kernel
@@ -669,7 +669,7 @@ def simulate(output_v=None, output_h=None, visualize=True):
             forward()
             get_loss()
     else:
-        forward(train = train, prefix = prefix)
+        forward(train = train)
         if dim == 3:
             x_ = x.to_numpy()
             t = threading.Thread(target=output_mesh,args=(x_, str(output_v) + '_' + str(output_h)))
