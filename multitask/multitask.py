@@ -439,9 +439,9 @@ def compute_loss_pose(t: ti.i32):
         loss_pose[None] += dist2 / batch_size / 25
 
 @ti.kernel
-def compute_loss_actuation(t: ti.i32):
+def compute_loss_actuation():
     for t, k, i in ti.ndrange(train_steps, batch_size, n_springs):
-        loss_act[None] += act_act[t, k, i] ** 2 / n_springs / batch_size / train_steps * 1e-2
+        loss_act[None] += ti.max(ti.abs(act_act[t, k, i]) - ti.abs(target_v[t, k][0]) / 0.08, 0.) / n_springs / batch_size / train_steps
 
 
 @ti.kernel
@@ -550,7 +550,7 @@ def advance_mpm_grad(s):
 
 
 @debug
-def forward(train = True, prefix = None):
+def forward(train = True):
     total_steps = train_steps if train else validate_steps
     for t in range(total_steps):
         compute_center(t)
@@ -566,15 +566,16 @@ def forward(train = True, prefix = None):
 
     compute_center(total_steps)
     compute_height(total_steps)
-    
-    for t in range(1, total_steps + 1):
-        if duplicate_v > 0 and t % turn_period > run_period:
-            compute_loss_velocity(t)
-        if duplicate_h > 0 and t % jump_period == jump_period - 1:
-            compute_loss_height(t)
-        if duplicate_h > 0 and t % jump_period == 0:
-            compute_loss_pose(t)
-    compute_loss_actuation(t)
+
+def get_loss():
+    for t in range(train_steps):
+        if duplicate_v > 0 and (t + 1) % turn_period > run_period:
+            compute_loss_velocity(t + 1)
+        if duplicate_h > 0 and (t + 1) % jump_period == jump_period - 1:
+            compute_loss_height(t + 1)
+        if duplicate_h > 0 and (t + 1) % jump_period == 0:
+            compute_loss_pose(t + 1)
+    compute_loss_actuation()
 
     for l in losses:
         compute_loss_final(l)
@@ -666,6 +667,7 @@ def simulate(output_v=None, output_h=None, visualize=True):
     if train:
         with ti.Tape(loss):
             forward()
+            get_loss()
     else:
         forward(train = train, prefix = prefix)
         if dim == 3:
