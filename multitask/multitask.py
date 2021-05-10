@@ -40,6 +40,7 @@ else:
     n_objects = len(objects)
     n_springs = len(springs)
 
+
 scalar = lambda: ti.field(dtype=real)
 vec = lambda: ti.Vector.field(dim, dtype=real)
 mat = lambda: ti.Matrix.field(dim, dim, dtype=real)
@@ -83,6 +84,8 @@ spring_anchor_b = ti.field(ti.i32)
 spring_length = scalar()
 spring_stiffness = scalar()
 spring_actuation = scalar()
+
+initial_objects = vec()
 
 input_state = scalar()
 
@@ -156,6 +159,7 @@ particle_type = ti.field(ti.i32)
 grid_v_in, grid_m_in = vec(), scalar()
 grid_v_out = vec()
 C, F = mat(), mat()
+
 ti.root.dense(ti.ij, (batch_size, n_particles)).place(actuator_id, particle_type)
 ti.root.dense(ti.ijk, (max_steps, batch_size, n_particles)).place(C, F)
 ti.root.dense(ti.ijk, (batch_size, n_grid, n_grid)).place(grid_v_in, grid_m_in, grid_v_out)
@@ -171,6 +175,8 @@ ti.root.dense(ti.ij, (n_springs, n_hidden)).place(m_weights2, v_weights2)
 ti.root.dense(ti.i, n_springs).place(m_bias2, v_bias2)
 
 ti.root.dense(ti.ijk, (max_steps, batch_size, n_input_states)).place(input_state)
+
+ti.root.dense(ti.i, n_objects).place(initial_objects)
 
 ti.root.dense(ti.ijk, (max_steps, batch_size, n_hidden)).place(hidden_act, hidden)
 ti.root.dense(ti.ijk, (max_steps, batch_size, n_springs)).place(act_act, act)
@@ -431,6 +437,10 @@ def compute_loss_pose(t: ti.i32):
         for d in ti.static(range(dim)):
             dist2 += (x[t, k, i](d) - center[t, k](d) - x[0, k, i](d) + center[0, k](d)) ** 2
         loss_pose[None] += dist2 / batch_size / 25
+'''
+def compute_loss_stop(t: ti.i32):
+    for k, i in ti.ndrange(batch_size, n_objects):
+'''
 
 @ti.kernel
 def compute_weight_decay():
@@ -686,25 +696,25 @@ def copy_robot():
         x[0, k, i] = x[train_steps, k, i]
         v[0, k, i] = v[train_steps, k, i]
 
-def reset_robot(start = 0, step = 1):
-    for k in range(start, batch_size, step):
-        for i in range(n_objects):
-            x[0, k, i] = objects[i]
-            x[0, k, i][0] += 0.4
-
+@ti.kernel
+def reset_robot(start: ti.template(), step: ti.template(), times: ti.template()):
+    for k, i in ti.ndrange(times, n_objects):
+        x[0, k * step + start, i] = initial_objects[i]
+        x[0, k * step + start, i][0] += 0.4
 
 def setup_robot():
     print('n_objects=', n_objects, '   n_springs=', n_springs)
 
+    initial_objects.from_numpy(np.array(objects))
+
     if simulator == "mpm":
+        reset_robot(0, 1, n_objects)
         for k in range(batch_size):
             for i in range(n_objects):
-                x[0, k, i] = objects[i]
-                x[0, k, i][0] += 0.4
                 actuator_id[k, i] = springs[i]
         particle_type.fill(1)
     else:
-        reset_robot()
+        reset_robot(0, 1, batch_size)
         for i in range(n_springs):
             s = springs[i]
             spring_anchor_a[i] = s[0]
@@ -715,7 +725,10 @@ def setup_robot():
 
 def rounded_train(iter):
     copy_robot()
-    reset_robot(iter % reset_step, reset_step)
+    start = iter % reset_step
+    step = reset_step
+    times = (batch_size + step - start) // step
+    reset_robot(start, step, times)
 
 @ti.kernel
 def gradient_update(w: ti.template(), m: ti.template(), v: ti.template(), iter: ti.i32):
