@@ -57,11 +57,13 @@ loss = scalar()
 loss_velocity = scalar()
 loss_height = scalar()
 loss_pose = scalar()
+loss_rotation = scalar()
 loss_weight = scalar()
 loss_act = scalar()
 loss_dict = {'loss_v': loss_velocity,
              'loss_h': loss_height,
              'loss_p': loss_pose,
+             'loss_r': loss_rotation,
              'loss_w': loss_weight,
              'loss_a': loss_act}
 losses = loss_dict.values()
@@ -454,15 +456,16 @@ def compute_loss_height():
 @ti.kernel
 def compute_loss_pose():
     # TODO: This doesn't work for 3D
-    if ti.static(dim == 2):
-        for t, k, i in ti.ndrange((1, train_steps + 1), batch_size, n_objects):
-            if t % jump_period == 0:
-                #dist2 = sum((x[t, k, i] - center[t, k] - initial_objects[i] + initial_center[None]) ** 2)
-                dist2 = sum((x[t, k, i] - initial_objects[i]) ** 2)
-                loss_pose[None] += dist2 / batch_size / (train_steps // jump_period)
-    else:
-        for t, k in ti.ndrange((1, train_steps + 1), batch_size):
-            loss_pose[None] += rotation[t] ** 2 / batch_size
+    for t, k, i in ti.ndrange((1, train_steps + 1), batch_size, n_objects):
+        if t % jump_period == 0:
+            #dist2 = sum((x[t, k, i] - center[t, k] - initial_objects[i] + initial_center[None]) ** 2)
+            dist2 = sum((x[t, k, i] - initial_objects[i]) ** 2)
+            loss_pose[None] += dist2 / batch_size / (train_steps // jump_period)
+
+@ti.kernel
+def compute_loss_rotation():
+    for t, k in ti.ndrange((1, train_steps + 1), batch_size):
+        loss_rotation[None] += rotation[t, k] ** 2 / batch_size
 
 @ti.kernel
 def compute_loss_actuation():
