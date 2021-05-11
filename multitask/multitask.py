@@ -110,6 +110,13 @@ center = vec()
 height = scalar()
 duplicate_v = 30
 duplicate_h = 30
+if dim == 3:
+    duplicate_h = 0
+rotation = scalar()
+head_center = vec()
+head_counter = scalar()
+tail_center = vec()
+tail_counter = scalar()
 target_v = vec()
 target_h = scalar()
 weight_v = 1.
@@ -183,7 +190,7 @@ ti.root.place(initial_center)
 
 ti.root.dense(ti.ijk, (max_steps, batch_size, n_hidden)).place(hidden_act, hidden)
 ti.root.dense(ti.ijk, (max_steps, batch_size, n_springs)).place(act_act, act)
-ti.root.dense(ti.ij, (max_steps, batch_size)).place(center, target_v, target_h, height)
+ti.root.dense(ti.ij, (max_steps, batch_size)).place(center, target_v, target_h, height, rotation, head_center, head_counter, tail_center, tail_counter)
 ti.root.place(loss, total_norm_sqr)
 ti.root.place(*losses)
 ti.root.lazy_grad()
@@ -225,6 +232,19 @@ def compute_height(t: ti.i32):
             height[t, k] = h
         else:
             height[t, k] = ti.max(height[t - 1, k], h)
+
+@ti.kernel
+def compute_rotation(t: ti.i32):
+    for k in range(batch_size):
+        for i in ti.static(range(n_objects)):
+            if x[0, k, i](0) < center[0, k](0):
+                head_center[t, k] += x[t, k ,i]
+                head_counter[t, k] += 1.
+            else:
+                tail_center[t, k] += x[t, k, i]
+                tail_counter[t, k] += 1.
+        direction = -head_center[t, k] / head_counter[t, k] + tail_center[t, k] / tail_counter[t, k]
+        rotation[t, k] = ti.atan2(direction[1], direction[0])
 
 @ti.kernel
 def nn_input(t: ti.i32):
@@ -434,11 +454,15 @@ def compute_loss_height():
 @ti.kernel
 def compute_loss_pose():
     # TODO: This doesn't work for 3D
-    for t, k, i in ti.ndrange((1, train_steps + 1), batch_size, n_objects):
-        if t % jump_period == 0:
-            #dist2 = sum((x[t, k, i] - center[t, k] - initial_objects[i] + initial_center[None]) ** 2)
-            dist2 = sum((x[t, k, i] - initial_objects[i]) ** 2)
-            loss_pose[None] += dist2 / batch_size / (train_steps // jump_period)
+    if ti.static(dim == 2):
+        for t, k, i in ti.ndrange((1, train_steps + 1), batch_size, n_objects):
+            if t % jump_period == 0:
+                #dist2 = sum((x[t, k, i] - center[t, k] - initial_objects[i] + initial_center[None]) ** 2)
+                dist2 = sum((x[t, k, i] - initial_objects[i]) ** 2)
+                loss_pose[None] += dist2 / batch_size / (train_steps // jump_period)
+    else:
+        for t, k in ti.ndrange((1, train_steps + 1), batch_size):
+            loss_pose[None] += rotation[t] ** 2 / batch_size
 
 @ti.kernel
 def compute_loss_actuation():
@@ -484,6 +508,10 @@ def initialize_validate(output_v: ti.f32, output_h: ti.f32):
         else:
             target_v[t, k][0] = 0
             target_h[t, k] = 0.1
+        if ti.static(dim == 3):
+            target_v[t, k][0] = ((t // turn_period) % 2 * 2 - 1) * output_v
+            target_v[t, k][2] = 0
+            target_h[t, k] = 0
 
 @ti.kernel
 def initialize_train():
@@ -496,8 +524,10 @@ def initialize_train():
             if ti.static(dim == 2):
                 target_v[t, k][0] = (pool[q + 1] * 2 - 1) * 0.08
             else:
-                target_v[t, k][0] = (pool[q + 1] * 2 - 1) * 0.08
-                target_v[t, k][2] = (pool[q + 2] * 2 - 1) * 0.08
+                r = pool[q + 1]
+                angle = pool[q + 2] * 2 * 3.1415926
+                target_v[t, k][0] = r * ti.cos(angle) * 0.05
+                target_v[t, k][2] = r * ti.sin(angle) * 0.05
             target_h[t, k] = 0.1
         else:
             target_h[t, k] = pool[q + 1] * 0.1 + 0.1
@@ -523,6 +553,12 @@ def clear_states():
         hidden[I] = 0.
     for I in ti.grouped(act):
         act[I] = 0.
+    for I in ti.grouped(head_center):
+        head_center[I] = ti.Matrix.zero(real, dim, 1)
+        head_counter[I] = 0.
+        tail_center[I] = ti.Matrix.zero(real, dim, 1)
+        tail_counter[I] = 0.
+        rotation[I] = 0.
 
 
 def clear():
