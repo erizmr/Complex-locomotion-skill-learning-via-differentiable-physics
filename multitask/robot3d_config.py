@@ -21,7 +21,7 @@ mesh_springs = []
 
 def add_mesh_point(i, j, k):
     if (i, j, k) not in points:
-        id = add_object((i * 0.2 + 0.1, j * 0.05 + 0.1, k * 0.2 + 0.1))
+        id = add_object((i * 0.05 + 0.1, j * 0.05 + 0.1, k * 0.05 + 0.1))
         points.append((i, j, k))
         point_id.append(id)
     return point_id[points.index((i, j, k))]

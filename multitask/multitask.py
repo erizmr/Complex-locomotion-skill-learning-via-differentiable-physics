@@ -20,7 +20,7 @@ real = ti.f64
 ti.init(arch=ti.gpu, default_fp=real)
 
 robot_id = 5
-if len(sys.argv) == 2:
+if len(sys.argv) >= 2:
     robot_id = int(sys.argv[1])
     print("Run robot", robot_id)
 simulator = ""
@@ -256,8 +256,12 @@ def nn_input(t: ti.i32):
     for k, j in ti.ndrange(batch_size, n_objects):
         offset = x[t, k, j] - center[t, k]
         for d in ti.static(range(dim)):
-            input_state[t, k, j * dim * 2 + n_sin_waves + d] = offset[d] / 0.05
-            input_state[t, k, j * dim * 2 + n_sin_waves + dim + d] = v[t, k, j][d]
+            if ti.static(dim == 2):
+                input_state[t, k, j * dim * 2 + n_sin_waves + d] = offset[d] / 0.05
+                input_state[t, k, j * dim * 2 + n_sin_waves + dim + d] = v[t, k, j][d]
+            else:
+                input_state[t, k, j * dim * 2 + n_sin_waves + d] = offset[d] * float(sys.argv[2])
+                input_state[t, k, j * dim * 2 + n_sin_waves + dim + d] = 0
 
     if ti.static(duplicate_v > 0):
         if ti.static(dim == 2):
@@ -265,8 +269,8 @@ def nn_input(t: ti.i32):
                 input_state[t, k, n_objects * dim * 2 + n_sin_waves + j * (dim - 1)] = target_v[t, k][0] / 0.08
         else:
             for k, j in ti.ndrange(batch_size, duplicate_v):
-                input_state[t, k, n_objects * dim * 2 + n_sin_waves + j * (dim - 1)] = target_v[t, k][0] / 0.08
-                input_state[t, k, n_objects * dim * 2 + n_sin_waves + j * (dim - 1) + 1] = target_v[t, k][2] / 0.08
+                input_state[t, k, n_objects * dim * 2 + n_sin_waves + j * (dim - 1)] = target_v[t, k][0] * float(sys.argv[3])
+                input_state[t, k, n_objects * dim * 2 + n_sin_waves + j * (dim - 1) + 1] = target_v[t, k][2] * float(sys.argv[3])
     if ti.static(duplicate_h > 0):
         for k, j in ti.ndrange(batch_size, duplicate_h):
             input_state[t, k, n_objects * dim * 2 + n_sin_waves + duplicate_v * (dim - 1) + j] = (target_h[t, k] - 0.15) / 0.05 - 1
@@ -523,18 +527,22 @@ def initialize_train():
         pool[_] = ti.random()
     for t, k in ti.ndrange(train_steps, batch_size):
         q = (t // turn_period * batch_size + k) * 3
-        if pool[q + 0] < 0.5:
-            if ti.static(dim == 2):
+        if ti.static(dim == 2):
+            if pool[q + 0] < 0.5:
                 target_v[t, k][0] = (pool[q + 1] * 2 - 1) * 0.08
+                target_h[t, k] = 0.1
             else:
-                r = pool[q + 1]
-                angle = pool[q + 2] * 2 * 3.1415926
-                target_v[t, k][0] = r * ti.cos(angle) * 0.05
-                target_v[t, k][2] = r * ti.sin(angle) * 0.05
-            target_h[t, k] = 0.1
+                target_h[t, k] = pool[q + 1] * 0.1 + 0.1
+                target_v[t, k] *= 0.
         else:
-            target_h[t, k] = pool[q + 1] * 0.1 + 0.1
-            target_v[t, k] *= 0.
+            # r = pool[q + 1]
+            # angle = pool[q + 2] * 2 * 3.1415926
+            r = 1.
+            angle = 0.
+            target_v[t, k][0] = r * ti.cos(angle) * 0.05
+            target_v[t, k][2] = r * ti.sin(angle) * 0.05
+            target_h[t, k] = 0.
+
 
 
 @ti.kernel
@@ -614,6 +622,7 @@ def forward(train = True):
     for t in range(total_steps):
         compute_center(t)
         compute_height(t)
+        # compute_rotation(t)
         nn_input(t)
         nn1(t)
         nn2(t)
@@ -635,6 +644,7 @@ def get_loss():
     if duplicate_h > 0:
         compute_loss_height()
         #compute_loss_pose()
+    # compute_loss_rotation()
     compute_loss_actuation()
 
     for l in losses:
