@@ -19,7 +19,7 @@ debug = utils.Debug(False)
 real = ti.f64
 ti.init(arch=ti.gpu, default_fp=real)
 
-robot_id = 5
+robot_id = 3
 if len(sys.argv) == 2:
     robot_id = int(sys.argv[1])
     print("Run robot", robot_id)
@@ -47,8 +47,6 @@ mat = lambda: ti.Matrix.field(dim, dim, dtype=real)
 max_steps = 4005
 vis_interval = 256
 output_vis_interval = 8
-train_steps = 1000
-validate_steps = 4000
 output_target = []
 output_sim = []
 output_loss = []
@@ -136,8 +134,11 @@ reset_step = 16
 learning_rate = 3e-4
 
 adam_a = learning_rate
-adam_b1=0.9
-adam_b2=0.9
+adam_b1=0.8
+adam_b2=0.8
+
+max_speed = 0.08
+max_height = 0.1
 
 def get_input_states():
     return n_sin_waves + dim * 2 * n_objects + duplicate_v * (dim - 1) + duplicate_h
@@ -240,14 +241,14 @@ def nn_input(t: ti.i32):
     if ti.static(duplicate_v > 0):
         if ti.static(dim == 2):
             for k, j in ti.ndrange(batch_size, duplicate_v):
-                input_state[t, k, n_objects * dim * 2 + n_sin_waves + j * (dim - 1)] = target_v[t, k][0] / 0.08
+                input_state[t, k, n_objects * dim * 2 + n_sin_waves + j * (dim - 1)] = target_v[t, k][0] / max_speed
         else:
             for k, j in ti.ndrange(batch_size, duplicate_v):
-                input_state[t, k, n_objects * dim * 2 + n_sin_waves + j * (dim - 1)] = target_v[t, k][0] / 0.08
-                input_state[t, k, n_objects * dim * 2 + n_sin_waves + j * (dim - 1) + 1] = target_v[t, k][2] / 0.08
+                input_state[t, k, n_objects * dim * 2 + n_sin_waves + j * (dim - 1)] = target_v[t, k][0] / max_speed
+                input_state[t, k, n_objects * dim * 2 + n_sin_waves + j * (dim - 1) + 1] = target_v[t, k][2] / max_speed
     if ti.static(duplicate_h > 0):
         for k, j in ti.ndrange(batch_size, duplicate_h):
-            input_state[t, k, n_objects * dim * 2 + n_sin_waves + duplicate_v * (dim - 1) + j] = (target_h[t, k] - 0.15) / 0.05 - 1
+            input_state[t, k, n_objects * dim * 2 + n_sin_waves + duplicate_v * (dim - 1) + j] = (target_h[t, k] - 0.1) / max_height * 2 - 1
 
 @ti.kernel
 def nn1(t: ti.i32):
@@ -412,8 +413,8 @@ def g2p(f: ti.i32):
 
 
 @ti.kernel
-def compute_loss_velocity():
-    for t, k in ti.ndrange((run_period, train_steps + 1), batch_size):
+def compute_loss_velocity(steps: ti.template()):
+    for t, k in ti.ndrange((run_period, steps + 1), batch_size):
         if t % turn_period > run_period:# and target_h[t - run_period, k] < 0.1 + 1e-4:
             if ti.static(dim == 2):
                 loss_velocity[None] += (center[t, k](0) - center[t - run_period, k](0) - target_v[t - run_period, k](0))**2 / batch_size
@@ -425,32 +426,26 @@ def compute_loss_velocity():
 
 
 @ti.kernel
-def compute_loss_height():
-    for t, k in ti.ndrange((1, train_steps + 1), batch_size):
+def compute_loss_height(steps: ti.template()):
+    for t, k in ti.ndrange((1, steps + 1), batch_size):
         if t % jump_period == jump_period - 1 and target_h[t, k] > 0.1:
-            loss_height[None] += (height[t, k] - target_h[t, k]) ** 2 / batch_size / (train_steps // jump_period) * 100
+            loss_height[None] += (height[t, k] - target_h[t, k]) ** 2 / batch_size / (steps // jump_period) * 100
 
 
 @ti.kernel
-def compute_loss_pose():
+def compute_loss_pose(steps: ti.template()):
     # TODO: This doesn't work for 3D
-    for t, k, i in ti.ndrange((1, train_steps + 1), batch_size, n_objects):
+    for t, k, i in ti.ndrange((1, steps + 1), batch_size, n_objects):
         if t % jump_period == 0:
             #dist2 = sum((x[t, k, i] - center[t, k] - initial_objects[i] + initial_center[None]) ** 2)
             dist2 = sum((x[t, k, i] - initial_objects[i]) ** 2)
-            loss_pose[None] += dist2 / batch_size / (train_steps // jump_period)
+            loss_pose[None] += dist2 / batch_size / (steps // jump_period)
 
 @ti.kernel
-def compute_loss_actuation():
-    for t, k, i in ti.ndrange(train_steps, batch_size, n_springs):
+def compute_loss_actuation(steps: ti.template()):
+    for t, k, i in ti.ndrange(steps, batch_size, n_springs):
         if target_h[t, k] < 0.1 + 1e-4:
-            loss_act[None] += ti.max(ti.abs(act_act[t, k, i]) - (ti.abs(target_v[t, k][0]) / 0.08) ** 0.5, 0.) / n_springs / batch_size / train_steps * 10
-'''
-@ti.kernel
-def compute_loss_crouch():
-    for t, k, i in ti.ndrange(train_steps, batch_size, n_springs):
-
-'''
+            loss_act[None] += ti.max(ti.abs(act_act[t, k, i]) - (ti.abs(target_v[t, k][0]) / 0.08) ** 0.5, 0.) / n_springs / batch_size / steps * 10
 
 @ti.kernel
 def compute_loss_final(l: ti.template()):
@@ -468,8 +463,8 @@ def compute_weight_decay():
 gui = ti.GUI(show_gui=False, background_color=0xFFFFFF)
 
 @ti.kernel
-def initialize_validate(output_v: ti.f32, output_h: ti.f32):
-    for t, k in ti.ndrange(validate_steps, batch_size):
+def initialize_validate(steps: ti.template(), output_v: ti.f32, output_h: ti.f32):
+    for t, k in ti.ndrange(steps, batch_size):
         q = t // turn_period
         if q % 3 == 0:
             if ti.static(dim == 2):
@@ -486,21 +481,21 @@ def initialize_validate(output_v: ti.f32, output_h: ti.f32):
             target_h[t, k] = 0.1
 
 @ti.kernel
-def initialize_train():
-    times = ti.static(train_steps // turn_period)
+def initialize_train(steps: ti.template()):
+    times = steps // turn_period + 1
     for _ in range(batch_size * times * 3):
         pool[_] = ti.random()
-    for t, k in ti.ndrange(train_steps, batch_size):
+    for t, k in ti.ndrange(steps, batch_size):
         q = (t // turn_period * batch_size + k) * 3
         if pool[q + 0] < 0.5:
             if ti.static(dim == 2):
-                target_v[t, k][0] = (pool[q + 1] * 2 - 1) * 0.08
+                target_v[t, k][0] = (pool[q + 1] * 2 - 1) * max_speed
             else:
-                target_v[t, k][0] = (pool[q + 1] * 2 - 1) * 0.08
-                target_v[t, k][2] = (pool[q + 2] * 2 - 1) * 0.08
+                target_v[t, k][0] = (pool[q + 1] * 2 - 1) * max_speed
+                target_v[t, k][2] = (pool[q + 2] * 2 - 1) * max_speed
             target_h[t, k] = 0.1
         else:
-            target_h[t, k] = pool[q + 1] * 0.1 + 0.1
+            target_h[t, k] = pool[q + 1] * 0.1 + max_height
             target_v[t, k] *= 0.
 
 
@@ -537,11 +532,11 @@ def clear():
     v_bias2.fill(0)
 
 @debug
-def init(train, output_v = None, output_h = None):
+def init(steps, train, output_v = None, output_h = None):
     clear_states()
 
     if train:
-        initialize_train()
+        initialize_train(steps)
     else:
         initialize_validate(output_v, output_h)
 
@@ -570,9 +565,8 @@ def advance_mpm_grad(s):
 
 
 @debug
-def forward(train = True):
-    total_steps = train_steps if train else validate_steps
-    for t in range(total_steps):
+def forward(steps, train = True):
+    for t in range(steps):
         compute_center(t)
         compute_height(t)
         nn_input(t)
@@ -584,34 +578,32 @@ def forward(train = True):
             apply_spring_force(t)
             advance_toi(t + 1)
 
-    compute_center(total_steps)
-    compute_height(total_steps)
+    compute_center(steps)
+    compute_height(steps)
 
-def get_loss():
+def get_loss(steps):
     #for t in range(train_steps):
 
     if duplicate_v > 0:
-        compute_loss_velocity()
+        compute_loss_velocity(steps)
 
     if duplicate_h > 0:
-        compute_loss_height()
-        #compute_loss_pose()
-    compute_loss_actuation()
+        compute_loss_height(steps)
+        #compute_loss_pose(steps)
+    compute_loss_actuation(steps)
 
     for l in losses:
         compute_loss_final(l)
 
 @debug
-def visualizer(train, prefix, visualize = True):
-    total_steps = train_steps if train else validate_steps
-
+def visualizer(steps, train, prefix, visualize = True):
     interval = vis_interval
     if not train:
         interval = output_vis_interval
         os.makedirs('mass_spring/{}/'.format(prefix), exist_ok=True)
 
         if visualize:
-            for t in range(1, total_steps):
+            for t in range(1, steps):
                 if (t + 1) % interval == 0:
                     gui.clear()
                     gui.line((0, ground_height), (1, ground_height),
@@ -668,9 +660,9 @@ def visualizer(train, prefix, visualize = True):
             utils.plot_curve(output_loss, "training_curve.png")
             utils.plot_curve(output_loss[-200:], "training_curve_last_200.png")
 
-def output_mesh(x_, fn):
+def output_mesh(steps, x_, fn):
     os.makedirs(fn + '_objs', exist_ok=True)
-    for t in range(1, validate_steps):
+    for t in range(1, steps):
         f = open(fn + f'_objs/{t:06d}.obj', 'w')
         for i in range(n_objects):
             f.write('v %.6f %.6f %.6f\n' % (x_[t, 0, i, 0], x_[t, 0, i, 1], x_[t, 0, i, 2]))
@@ -679,51 +671,51 @@ def output_mesh(x_, fn):
         f.close()
 
 @debug
-def simulate(output_v=None, output_h=None, visualize=True):
+def simulate(steps, output_v=None, output_h=None, visualize=True):
     train = output_v is None and output_h is None
     prefix = None
     if not train:
         prefix = str(output_v) + "_" + str(output_h)
-    init(train, output_v, output_h)
+    init(steps, train, output_v, output_h)
     if train:
         with ti.Tape(loss):
-            forward()
-            get_loss()
+            forward(steps)
+            get_loss(steps)
     else:
-        forward(False)
+        forward(steps, False)
         if dim == 3:
             x_ = x.to_numpy()
-            t = threading.Thread(target=output_mesh,args=(x_, str(output_v) + '_' + str(output_h)))
+            t = threading.Thread(target=output_mesh,args=(steps, x_, str(output_v) + '_' + str(output_h)))
             t.start()
 
-    visualizer(train = train, prefix = prefix, visualize = visualize)
+    visualizer(steps, train = train, prefix = prefix, visualize = visualize)
 
-def validate():
+def validate(steps):
     '''
-    simulate(0.08, 0.1)
-    simulate(0.06, 0.1)
-    simulate(0.04, 0.1)
-    simulate(0.02, 0.1)
-    simulate(0., 0.1)
+    simulate(steps, 0.08, 0.1)
+    simulate(steps, 0.06, 0.1)
+    simulate(steps, 0.04, 0.1)
+    simulate(steps, 0.02, 0.1)
+    simulate(steps, 0., 0.1)
 
-    simulate(0, 0.15)
-    simulate(0, 0.175)
-    simulate(0, 0.20)
+    simulate(steps, 0, 0.15)
+    simulate(steps, 0, 0.175)
+    simulate(steps, 0, 0.20)
     '''
-    simulate(0.06, 0.15)
-    simulate(0.04, 0.15)
-    simulate(0.02, 0.15)
-    # simulate(0, 0.25)
-    # simulate(0, 0.3)
-    # simulate(0, 0)
+    simulate(steps, 0.06, 0.15)
+    simulate(steps, 0.04, 0.15)
+    simulate(steps, 0.02, 0.15)
+    # simulate(steps, 0, 0.25)
+    # simulate(steps, 0, 0.3)
+    # simulate(steps, 0, 0)
 
 simulate.cnt = 0
 
 @ti.kernel
-def copy_robot():
+def copy_robot(steps: ti.i32):
     for k, i in ti.ndrange(batch_size, n_objects):
-        x[0, k, i] = x[train_steps, k, i]
-        v[0, k, i] = v[train_steps, k, i]
+        x[0, k, i] = x[steps, k, i]
+        v[0, k, i] = v[steps, k, i]
 
 @ti.kernel
 def reset_robot(start: ti.template(), step: ti.template(), times: ti.template()):
@@ -760,8 +752,8 @@ def setup_robot():
             spring_stiffness[i] = s[3] / 10
             spring_actuation[i] = s[4]
 
-def rounded_train(iter):
-    copy_robot()
+def rounded_train(steps, iter):
+    copy_robot(steps)
     start = iter % reset_step
     step = reset_step
     times = (batch_size + step - start) // step
@@ -815,22 +807,29 @@ def optimize(output_log = "plots/training.log"):
     # simulate('initial{}'.format(robot_id), visualize=visualize)
     best = 1e+15
     best_finetune = 1e+15
+    train_steps = 200
 
     os.makedirs("weights", exist_ok=True)
 
     for iter in range(100000):
-        #if iter > 5000:
-        #    rounded_train(iter)
+        if iter == 500:
+            train_steps = 500
+
+        if iter == 5000:
+            train_steps = 1000
+        
+        if iter > 10000:
+            rounded_train(iter)
             
         print("-------------------- iter #{} --------------------".format(iter))
 
-        simulate(visualize=iter % 10 == 0)
+        simulate(train_steps, visualize=iter % 10 == 0)
 
-        if iter <= 5000 and loss[None] < best:
+        if iter > 5000 and iter <= 10000 and loss[None] < best:
             best = loss[None]
             dump_weights("weights/best.pkl")
         
-        if iter > 5016 and loss[None] < best_finetune:
+        if iter > 10016 and loss[None] < best_finetune:
             best_finetune = loss[None]
             dump_weights("weights/best_finetune.pkl")
 
