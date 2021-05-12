@@ -414,7 +414,7 @@ def g2p(f: ti.i32):
 @ti.kernel
 def compute_loss_velocity():
     for t, k in ti.ndrange((run_period, train_steps + 1), batch_size):
-        if t % turn_period > run_period and target_h[t - run_period, k] < 0.1 + 1e-4:
+        if t % turn_period > run_period:# and target_h[t - run_period, k] < 0.1 + 1e-4:
             if ti.static(dim == 2):
                 loss_velocity[None] += (center[t, k](0) - center[t - run_period, k](0) - target_v[t - run_period, k](0))**2 / batch_size
             else:
@@ -818,7 +818,7 @@ def optimize(output_log = "plots/training.log"):
 
     os.makedirs("weights", exist_ok=True)
 
-    for iter in range(10000):
+    for iter in range(100000):
         #if iter > 5000:
         #    rounded_train(iter)
             
