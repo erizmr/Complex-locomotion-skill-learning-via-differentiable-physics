@@ -2,6 +2,7 @@ from robot_config import robots
 from robot3d_config import robots3d
 from robot_mpm import robots_mpm
 import threading
+from taichi.lang.impl import reset
 import utils
 
 import random
@@ -19,7 +20,7 @@ debug = utils.Debug(False)
 real = ti.f64
 ti.init(arch=ti.gpu, default_fp=real)
 
-robot_id = 5
+robot_id = 2
 if len(sys.argv) >= 2:
     robot_id = int(sys.argv[1])
     print("Run robot", robot_id)
@@ -143,8 +144,8 @@ reset_step = 16
 learning_rate = 3e-4
 
 adam_a = learning_rate
-adam_b1=0.9
-adam_b2=0.9
+adam_b1=0.90
+adam_b2=0.90
 
 max_speed = 0.08
 max_height = 0.1
@@ -514,21 +515,39 @@ def initialize_validate(steps: ti.template(), output_v: ti.f32, output_h: ti.f32
             target_v[t, k][0] = ((t // turn_period) % 2 * 2 - 1) * output_v
             target_v[t, k][2] = 0
             target_h[t, k] = 0
+    if output_v < 1e-8:
+        for t, k in ti.ndrange(steps, batch_size):
+            target_v[t, k][0] = 0
+            target_h[t, k] = output_h
+    if output_h < 1.0 + 1e-8:
+        for t, k in ti.ndrange(steps, batch_size):
+            target_v[t, k][0] = ((t // turn_period) % 2 * 2 - 1) * output_v
+            target_h[t, k] = 0
 
 @ti.kernel
-def initialize_train(steps: ti.template()):
+def initialize_train(iter: ti.i32, steps: ti.template()):
     times = steps // turn_period + 1
     for _ in range(batch_size * times * 3):
         pool[_] = ti.random()
     for t, k in ti.ndrange(steps, batch_size):
         q = (t // turn_period * batch_size + k) * 3
         if ti.static(dim == 2):
-            if pool[q + 0] < 0.5:
-                target_v[t, k][0] = (pool[q + 1] * 2 - 1) * max_speed
-                target_h[t, k] = 0.1
+                '''
+            if iter < 500:
+                if k < batch_size / 2:
+                    target_v[t, k][0] = (k / (batch_size / 2 - 1)) * 2 - 1 * max_speed
+                    target_h[t, k] = 0.1
+                else:
+                    target_v[t, k][0] *= 0.
+                    target_h[t, k] = ((k - batch_size / 2) / (batch_size / 2 - 1)) * max_height + 0.1
             else:
-                target_h[t, k] = pool[q + 1] * 0.1 + max_height
-                target_v[t, k] *= 0.
+                '''
+                if pool[q + 0] < 0.5:
+                    target_v[t, k][0] = (pool[q + 1] * 2 - 1) * max_speed
+                    target_h[t, k] = 0.1
+                else:
+                    target_h[t, k] = pool[q + 1] * max_height + 0.1
+                    target_v[t, k] *= 0.
         else:
             # r = pool[q + 1]
             # angle = pool[q + 2] * 2 * 3.1415926
@@ -577,13 +596,13 @@ def clear():
     v_bias2.fill(0)
 
 @debug
-def init(steps, train, output_v = None, output_h = None):
+def init(steps, train, output_v = None, output_h = None, iter = 0):
     clear_states()
 
     if train:
-        initialize_train(steps)
+        initialize_train(iter, steps)
     else:
-        initialize_validate(output_v, output_h)
+        initialize_validate(steps, output_v, output_h)
 
     loss[None] = 0.
     for l in losses:
@@ -717,12 +736,11 @@ def output_mesh(steps, x_, fn):
         f.close()
 
 @debug
-def simulate(steps, output_v=None, output_h=None, visualize=True):
-    train = output_v is None and output_h is None
+def simulate(steps, output_v=None, output_h=None, visualize=True, train = True, iter = 0):
     prefix = None
     if not train:
         prefix = str(output_v) + "_" + str(output_h)
-    init(steps, train, output_v, output_h)
+    init(steps, train, output_v, output_h, iter)
     if train:
         with ti.Tape(loss):
             forward(steps)
@@ -738,19 +756,21 @@ def simulate(steps, output_v=None, output_h=None, visualize=True):
 
 def validate(steps):
     '''
-    simulate(steps, 0.08, 0.1)
-    simulate(steps, 0.06, 0.1)
-    simulate(steps, 0.04, 0.1)
-    simulate(steps, 0.02, 0.1)
-    simulate(steps, 0., 0.1)
+    simulate(steps, 0.08, 0.1, train = False)
+    simulate(steps, 0.06, 0.1, train = False)
+    simulate(steps, 0.04, 0.1, train = False)
+    simulate(steps, 0.02, 0.1, train = False)
+    simulate(steps, 0., 0.1, train = False)
+    
 
-    simulate(steps, 0, 0.15)
-    simulate(steps, 0, 0.175)
-    simulate(steps, 0, 0.20)
+    simulate(steps, 0, 0.15, train = False)
+    simulate(steps, 0, 0.125, train = False)
+    simulate(steps, 0, 0.10, train = False)
     '''
-    simulate(steps, 0.06, 0.15)
-    simulate(steps, 0.04, 0.15)
-    simulate(steps, 0.02, 0.15)
+    simulate(steps, 0.06, 0.15, train = False)
+    simulate(steps, 0.04, 0.15, train = False)
+    simulate(steps, 0.02, 0.15, train = False)
+    
     # simulate(steps, 0, 0.25)
     # simulate(steps, 0, 0.3)
     # simulate(steps, 0, 0)
@@ -832,24 +852,22 @@ def nn_init_random():
     q2 = math.sqrt(6 / n_hidden)
     for i, j in ti.ndrange(n_springs, n_hidden):
         weights2[i, j] = (np.random.rand() * 2 - 1) * q2
+    '''
+    for i, j in ti.ndrange(n_hidden, n_input_states):
+        weights1[i, j] = np.random.randn() * math.sqrt(
+            2 / (n_hidden + n_input_states)) * 2
+
+    for i, j in ti.ndrange(n_springs, n_hidden):
+        # TODO: n_springs should be n_actuators
+        weights2[i, j] = np.random.randn() * math.sqrt(
+            2 / (n_hidden + n_springs)) * 2
+    '''
 
 
-def optimize(output_log = "plots/training.log"):
+def optimize(iters = 100000, output_log = "plots/training.log"):
     os.makedirs("plots", exist_ok = True)
     log_file = open(output_log, 'w')
     log_file.close()
-    '''
-    for i in range(n_hidden):
-        for j in range(n_input_states):
-            weights1[i, j] = np.random.randn() * math.sqrt(
-                2 / (n_hidden + n_input_states)) * 2
-
-    for i in range(n_springs):
-        for j in range(n_hidden):
-            # TODO: n_springs should be n_actuators
-            weights2[i, j] = np.random.randn() * math.sqrt(
-                2 / (n_hidden + n_springs)) * 2
-    '''
 
     if os.path.exists("load.pkl"):
         load_weights("load.pkl")
@@ -861,10 +879,11 @@ def optimize(output_log = "plots/training.log"):
     best = 1e+15
     best_finetune = 1e+15
     train_steps = 1000
+    change_iter = 1000
 
     os.makedirs("weights", exist_ok=True)
 
-    for iter in range(100000):
+    for iter in range(iters):
         '''
         if iter == 500:
             train_steps = 500
@@ -873,18 +892,18 @@ def optimize(output_log = "plots/training.log"):
             train_steps = 1000
         '''
         
-        if iter > 5000:
-            rounded_train(iter)
+        if iter > change_iter:
+            rounded_train(train_steps, iter)
             
         print("-------------------- iter #{} --------------------".format(iter))
 
-        simulate(train_steps, visualize=iter % 100 == 0)
+        simulate(train_steps, visualize = (iter % 100 == 0) or (iter < 500 and iter % 10 == 0), iter = iter)
 
-        if iter <= 5000 and loss[None] < best:
+        if iter <= change_iter and loss[None] < best:
             best = loss[None]
             dump_weights("weights/best.pkl")
         
-        if iter > 5016 and loss[None] < best_finetune:
+        if iter > change_iter + reset_step and loss[None] < best_finetune:
             best_finetune = loss[None]
             dump_weights("weights/best_finetune.pkl")
 
@@ -900,7 +919,7 @@ def optimize(output_log = "plots/training.log"):
         compute_TNS(bias2)
 
         def print_logs(file = None):
-            if iter > 5000:
+            if iter > change_iter:
                 print('Iter=', iter, 'Loss=', loss[None], 'Best_FT=', best_finetune, file = file)
             else:
                 print('Iter=', iter, 'Loss=', loss[None], 'Best=', best, file = file)
