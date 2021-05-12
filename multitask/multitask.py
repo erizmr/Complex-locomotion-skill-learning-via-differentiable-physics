@@ -44,7 +44,7 @@ scalar = lambda: ti.field(dtype=real)
 vec = lambda: ti.Vector.field(dim, dtype=real)
 mat = lambda: ti.Matrix.field(dim, dim, dtype=real)
 
-max_steps = 4005
+max_steps = 1050
 vis_interval = 256
 output_vis_interval = 8
 output_target = []
@@ -143,8 +143,8 @@ reset_step = 16
 learning_rate = 3e-4
 
 adam_a = learning_rate
-adam_b1=0.8
-adam_b2=0.8
+adam_b1=0.9
+adam_b2=0.9
 
 max_speed = 0.08
 max_height = 0.1
@@ -823,6 +823,17 @@ def compute_TNS(w: ti.template()):
     for I in ti.grouped(w):
         total_norm_sqr[None] += w.grad[I] ** 2
 
+@ti.kernel
+def nn_init_random():
+    q1 = math.sqrt(6 / n_input_states)
+    for i, j in ti.ndrange(n_hidden, n_input_states):
+        weights1[i, j] = (np.random.rand() * 2 - 1) * q1
+
+    q2 = math.sqrt(6 / n_hidden)
+    for i, j in ti.ndrange(n_springs, n_hidden):
+        weights2[i, j] = (np.random.rand() * 2 - 1) * q2
+
+
 def optimize(output_log = "plots/training.log"):
     os.makedirs("plots", exist_ok = True)
     log_file = open(output_log, 'w')
@@ -839,43 +850,41 @@ def optimize(output_log = "plots/training.log"):
             weights2[i, j] = np.random.randn() * math.sqrt(
                 2 / (n_hidden + n_springs)) * 2
     '''
-    q1 = math.sqrt(6 / n_input_states)
-    for i in range(n_hidden):
-        for j in range(n_input_states):
-            weights1[i, j] = (np.random.rand() * 2 - 1) * q1
 
-    q2 = math.sqrt(6 / n_hidden)
-    for i in range(n_springs):
-        for j in range(n_hidden):
-            weights2[i, j] = (np.random.rand() * 2 - 1) * q2
+    if os.path.exists("load.pkl"):
+        load_weights("load.pkl")
+    else:
+        nn_init_random()
 
     losses = []
     # simulate('initial{}'.format(robot_id), visualize=visualize)
     best = 1e+15
     best_finetune = 1e+15
-    train_steps = 200
+    train_steps = 1000
 
     os.makedirs("weights", exist_ok=True)
 
     for iter in range(100000):
+        '''
         if iter == 500:
             train_steps = 500
 
         if iter == 2000:
             train_steps = 1000
+        '''
         
-        if iter > 10000:
+        if iter > 5000:
             rounded_train(iter)
             
         print("-------------------- iter #{} --------------------".format(iter))
 
-        simulate(train_steps, visualize=iter % 10 == 0)
+        simulate(train_steps, visualize=iter % 100 == 0)
 
-        if iter > 2000 and iter <= 10000 and loss[None] < best:
+        if iter <= 5000 and loss[None] < best:
             best = loss[None]
             dump_weights("weights/best.pkl")
         
-        if iter > 10016 and loss[None] < best_finetune:
+        if iter > 5016 and loss[None] < best_finetune:
             best_finetune = loss[None]
             dump_weights("weights/best_finetune.pkl")
 
