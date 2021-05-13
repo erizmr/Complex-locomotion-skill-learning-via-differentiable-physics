@@ -423,13 +423,13 @@ def initialize_train(iter: ti.i32, steps: ti.template()):
             target_h[t, k] = 0.
 
 @ti.kernel
-def clear_states():
-    for t, k, i in ti.ndrange(max_steps, batch_size, n_objects):
+def clear_states(steps: ti.template()):
+    for t, k, i in ti.ndrange(steps, batch_size, n_objects):
         x.grad[t, k, i] = ti.Matrix.zero(real, dim, 1)
         v.grad[t, k, i] = ti.Matrix.zero(real, dim, 1)
         v_inc[t, k, i] = ti.Matrix.zero(real, dim, 1)
         v_inc.grad[t, k, i] = ti.Matrix.zero(real, dim, 1)
-    for t, k, i in ti.ndrange(max_steps, batch_size, n_particles):
+    for t, k, i in ti.ndrange(steps, batch_size, n_particles):
         C[t, k, i] = ti.Matrix.zero(real, dim, dim)
         C.grad[t, k, i] = ti.Matrix.zero(real, dim, dim)
         if ti.static(dim == 2):
@@ -446,7 +446,7 @@ def clear_states():
 
 @debug
 def init(steps, train, output_v = None, output_h = None, iter = 0):
-    clear_states()
+    clear_states(steps)
     nn.clear()
 
     if train:
