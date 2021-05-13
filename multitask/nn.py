@@ -2,7 +2,7 @@ import taichi as ti
 import pickle as pkl
 
 from utils import *
-from config import learning_rate, adam_a, adam_b1, adam_b2
+from config import learning_rate, adam_a, adam_b1, adam_b2, dim
 
 @ti.kernel
 def compute_TNS(w: ti.template(), s: ti.template()):
@@ -122,8 +122,12 @@ class Model:
 
     @ti.kernel
     def nn1(self, t: ti.i32):
-        for k, i, j in ti.ndrange(self.batch_size, self.n_hidden, self.n_input):
-            self.hidden[t, k, i] += self.weights1[i, j] * self.input[t, k, j]
+        if ti.static(dim == 2):
+            for k, i, j in ti.ndrange(self.batch_size, self.n_hidden, self.n_input):
+                self.hidden[t, k, i] += self.weights1[i, j] * self.input[t, k, j]
+        else:
+            for k, i, j in ti.ndrange(self.batch_size, self.n_hidden, self.n_input):
+                self.hidden[t, k, i] += self.weights1[i, j] * self.input[t, k, j] * 30.
         for k, i in ti.ndrange(self.batch_size, self.n_hidden):
             self.hidden_act[t, k, i] = ti.sin(self.hidden[t, k, i] + self.bias1[i])
 

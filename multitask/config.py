@@ -45,14 +45,9 @@ dt = 0.004 if simulator == "mass_spring" else 0.002
 spring_omega = 2 * math.pi / dt / run_period
 
 # simulator----------------------------------------------------------
-
-head_id = 10
-
 # target_ball = 0
-elasticity = 0.0
 ground_height = 0.1
 gravity = -1.8
-friction = 2.5
 
 drag_damping = 0
 dashpot_damping = 0.2 if dim == 2 else 0.1
@@ -74,6 +69,7 @@ n_hidden = 64
 duplicate_v = 30
 duplicate_h = 30
 if dim == 3:
+    duplicate_v = 1
     duplicate_h = 0
 
 n_input_states = n_sin_waves + dim * 2 * n_objects + duplicate_v * (dim - 1) + duplicate_h

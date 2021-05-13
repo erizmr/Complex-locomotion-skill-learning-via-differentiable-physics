@@ -121,12 +121,12 @@ def compute_rotation(t: ti.i32):
     for k in range(batch_size):
         for i in ti.static(range(n_objects)):
             if x[0, k, i](0) < center[0, k](0):
-                head_center[t, k] += x[t, k ,i]
+                head_center[t, k] += x[t, k, i]
                 head_counter[t, k] += 1.
             else:
                 tail_center[t, k] += x[t, k, i]
                 tail_counter[t, k] += 1.
-        direction = -head_center[t, k] / head_counter[t, k] + tail_center[t, k] / tail_counter[t, k]
+        direction = -head_center[t, k] * tail_counter[t, k] + tail_center[t, k] * head_counter[t, k]
         rotation[t, k] = ti.atan2(direction[1], direction[0])
 
 @ti.kernel
@@ -329,7 +329,7 @@ def compute_loss_pose(steps: ti.template()):
 @ti.kernel
 def compute_loss_rotation(steps: ti.template()):
     for t, k in ti.ndrange((1, steps + 1), batch_size):
-        loss_rotation[None] += rotation[t, k] ** 2 / batch_size
+        loss_rotation[None] += rotation[t, k] ** 2 / batch_size / 5
 
 @ti.kernel
 def compute_loss_actuation(steps: ti.template()):
@@ -357,6 +357,23 @@ def initialize_interactive(steps: ti.template(), output_v: ti.f32, output_h: ti.
     for t, k in ti.ndrange(steps, batch_size):
         target_v[t, k][0] = output_v
         target_h[t, k] = output_h
+
+@ti.kernel
+def initialize_script(steps: ti.template(), x0:real, y0:real, x1:real, y1:real, x2:real, y2:real, x3:real, y3:real):
+    for t, k in ti.ndrange(steps, batch_size):
+        if t < 1000:
+            target_v[t, k][0] = x0
+            target_v[t, k][2] = y0
+        elif t < 2000:
+            target_v[t, k][0] = x1
+            target_v[t, k][2] = y1
+        elif t < 3000:
+            target_v[t, k][0] = x2
+            target_v[t, k][2] = y2
+        elif t < 4000:
+            target_v[t, k][0] = x3
+            target_v[t, k][2] = y3
+        target_h[t, k] = 0.
 
 @ti.kernel
 def initialize_validate(steps: ti.template(), output_v: ti.f32, output_h: ti.f32):
@@ -489,7 +506,8 @@ def forward(steps, train = True):
     for t in range(steps):
         compute_center(t)
         compute_height(t)
-        # compute_rotation(t)
+        if dim == 3:
+            compute_rotation(t)
         nn_input(t)
         nn.forward(t)
         if simulator == "mpm":
@@ -508,8 +526,10 @@ def get_loss(steps):
     if duplicate_h > 0:
         compute_loss_height(steps)
         #compute_loss_pose(steps)
-    # compute_loss_rotation(steps)
-    compute_loss_actuation(steps)
+    if dim == 2:
+        compute_loss_actuation(steps)
+    else:
+        compute_loss_rotation(steps)
 
     for l in losses:
         compute_loss_final(l)
@@ -607,8 +627,6 @@ def simulate(steps, output_v=None, output_h=None, visualize=True, train = True, 
             t.start()
 
     visualizer(steps, train = train, prefix = prefix, visualize = visualize)
-
-simulate.cnt = 0
 
 @ti.kernel
 def copy_robot(steps: ti.i32):
