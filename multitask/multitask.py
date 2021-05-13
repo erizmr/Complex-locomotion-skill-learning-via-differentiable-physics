@@ -175,8 +175,8 @@ def apply_spring_force(t: ti.i32):
         v_rel = (v[t, k, a] - v[t, k, b]).dot(d)
         impulse += dashpot_damping * v_rel * d
 
-        ti.atomic_add(v_inc[t + 1, k, a], -impulse)
-        ti.atomic_add(v_inc[t + 1, k, b], impulse)
+        ti.atomic_add(v_inc[t, k, a], -impulse)
+        ti.atomic_add(v_inc[t, k, b], impulse)
 
 
 @ti.kernel
@@ -185,7 +185,7 @@ def advance_toi(t: ti.i32):
         s = math.exp(-dt * drag_damping)
         unitY = ti.Matrix.zero(real, dim, 1)
         unitY[1] = 1.0
-        old_v = s * v[t - 1, k, i] + dt * gravity * unitY + v_inc[t, k, i]
+        old_v = s * v[t - 1, k, i] + dt * gravity * unitY + v_inc[t - 1, k, i]
         old_x = x[t - 1, k, i]
         new_x = old_x + dt * old_v
         toi = 0.0
