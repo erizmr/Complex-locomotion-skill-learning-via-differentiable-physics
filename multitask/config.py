@@ -40,6 +40,8 @@ turn_period = 500
 max_speed = 0.08
 max_height = 0.1
 
+dt = 0.004 if simulator == "mass_spring" else 0.002
+
 spring_omega = 2 * math.pi / dt / run_period
 
 # simulator----------------------------------------------------------
@@ -51,8 +53,6 @@ elasticity = 0.0
 ground_height = 0.1
 gravity = -1.8
 friction = 2.5
-
-dt = 0.004 if simulator == "mass_spring" else 0.002
 
 drag_damping = 0
 dashpot_damping = 0.2 if dim == 2 else 0.1
@@ -80,7 +80,7 @@ n_input_states = n_sin_waves + dim * 2 * n_objects + duplicate_v * (dim - 1) + d
 
 batch_size = 64
 
-reset_step = 16
+reset_step = 4
 
 #weight_decay = 0.001
 learning_rate = 3e-4

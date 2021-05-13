@@ -3,6 +3,7 @@ from taichi.lang.impl import reset
 
 from utils import *
 from config import *
+from nn import Model
 
 import random
 import sys
@@ -37,8 +38,6 @@ loss_dict = {'loss_v': loss_velocity,
              'loss_a': loss_act}
 losses = loss_dict.values()
 
-total_norm_sqr = scalar()
-
 x = vec()
 v = vec()
 v_inc = vec()
@@ -54,19 +53,6 @@ initial_center = vec()
 
 input_state = scalar()
 
-weights1 = scalar()
-bias1 = scalar()
-
-weights2 = scalar()
-bias2 = scalar()
-hidden_act = scalar()
-hidden = scalar()
-
-m_weights1, v_weights1 = scalar(), scalar()
-m_bias1, v_bias1 = scalar(), scalar()
-m_weights2, v_weights2 = scalar(), scalar()
-m_bias2, v_bias2 = scalar(), scalar()
-
 center = vec()
 height = scalar()
 rotation = scalar()
@@ -77,8 +63,7 @@ tail_counter = scalar()
 target_v = vec()
 target_h = scalar()
 
-act = scalar()
-act_act = scalar()
+actuation = scalar()
 
 ti.root.dense(ti.ijk, (max_steps, batch_size, n_objects)).place(x, v, v_inc)
 ti.root.dense(ti.i, n_springs).place(spring_anchor_a, spring_anchor_b,
@@ -96,46 +81,21 @@ ti.root.dense(ti.ij, (batch_size, n_particles)).place(actuator_id, particle_type
 ti.root.dense(ti.ijk, (max_steps, batch_size, n_particles)).place(C, F)
 ti.root.dense(ti.ijk, (batch_size, n_grid, n_grid)).place(grid_v_in, grid_m_in, grid_v_out)
 
-ti.root.dense(ti.ij, (n_hidden, n_input_states)).place(weights1)
-ti.root.dense(ti.i, n_hidden).place(bias1)
-ti.root.dense(ti.ij, (n_springs, n_hidden)).place(weights2)
-ti.root.dense(ti.i, n_springs).place(bias2)
-
-ti.root.dense(ti.ij, (n_hidden, n_input_states)).place(m_weights1, v_weights1)
-ti.root.dense(ti.i, n_hidden).place(m_bias1, v_bias1)
-ti.root.dense(ti.ij, (n_springs, n_hidden)).place(m_weights2, v_weights2)
-ti.root.dense(ti.i, n_springs).place(m_bias2, v_bias2)
-
 ti.root.dense(ti.ijk, (max_steps, batch_size, n_input_states)).place(input_state)
 
 ti.root.dense(ti.i, n_objects).place(initial_objects)
 ti.root.place(initial_center)
 
-ti.root.dense(ti.ijk, (max_steps, batch_size, n_hidden)).place(hidden_act, hidden)
-ti.root.dense(ti.ijk, (max_steps, batch_size, n_springs)).place(act_act, act)
+ti.root.dense(ti.ijk, (max_steps, batch_size, n_springs)).place(actuation)
 ti.root.dense(ti.ij, (max_steps, batch_size)).place(center, target_v, target_h, height, rotation, head_center, head_counter, tail_center, tail_counter)
-ti.root.place(loss, total_norm_sqr)
+ti.root.place(loss)
 ti.root.place(*losses)
+
+nn = Model(max_steps, batch_size, n_input_states, n_springs, input_state, actuation, n_hidden)
+
 ti.root.lazy_grad()
 
 pool = ti.field(ti.f32, shape = (5 * batch_size))
-
-weights = [weights1, weights2, bias1, bias2]
-
-def dump_weights(name = "save.pkl"):
-    #print("# Save to {}".format(name))
-    w_val = []
-    for w in weights:
-        w_val.append(w.to_numpy())
-    pkl.dump(w_val, open(name, "wb"))
-    #print("# Done!")
-
-def load_weights(name = "save.pkl"):
-    #print('# Load from {}'.format(name))
-    w_val = pkl.load(open(name, 'rb'))
-    for w, val in zip(weights, w_val):
-        w.from_numpy(val)
-    #print("# Done!")
 
 @ti.kernel
 def compute_center(t: ti.i32):
@@ -197,23 +157,6 @@ def nn_input(t: ti.i32):
             input_state[t, k, n_objects * dim * 2 + n_sin_waves + duplicate_v * (dim - 1) + j] = (target_h[t, k] - 0.1) / max_height * 2 - 1
 
 @ti.kernel
-def nn1(t: ti.i32):
-    for k, i, j in ti.ndrange(batch_size, n_hidden, n_input_states):
-        hidden[t, k, i] += weights1[i, j] * input_state[t, k, j]
-
-    for k, i in ti.ndrange(batch_size, n_hidden):
-        hidden_act[t, k, i] = ti.sin(hidden[t, k, i] + bias1[i])
-
-
-@ti.kernel
-def nn2(t: ti.i32):
-    for k, i, j in ti.ndrange(batch_size, n_springs, n_hidden):
-        act[t, k, i] += weights2[i, j] * hidden_act[t, k, j]
-    for k, i in ti.ndrange(batch_size, n_springs):
-        act_act[t, k, i] = ti.sin(act[t, k, i] + bias2[i])
-
-
-@ti.kernel
 def apply_spring_force(t: ti.i32):
     for k, i in ti.ndrange(batch_size, n_springs):
         a = spring_anchor_a[i]
@@ -223,7 +166,7 @@ def apply_spring_force(t: ti.i32):
         dist = pos_a - pos_b
         length = dist.norm(1e-8) + 1e-4
 
-        target_length = spring_length[i] * (1.0 + spring_actuation[i] * act_act[t, k, i])
+        target_length = spring_length[i] * (1.0 + spring_actuation[i] * actuation[t, k, i])
         impulse = dt * (length - target_length) * spring_stiffness[i] / length * dist
 
         # Dashpot damping
@@ -284,10 +227,10 @@ def p2g(f: ti.i32):
 
         act_id = actuator_id[k, p]
 
-        act_applied = act_act[f, k, ti.max(0, act_id)] * act_strength
+        act_applied = actuation[f, k, ti.max(0, act_id)] * act_strength
         if act_id == -1:
             act_applied = 0.0
-        # ti.print(act_act)
+        # ti.print(actuation)
 
         A = ti.Matrix([[0.0, 0.0], [0.0, 1.0]]) * act_applied
         cauchy = ti.Matrix([[0.0, 0.0], [0.0, 0.0]])
@@ -392,20 +335,20 @@ def compute_loss_rotation(steps: ti.template()):
 def compute_loss_actuation(steps: ti.template()):
     for t, k, i in ti.ndrange(steps, batch_size, n_springs):
         if target_h[t, k] < 0.1 + 1e-4:
-            loss_act[None] += ti.max(ti.abs(act_act[t, k, i]) - (ti.abs(target_v[t, k][0]) / 0.08) ** 0.5, 0.) / n_springs / batch_size / steps * 10
+            loss_act[None] += ti.max(ti.abs(actuation[t, k, i]) - (ti.abs(target_v[t, k][0]) / 0.08) ** 0.5, 0.) / n_springs / batch_size / steps * 10
 
 @ti.kernel
 def compute_loss_final(l: ti.template()):
     loss[None] += l[None]
 
-
+'''
 @ti.kernel
 def compute_weight_decay():
     for I in ti.grouped(weights1):
         loss[None] += weight_decay * weights1[I] ** 2
     for I in ti.grouped(weights2):
         loss[None] += weight_decay * weights2[I] ** 2
-
+'''
 
 gui = ti.GUI(show_gui=False, background_color=0xFFFFFF)
 
@@ -430,6 +373,7 @@ def initialize_validate(steps: ti.template(), output_v: ti.f32, output_h: ti.f32
             target_v[t, k][0] = ((t // turn_period) % 2 * 2 - 1) * output_v
             target_v[t, k][2] = 0
             target_h[t, k] = 0
+    '''
     if output_v < 1e-8:
         for t, k in ti.ndrange(steps, batch_size):
             target_v[t, k][0] = 0
@@ -438,6 +382,7 @@ def initialize_validate(steps: ti.template(), output_v: ti.f32, output_h: ti.f32
         for t, k in ti.ndrange(steps, batch_size):
             target_v[t, k][0] = ((t // turn_period) % 2 * 2 - 1) * output_v
             target_h[t, k] = 0
+    '''
 
 @ti.kernel
 def initialize_train(iter: ti.i32, steps: ti.template()):
@@ -487,10 +432,6 @@ def clear_states():
         else:
             F[t, k, i] = [[1., 0., 0.], [0., 1., 0.], [0., 0., 1.]]
         F.grad[t, k, i] = ti.Matrix.zero(real, dim, dim)
-    for I in ti.grouped(hidden):
-        hidden[I] = 0.
-    for I in ti.grouped(act):
-        act[I] = 0.
     for I in ti.grouped(head_center):
         head_center[I] = ti.Matrix.zero(real, dim, 1)
         head_counter[I] = 0.
@@ -498,21 +439,10 @@ def clear_states():
         tail_counter[I] = 0.
         rotation[I] = 0.
 
-
-def clear():
-    clear_states()
-    m_weights1.fill(0)
-    v_weights1.fill(0)
-    m_bias1.fill(0)
-    v_bias1.fill(0)
-    m_weights2.fill(0)
-    v_weights2.fill(0)
-    m_bias2.fill(0)
-    v_bias2.fill(0)
-
 @debug
 def init(steps, train, output_v = None, output_h = None, iter = 0):
     clear_states()
+    nn.clear()
 
     if train:
         initialize_train(iter, steps)
@@ -550,8 +480,7 @@ def forward(steps, train = True):
         compute_height(t)
         # compute_rotation(t)
         nn_input(t)
-        nn1(t)
-        nn2(t)
+        nn.forward(t)
         if simulator == "mpm":
             advance_mpm(t)
         else:
@@ -603,7 +532,7 @@ def visualizer(steps, train, prefix, visualize = True):
                             def get_pt(x):
                                 return (x[0], x[1])
 
-                            a = act_act[t - 1, 0, i] * 0.5
+                            a = actuation[t - 1, 0, i] * 0.5
                             r = 2
                             if spring_actuation[i] == 0:
                                 a = 0
@@ -620,7 +549,7 @@ def visualizer(steps, train, prefix, visualize = True):
                     for i in range(n_objects):
                         color = (0.06640625, 0.06640625, 0.06640625)
                         if simulator == "mpm" and aid[0, i] != -1:
-                            act_applied = act_act[t - 1, 0, aid[0, i]]
+                            act_applied = actuation[t - 1, 0, aid[0, i]]
                             color = (0.5 - act_applied, 0.5 - abs(act_applied), 0.5 + act_applied)
                         circle(x[t, 0, i][0], x[t, 0, i][1], color)
 
@@ -740,54 +669,15 @@ def rounded_train(steps, iter):
     times = (batch_size + step - start) // step
     reset_robot(start, step, times)
 
-@ti.kernel
-def gradient_update(w: ti.template(), m: ti.template(), v: ti.template(), iter: ti.i32):
-    '''
-    for I in ti.grouped(w):
-        w[I] -= w.grad[I] * learning_rate
-    '''
-    for I in ti.grouped(w):
-        m[I] = adam_b1 * m[I] + (1 - adam_b1) * w.grad[I]
-        v[I] = adam_b2 * v[I] + (1 - adam_b2) * w.grad[I] * w.grad[I]
-        m_cap = m[I] / (1 - adam_b1 ** (iter + 1))
-        v_cap = v[I] / (1 - adam_b2 ** (iter + 1))
-        w[I] -= (adam_a * m_cap) / (ti.sqrt(v_cap) + 1e-8)
-
-@ti.kernel
-def compute_TNS(w: ti.template()):
-    for I in ti.grouped(w):
-        total_norm_sqr[None] += w.grad[I] ** 2
-
-@ti.kernel
-def nn_init_random():
-    q1 = math.sqrt(6 / n_input_states)
-    for i, j in ti.ndrange(n_hidden, n_input_states):
-        weights1[i, j] = (np.random.rand() * 2 - 1) * q1
-
-    q2 = math.sqrt(6 / n_hidden)
-    for i, j in ti.ndrange(n_springs, n_hidden):
-        weights2[i, j] = (np.random.rand() * 2 - 1) * q2
-    '''
-    for i, j in ti.ndrange(n_hidden, n_input_states):
-        weights1[i, j] = np.random.randn() * math.sqrt(
-            2 / (n_hidden + n_input_states)) * 2
-
-    for i, j in ti.ndrange(n_springs, n_hidden):
-        # TODO: n_springs should be n_actuators
-        weights2[i, j] = np.random.randn() * math.sqrt(
-            2 / (n_hidden + n_springs)) * 2
-    '''
-
-
 def optimize(iters = 100000, output_log = "plots/training.log"):
     os.makedirs("plots", exist_ok = True)
     log_file = open(output_log, 'w')
     log_file.close()
 
     if os.path.exists("load.pkl"):
-        load_weights("load.pkl")
+        nn.load_weights("load.pkl")
     else:
-        nn_init_random()
+        nn.weights_init()
 
     losses = []
     # simulate('initial{}'.format(robot_id), visualize=visualize)
@@ -816,29 +706,25 @@ def optimize(iters = 100000, output_log = "plots/training.log"):
 
         if iter <= change_iter and loss[None] < best:
             best = loss[None]
-            dump_weights("weights/best.pkl")
+            nn.dump_weights("weights/best.pkl")
         
         if iter > change_iter + reset_step and loss[None] < best_finetune:
             best_finetune = loss[None]
-            dump_weights("weights/best_finetune.pkl")
+            nn.dump_weights("weights/best_finetune.pkl")
 
-        dump_weights("weights/last.pkl")
+        nn.dump_weights("weights/last.pkl")
 
         if iter % 50 == 0:
-            dump_weights("weights/iter{}.pkl".format(iter))
+            nn.dump_weights("weights/iter{}.pkl".format(iter))
 
-        total_norm_sqr[None] = 0.
-        compute_TNS(weights1)
-        compute_TNS(bias1)
-        compute_TNS(weights2)
-        compute_TNS(bias2)
+        total_norm_sqr = nn.get_TNS()
 
         def print_logs(file = None):
             if iter > change_iter:
                 print('Iter=', iter, 'Loss=', loss[None], 'Best_FT=', best_finetune, file = file)
             else:
                 print('Iter=', iter, 'Loss=', loss[None], 'Best=', best, file = file)
-            print("TNS= ", total_norm_sqr[None], file = file)
+            print("TNS= ", total_norm_sqr, file = file)
             for name, l in loss_dict.items():
                 print("{}={}".format(name, l[None]), file = file)
 
@@ -847,10 +733,7 @@ def optimize(iters = 100000, output_log = "plots/training.log"):
         print_logs(log_file)
         log_file.close()
 
-        gradient_update(weights1, m_weights1, v_weights1, iter)
-        gradient_update(bias1, m_bias1, v_bias1, iter)
-        gradient_update(weights2, m_weights2, v_weights2, iter)
-        gradient_update(bias2, m_bias2, v_bias2, iter)
+        nn.gradient_update(iter)
         losses.append(loss[None])
 
         # print(time.time() - t, ' 2')
