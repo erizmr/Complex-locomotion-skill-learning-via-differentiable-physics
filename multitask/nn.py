@@ -114,6 +114,13 @@ class Model:
             self.output[I] = 0.
 
     @ti.kernel
+    def clear_single(self, t: ti.i32):
+        for k, i in ti.ndrange(self.batch_size, self.n_hidden):
+            self.hidden[t, k, i] = 0.
+        for k, i in ti.ndrange(self.batch_size, self.n_output):
+            self.output[t, k, i] = 0.
+
+    @ti.kernel
     def nn1(self, t: ti.i32):
         for k, i, j in ti.ndrange(self.batch_size, self.n_hidden, self.n_input):
             self.hidden[t, k, i] += self.weights1[i, j] * self.input[t, k, j]

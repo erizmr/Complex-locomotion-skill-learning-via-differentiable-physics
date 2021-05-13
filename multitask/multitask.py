@@ -353,6 +353,12 @@ def compute_weight_decay():
 gui = ti.GUI(show_gui=False, background_color=0xFFFFFF)
 
 @ti.kernel
+def initialize_interactive(steps: ti.template(), output_v: ti.f32, output_h: ti.f32):
+    for t, k in ti.ndrange(steps, batch_size):
+        target_v[t, k][0] = output_v
+        target_h[t, k] = output_h
+
+@ti.kernel
 def initialize_validate(steps: ti.template(), output_v: ti.f32, output_h: ti.f32):
     '''
     for t, k in ti.ndrange(steps, batch_size):
