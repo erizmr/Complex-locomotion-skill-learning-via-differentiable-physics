@@ -5,6 +5,16 @@ import os
 import matplotlib.pyplot as plt
 from scipy.ndimage.filters import gaussian_filter
 
+import taichi as ti
+
+from config import *
+
+real = ti.f64
+
+scalar = lambda: ti.field(dtype=real)
+vec = lambda: ti.Vector.field(dim, dtype=real)
+mat = lambda: ti.Matrix.field(dim, dim, dtype=real)
+
 class Debug():
     def __init__(self, debug = True):
         self.debug = debug

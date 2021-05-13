@@ -1,9 +1,8 @@
-from robot_config import robots
-from robot3d_config import robots3d
-from robot_mpm import robots_mpm
 import threading
 from taichi.lang.impl import reset
-import utils
+
+from utils import *
+from config import *
 
 import random
 import sys
@@ -15,39 +14,10 @@ import os
 
 import pickle as pkl
 
-debug = utils.Debug(False)
+debug = Debug(False)
 
-real = ti.f64
 ti.init(arch=ti.gpu, default_fp=real)
 
-robot_id = 2
-if len(sys.argv) >= 2:
-    robot_id = int(sys.argv[1])
-    print("Run robot", robot_id)
-simulator = ""
-if robot_id >= 10000:
-    simulator = "mpm"
-    dim = 2
-    objects, springs, n_springs = robots_mpm[robot_id - 10000]()
-    n_objects = len(objects)
-else:
-    simulator = "mass_spring"
-    if robot_id < 100:
-        dim = 2
-        objects, springs = robots[robot_id]()
-    else:
-        dim = 3
-        objects, springs, faces = robots3d[robot_id - 100]()
-    n_objects = len(objects)
-    n_springs = len(springs)
-
-scalar = lambda: ti.field(dtype=real)
-vec = lambda: ti.Vector.field(dim, dtype=real)
-mat = lambda: ti.Matrix.field(dim, dim, dtype=real)
-
-max_steps = 1050
-vis_interval = 256
-output_vis_interval = 8
 output_target = []
 output_sim = []
 output_loss = []
@@ -73,14 +43,6 @@ x = vec()
 v = vec()
 v_inc = vec()
 
-head_id = 10
-
-# target_ball = 0
-elasticity = 0.0
-ground_height = 0.1
-gravity = -1.8
-friction = 2.5
-
 spring_anchor_a = ti.field(ti.i32)
 spring_anchor_b = ti.field(ti.i32)
 spring_length = scalar()
@@ -92,11 +54,9 @@ initial_center = vec()
 
 input_state = scalar()
 
-n_sin_waves = 10
 weights1 = scalar()
 bias1 = scalar()
 
-n_hidden = 64
 weights2 = scalar()
 bias2 = scalar()
 hidden_act = scalar()
@@ -109,10 +69,6 @@ m_bias2, v_bias2 = scalar(), scalar()
 
 center = vec()
 height = scalar()
-duplicate_v = 30
-duplicate_h = 30
-if dim == 3:
-    duplicate_h = 0
 rotation = scalar()
 head_center = vec()
 head_counter = scalar()
@@ -120,52 +76,15 @@ tail_center = vec()
 tail_counter = scalar()
 target_v = vec()
 target_h = scalar()
-weight_v = 1.
-weight_h = 1.
 
 act = scalar()
 act_act = scalar()
-
-dt = 0.004 if simulator == "mass_spring" else 0.002
-
-run_period = 100
-jump_period = 500
-turn_period = 500
-spring_omega = 2 * math.pi / dt / run_period
-print(spring_omega)
-drag_damping = 0
-dashpot_damping = 0.2 if dim == 2 else 0.1
-
-batch_size = 64
-
-reset_step = 16
-
-#weight_decay = 0.001
-learning_rate = 3e-4
-
-adam_a = learning_rate
-adam_b1=0.90
-adam_b2=0.90
-
-max_speed = 0.08
-max_height = 0.1
-
-def get_input_states():
-    return n_sin_waves + dim * 2 * n_objects + duplicate_v * (dim - 1) + duplicate_h
 
 ti.root.dense(ti.ijk, (max_steps, batch_size, n_objects)).place(x, v, v_inc)
 ti.root.dense(ti.i, n_springs).place(spring_anchor_a, spring_anchor_b,
                                      spring_length, spring_stiffness,
                                      spring_actuation)
 
-n_particles = n_objects
-n_input_states = get_input_states()
-n_grid = 64
-dx = 1 / n_grid
-inv_dx = 1 / dx
-p_vol = 1
-E, mu, la = 10, 10, 10
-act_strength = 4
 
 actuator_id = ti.field(ti.i32)
 particle_type = ti.field(ti.i32)
@@ -390,10 +309,6 @@ def p2g(f: ti.i32):
                 weight = w[i](0) * w[j](1)
                 grid_v_in[k, base + offset] += weight * (mass * v[f, k, p] + affine @ dpos)
                 grid_m_in[k, base + offset] += weight * mass
-
-
-bound = 3
-coeff = 0.5
 
 
 @ti.kernel
@@ -722,8 +637,8 @@ def visualizer(steps, train, prefix, visualize = True):
         output_loss.append(loss[None])
 
         if visualize:
-            utils.plot_curve(output_loss, "training_curve.png")
-            utils.plot_curve(output_loss[-200:], "training_curve_last_200.png")
+            plot_curve(output_loss, "training_curve.png")
+            plot_curve(output_loss[-200:], "training_curve_last_200.png")
 
 def output_mesh(steps, x_, fn):
     os.makedirs(fn + '_objs', exist_ok=True)
@@ -879,7 +794,7 @@ def optimize(iters = 100000, output_log = "plots/training.log"):
     best = 1e+15
     best_finetune = 1e+15
     train_steps = 1000
-    change_iter = 1000
+    change_iter = 5000
 
     os.makedirs("weights", exist_ok=True)
 
