@@ -354,14 +354,11 @@ gui = ti.GUI(show_gui=False, background_color=0xFFFFFF)
 
 @ti.kernel
 def initialize_validate(steps: ti.template(), output_v: ti.f32, output_h: ti.f32):
+    '''
     for t, k in ti.ndrange(steps, batch_size):
         q = t // turn_period
         if q % 3 == 0:
-            if ti.static(dim == 2):
-                target_v[t, k][0] = (q / 3 % 2 * 2 - 1) * output_v
-            else:
-                target_v[t, k][0] = (q / 3 % 2 * 2 - 1) * output_v
-                target_v[t, k][2] = (q / 3 % 2 * 2 - 1) * output_v
+            target_v[t, k][0] = (q // 3 % 2 * 2 - 1) * output_v
             target_h[t, k] = 0.1
         elif q % 3 == 1:
             target_v[t, k][0] = 0
@@ -374,14 +371,22 @@ def initialize_validate(steps: ti.template(), output_v: ti.f32, output_h: ti.f32
             target_v[t, k][2] = 0
             target_h[t, k] = 0
     '''
-    if output_v < 1e-8:
-        for t, k in ti.ndrange(steps, batch_size):
-            target_v[t, k][0] = 0
-            target_h[t, k] = output_h
+    for t, k in ti.ndrange(steps, batch_size): # jump
+        target_v[t, k][0] = 0
+        target_h[t, k] = output_h
+    '''
     if output_h < 1.0 + 1e-8:
         for t, k in ti.ndrange(steps, batch_size):
             target_v[t, k][0] = ((t // turn_period) % 2 * 2 - 1) * output_v
             target_h[t, k] = 0
+    for t, k in ti.ndrange(steps, batch_size):
+        q = t // turn_period
+        if q % 2 == 0:
+            target_v[t, k][0] = (q // 2 % 2 * 2 - 1) * output_v
+            target_h[t, k] = 0.1
+        else:
+            target_v[t, k][0] = 0
+            target_h[t, k] = output_h
     '''
 
 @ti.kernel
@@ -491,7 +496,6 @@ def forward(steps, train = True):
     compute_height(steps)
 
 def get_loss(steps):
-
     if duplicate_v > 0:
         compute_loss_velocity(steps)
 
@@ -598,27 +602,6 @@ def simulate(steps, output_v=None, output_h=None, visualize=True, train = True, 
 
     visualizer(steps, train = train, prefix = prefix, visualize = visualize)
 
-def validate(steps):
-    '''
-    simulate(steps, 0.08, 0.1, train = False)
-    simulate(steps, 0.06, 0.1, train = False)
-    simulate(steps, 0.04, 0.1, train = False)
-    simulate(steps, 0.02, 0.1, train = False)
-    simulate(steps, 0., 0.1, train = False)
-    
-
-    simulate(steps, 0, 0.15, train = False)
-    simulate(steps, 0, 0.125, train = False)
-    simulate(steps, 0, 0.10, train = False)
-    '''
-    simulate(steps, 0.06, 0.15, train = False)
-    simulate(steps, 0.04, 0.15, train = False)
-    simulate(steps, 0.02, 0.15, train = False)
-    
-    # simulate(steps, 0, 0.25)
-    # simulate(steps, 0, 0.3)
-    # simulate(steps, 0, 0)
-
 simulate.cnt = 0
 
 @ti.kernel
@@ -669,10 +652,12 @@ def rounded_train(steps, iter):
     times = (batch_size + step - start) // step
     reset_robot(start, step, times)
 
-def optimize(iters = 100000, output_log = "plots/training.log"):
+def optimize(iters = 100000, change_iter = 5000, output_log = "plots/training.log"):
     os.makedirs("plots", exist_ok = True)
     log_file = open(output_log, 'w')
     log_file.close()
+    
+    nn.clear_adam()
 
     if os.path.exists("load.pkl"):
         nn.load_weights("load.pkl")
@@ -684,7 +669,6 @@ def optimize(iters = 100000, output_log = "plots/training.log"):
     best = 1e+15
     best_finetune = 1e+15
     train_steps = 1000
-    change_iter = 5000
 
     os.makedirs("weights", exist_ok=True)
 

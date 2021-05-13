@@ -6,7 +6,7 @@ import sys
 import math
 
 # robot------------------------------------------------------------
-robot_id = 2
+robot_id = 3
 
 if len(sys.argv) >= 2:
     robot_id = int(sys.argv[1])
@@ -29,7 +29,7 @@ else:
     n_springs = len(springs)
 
 # process------------------------------------------------------------
-max_steps = 4050
+max_steps = 1050
 vis_interval = 256
 output_vis_interval = 8
 

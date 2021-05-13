@@ -117,7 +117,7 @@ def robotC():
 
 
 def robotD():
-    add_mesh_square(2, 0, actuation=0.3)
+    #add_mesh_square(2, 0, actuation=0.3)
     add_mesh_square(0, 0, actuation=0.3)
     add_mesh_square(0, 1, actuation=0.3)
     add_mesh_square(0, 2)
