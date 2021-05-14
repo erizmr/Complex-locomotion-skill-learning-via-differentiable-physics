@@ -140,7 +140,7 @@ def nn_input(t: ti.i32, offset: ti.i32):
                 input_state[t, k, j * dim * 2 + n_sin_waves + d] = vec_x[d] / 0.05
                 input_state[t, k, j * dim * 2 + n_sin_waves + dim + d] = v[t, k, j][d]
             else:
-                input_state[t, k, j * dim * 2 + n_sin_waves + d] = [vec_x] * float(sys.argv[2])
+                input_state[t, k, j * dim * 2 + n_sin_waves + d] = vec_x[d] * float(sys.argv[2])
                 input_state[t, k, j * dim * 2 + n_sin_waves + dim + d] = 0
 
     if ti.static(duplicate_v > 0):
@@ -436,10 +436,10 @@ def initialize_train(iter: ti.i32, steps: ti.template()):
                     target_h[t, k] = pool[q + 1] * max_height + 0.1
                     target_v[t, k] *= 0.
         else:
-            # r = pool[q + 1]
-            # angle = pool[q + 2] * 2 * 3.1415926
-            r = 1.
-            angle = 0.
+            r = ti.sqrt(pool[q + 1])
+            angle = pool[q + 2] * 2 * 3.1415926
+            # r = 1.
+            # angle = 0.
             target_v[t, k][0] = r * ti.cos(angle) * 0.05
             target_v[t, k][2] = r * ti.sin(angle) * 0.05
             target_h[t, k] = 0.
@@ -474,7 +474,10 @@ def init(steps, train, output_v = None, output_h = None, iter = 0):
     if train:
         initialize_train(iter, steps)
     else:
-        initialize_validate(steps, output_v, output_h)
+        if dim == 2:
+            initialize_validate(steps, output_v, output_h)
+        else:
+            initialize_script(steps, 0.04, 0, 0, 0.04, -0.04, 0, 0, -0.04)
 
     loss[None] = 0.
     for l in losses:
@@ -701,6 +704,8 @@ def optimize(iters = 100000, change_iter = 5000, prefix = None, root_dir = "./")
     best = 1e+15
     best_finetune = 1e+15
     train_steps = 1000
+    if dim == 3 and sys.argv[0] == "validate.py":
+        train_steps = 4000
 
     for iter in range(iters):
 
