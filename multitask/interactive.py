@@ -1,6 +1,9 @@
+import config
+config.batch_size = 1
 import multitask
 import taichi as ti
 
+offset = 0
 def set_target():
     for e in gui.get_events():
         if '0' <= e.key <= '9':
@@ -17,13 +20,13 @@ def set_target():
             set_target.target_h = 0.1
     print("Status: ", set_target.target_v, set_target.target_h)
     multitask.initialize_interactive(1, set_target.target_v, set_target.target_h)
-set_target.target_v = 0.
+set_target.target_v = -0.06
 set_target.target_h = 0.1
 
 def make_decision():
     multitask.nn.clear_single(0)
     multitask.compute_center(0)
-    multitask.nn_input(0)
+    multitask.nn_input(0, offset)
     multitask.nn.forward(0)
 
 def forward_mass_spring():
@@ -67,15 +70,18 @@ def visualizer():
     gui.show('mass_spring/{:04d}.png'.format(visualizer.frame))
     visualizer.frame += 1
 visualizer.frame = 0
-
+import os
 if __name__ == "__main__":
+    os.makedirs("mass_spring", exist_ok = True)
     multitask.setup_robot()
-    multitask.nn.load_weights("weights/best.pkl")
+    multitask.nn.load_weights("results/5-13-robot-2/weight.pkl")
     print(multitask.x.to_numpy()[0, :, :])
     visualizer()
     while gui.running:
-        set_target()
-        make_decision()
-        forward_mass_spring()
-        refresh_xv()
+        for i in range(10):
+            set_target()
+            make_decision()
+            forward_mass_spring()
+            refresh_xv()
+            offset += 1
         visualizer()

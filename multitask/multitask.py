@@ -130,18 +130,18 @@ def compute_rotation(t: ti.i32):
         rotation[t, k] = ti.atan2(direction[1], direction[0])
 
 @ti.kernel
-def nn_input(t: ti.i32):
+def nn_input(t: ti.i32, offset: ti.i32):
     for k, j in ti.ndrange(batch_size, n_sin_waves):
-        input_state[t, k, j] = ti.sin(spring_omega * t * dt + 2 * math.pi / n_sin_waves * j)
+        input_state[t, k, j] = ti.sin(spring_omega * (t + offset) * dt + 2 * math.pi / n_sin_waves * j)
 
     for k, j in ti.ndrange(batch_size, n_objects):
-        offset = x[t, k, j] - center[t, k]
+        vec_x = x[t, k, j] - center[t, k]
         for d in ti.static(range(dim)):
             if ti.static(dim == 2):
-                input_state[t, k, j * dim * 2 + n_sin_waves + d] = offset[d] / 0.05
+                input_state[t, k, j * dim * 2 + n_sin_waves + d] = vec_x[d] / 0.05
                 input_state[t, k, j * dim * 2 + n_sin_waves + dim + d] = v[t, k, j][d]
             else:
-                input_state[t, k, j * dim * 2 + n_sin_waves + d] = offset[d] * float(sys.argv[2])
+                input_state[t, k, j * dim * 2 + n_sin_waves + d] = [vec_x] * float(sys.argv[2])
                 input_state[t, k, j * dim * 2 + n_sin_waves + dim + d] = 0
 
     if ti.static(duplicate_v > 0):
@@ -508,7 +508,7 @@ def forward(steps, train = True):
         compute_height(t)
         if dim == 3:
             compute_rotation(t)
-        nn_input(t)
+        nn_input(t, 0)
         nn.forward(t)
         if simulator == "mpm":
             advance_mpm(t)

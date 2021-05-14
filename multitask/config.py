@@ -6,7 +6,7 @@ import sys
 import math
 
 # robot------------------------------------------------------------
-robot_id = 3
+robot_id = 2
 
 if len(sys.argv) >= 2:
     robot_id = int(sys.argv[1])
