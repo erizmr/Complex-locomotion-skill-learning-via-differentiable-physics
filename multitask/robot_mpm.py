@@ -1,4 +1,4 @@
-n_grid = 64
+n_grid = 32
 dx = 1 / n_grid
 
 class Scene:

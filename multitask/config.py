@@ -1,6 +1,6 @@
 from robot_config import robots
 from robot3d_config import robots3d
-from robot_mpm import robots_mpm
+from robot_mpm import robots_mpm, n_grid, dx
 
 import sys
 import math
@@ -42,25 +42,23 @@ turn_period = 500
 max_speed = 0.08
 max_height = 0.1
 
-dt = 0.004 if simulator == "mass_spring" else 0.002
+dt = 0.004 if simulator == "mass_spring" else 0.001
 
 spring_omega = 2 * math.pi / dt / run_period
 
 # simulator----------------------------------------------------------
 # target_ball = 0
 ground_height = 0.1
-gravity = -1.8
+gravity = -1.8 if simulator == "mass_spring" else -10.
 
 drag_damping = 0
 dashpot_damping = 0.2 if dim == 2 else 0.1
 
 n_particles = n_objects
-n_grid = 64
-dx = 1 / n_grid
 inv_dx = 1 / dx
 p_vol = 1
-E, mu, la = 10, 10, 10
-act_strength = 4
+E, mu, la = 40, 40, 40
+act_strength = 40
 
 bound = 3
 coeff = 0.5
