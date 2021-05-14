@@ -6,7 +6,7 @@ import sys
 import math
 
 # robot------------------------------------------------------------
-robot_id = 3
+robot_id = 5
 
 if len(sys.argv) >= 2:
     robot_id = int(sys.argv[1])
@@ -80,7 +80,7 @@ batch_size = 64
 if sys.argv[0] == "interactive.py":
     batch_size = 1
 
-reset_step = 4
+max_reset_step = 4
 
 #weight_decay = 0.001
 learning_rate = 3e-4

@@ -656,11 +656,11 @@ def setup_robot():
             spring_stiffness[i] = s[3] / 10
             spring_actuation[i] = s[4]
 
-def rounded_train(steps, iter):
+def rounded_train(steps, iter, reset_step):
     copy_robot(steps)
     start = iter % reset_step
     step = reset_step
-    times = (batch_size + step - start) // step
+    times = (batch_size + step - start - 1) // step
     reset_robot(start, step, times)
 
 def optimize(iters = 100000, change_iter = 5000, prefix = None, root_dir = "./",\
@@ -710,11 +710,14 @@ def optimize(iters = 100000, change_iter = 5000, prefix = None, root_dir = "./",
     train_steps = 1000
     if dim == 3 and sys.argv[0] == "validate.py":
         train_steps = 4000
+    
+    reset_step = 2
 
     for iter in range(iters):
-
         if iter > change_iter:
-            rounded_train(train_steps, iter)
+            if iter % 500 == 0 and reset_step < max_reset_step:
+                reset_step += 1
+            rounded_train(train_steps, iter, reset_step = reset_step)
 
         print("-------------------- {}iter #{} --------------------"\
             .format(""if prefix is None else "{}, ".format(prefix), iter))
@@ -724,14 +727,13 @@ def optimize(iters = 100000, change_iter = 5000, prefix = None, root_dir = "./",
         if iter <= change_iter and loss[None] < best:
             best = loss[None]
             nn.dump_weights(weight_out("best.pkl"))
-            nn.dump_weights(os.path.join(root_dir, "weight.pkl"))
         
-        if iter > change_iter + reset_step and loss[None] < best_finetune:
+        if iter > change_iter + max_reset_step and loss[None] < best_finetune:
             best_finetune = loss[None]
             nn.dump_weights(weight_out("best_finetune.pkl"))
-            nn.dump_weights(os.path.join(root_dir, "weight.pkl"))
 
         nn.dump_weights(weight_out("last.pkl"))
+        nn.dump_weights(os.path.join(root_dir, "weight.pkl"))
 
         if iter % 50 == 0:
             nn.dump_weights(weight_out("iter{}.pkl".format(iter)))
@@ -775,5 +777,7 @@ if __name__ == '__main__':
                 exit(0)
             os.system('rm "{}" -r'.format(root_dir))
         optimize(500, 250, "stage1", root_dir, loss_enable = {"height", "pose"}, max_height = 0.01)
-        optimize(2000, 1000, "stage2", root_dir, load_path = load_path, loss_enable = {"height", "pose"}, max_height = 0.1)
-        optimize(100000, 5000, "final", root_dir, load_path = load_path, loss_enable = {"velocity", "height", "actuation"}, max_height = 0.1)
+        #optimize(2000, 1000, "stage2", root_dir, load_path = load_path, loss_enable = {"height", "pose"}, max_height = 0.05)
+        optimize(2000, 1000, "stage2", root_dir, load_path = load_path, loss_enable = {"height", "pose"})
+        #optimize(2000, 1000, "stage4", root_dir, load_path = load_path, loss_enable = {"velocity", "actuation"}, max_speed = 0.08)
+        optimize(100000, 5000, "final", root_dir, load_path = load_path, loss_enable = {"velocity", "height", "actuation"})

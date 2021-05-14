@@ -74,7 +74,7 @@ import os
 if __name__ == "__main__":
     os.makedirs("mass_spring", exist_ok = True)
     multitask.setup_robot()
-    multitask.nn.load_weights("robot_3/weight.pkl")
+    multitask.nn.load_weights("robot_{}/weight.pkl".format(config.robot_id))
     print(multitask.x.to_numpy()[0, :, :])
     visualizer()
     while gui.running:
