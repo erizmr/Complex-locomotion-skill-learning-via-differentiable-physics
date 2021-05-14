@@ -3,8 +3,10 @@
 __pycache__
 plots/
 mass_spring/
+video/
 weights/
 *.mp4
 *.gif
 *.log
 *.pkl
+*.png

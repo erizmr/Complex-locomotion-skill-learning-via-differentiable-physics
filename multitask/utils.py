@@ -54,11 +54,10 @@ if __name__ == "__main__":
     
     run(5)
 
-def plot_curve(plots, name = "output.png"):
-    os.makedirs("plots", exist_ok = True)
+def plot_curve(plots, path = "output.png"):
     fig = plt.figure()
     plt.plot(plots, color = "red")
     temp_curve = gaussian_filter(plots, 10)
     plt.plot(temp_curve)
-    fig.savefig('plots/' + name, dpi=fig.dpi)
+    fig.savefig(path, dpi=fig.dpi)
     plt.close(fig)

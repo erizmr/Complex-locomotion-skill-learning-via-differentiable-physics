@@ -1,10 +1,10 @@
 import multitask
 import os
 
-os.system("rm mass_spring/* -r")
+os.system("rm video/* -r")
 
 multitask.setup_robot()
-multitask.nn.load_weights("weights/best.pkl")
+multitask.nn.load_weights("weights.pkl")
 
 def validate(steps):
     '''
