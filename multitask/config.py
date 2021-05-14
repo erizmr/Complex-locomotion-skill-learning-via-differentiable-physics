@@ -30,6 +30,8 @@ else:
 
 # process------------------------------------------------------------
 max_steps = 1050
+if dim == 3 and sys.argv[0] == "validate.py":
+    max_steps = 4050
 vis_interval = 256
 output_vis_interval = 8
 
