@@ -61,3 +61,11 @@ def plot_curve(plots, path = "output.png"):
     plt.plot(temp_curve)
     fig.savefig(path, dpi=fig.dpi)
     plt.close(fig)
+
+def load_string(message, options = ["Y", "N"]):
+    print(message)
+    s = input()
+    while s not in options:
+        print(message)
+        s = input()
+    return s

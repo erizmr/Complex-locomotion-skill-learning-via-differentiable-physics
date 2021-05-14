@@ -94,7 +94,7 @@ nn = Model(max_steps, batch_size, n_input_states, n_springs, input_state, actuat
 
 ti.root.lazy_grad()
 
-pool = ti.field(ti.f32, shape = (5 * batch_size))
+pool = ti.field(ti.f64, shape = (5 * batch_size))
 
 @ti.kernel
 def compute_center(t: ti.i32):
@@ -129,7 +129,7 @@ def compute_rotation(t: ti.i32):
         rotation[t, k] = ti.atan2(direction[1], direction[0])
 
 @ti.kernel
-def nn_input(t: ti.i32, offset: ti.i32):
+def nn_input(t: ti.i32, offset: ti.i32, max_speed: ti.f64, max_height: ti.f64):
     for k, j in ti.ndrange(batch_size, n_sin_waves):
         input_state[t, k, j] = ti.sin(spring_omega * (t + offset) * dt + 2 * math.pi / n_sin_waves * j)
 
@@ -340,19 +340,28 @@ def compute_loss_actuation(steps: ti.template()):
 def compute_loss_final(l: ti.template()):
     loss[None] += l[None]
 
-'''
-@ti.kernel
-def compute_weight_decay():
-    for I in ti.grouped(weights1):
-        loss[None] += weight_decay * weights1[I] ** 2
-    for I in ti.grouped(weights2):
-        loss[None] += weight_decay * weights2[I] ** 2
-'''
+def get_loss(steps, loss_enable, *args, **kwargs):
+    if duplicate_v > 0:
+        if "velocity" in loss_enable:
+            compute_loss_velocity(steps)
+
+    if duplicate_h > 0:
+        if "height" in loss_enable:
+            compute_loss_height(steps)
+        if "pose" in loss_enable:
+            compute_loss_pose(steps)
+    if "actuation" in loss_enable:
+        compute_loss_actuation(steps)
+    if "rotation" in loss_enable:
+        compute_loss_rotation(steps)
+
+    for l in losses:
+        compute_loss_final(l)
 
 gui = ti.GUI(show_gui=False, background_color=0xFFFFFF)
 
 @ti.kernel
-def initialize_interactive(steps: ti.template(), output_v: ti.f32, output_h: ti.f32):
+def initialize_interactive(steps: ti.template(), output_v: ti.f64, output_h: ti.f64):
     for t, k in ti.ndrange(steps, batch_size):
         target_v[t, k][0] = output_v
         target_h[t, k] = output_h
@@ -375,7 +384,7 @@ def initialize_script(steps: ti.template(), x0:real, y0:real, x1:real, y1:real, 
         target_h[t, k] = 0.
 
 @ti.kernel
-def initialize_validate(steps: ti.template(), output_v: ti.f32, output_h: ti.f32):
+def initialize_validate(steps: ti.template(), output_v: ti.f64, output_h: ti.f64):
     '''
     for t, k in ti.ndrange(steps, batch_size):
         q = t // turn_period
@@ -412,7 +421,7 @@ def initialize_validate(steps: ti.template(), output_v: ti.f32, output_h: ti.f32
     '''
 
 @ti.kernel
-def initialize_train(iter: ti.i32, steps: ti.template()):
+def initialize_train(iter: ti.i32, steps: ti.template(), max_speed: ti.f64, max_height: ti.f64):
     times = steps // turn_period + 1
     for _ in range(batch_size * times * 3):
         pool[_] = ti.random()
@@ -467,12 +476,13 @@ def clear_states(steps: ti.template()):
         rotation[I] = 0.
 
 @debug
-def init(steps, train, output_v = None, output_h = None, iter = 0):
+def init(steps, train, output_v = None, output_h = None, iter = 0, \
+         max_speed = 0.08, max_height = 0.1, *args, **kwargs):
     clear_states(steps)
     nn.clear()
 
     if train:
-        initialize_train(iter, steps)
+        initialize_train(iter, steps, max_speed, max_height)
     else:
         initialize_validate(steps, output_v, output_h)
 
@@ -501,13 +511,13 @@ def advance_mpm_grad(s):
 
 
 @debug
-def forward(steps, train = True):
+def forward(steps, train = True, max_speed = 0.08, max_height = 0.1, *args, **kwargs):
     for t in range(steps):
         compute_center(t)
         compute_height(t)
         if dim == 3:
             compute_rotation(t)
-        nn_input(t, 0)
+        nn_input(t, 0, max_speed, max_height)
         nn.forward(t)
         if simulator == "mpm":
             advance_mpm(t)
@@ -518,77 +528,60 @@ def forward(steps, train = True):
     compute_center(steps)
     compute_height(steps)
 
-def get_loss(steps):
-    if duplicate_v > 0:
-        compute_loss_velocity(steps)
-
-    if duplicate_h > 0:
-        compute_loss_height(steps)
-        #compute_loss_pose(steps)
-    if dim == 2:
-        compute_loss_actuation(steps)
-    else:
-        compute_loss_rotation(steps)
-
-    for l in losses:
-        compute_loss_final(l)
-
 @debug
-def visualizer(steps, prefix, visualize = True):
-    interval = vis_interval
-    if visualize:
-        interval = output_vis_interval
-        os.makedirs('video/{}/'.format(prefix), exist_ok=True)
+def visualizer(steps, prefix):
+    interval = output_vis_interval
+    os.makedirs('video/{}/'.format(prefix), exist_ok=True)
 
-        for t in range(1, steps):
-            if (t + 1) % interval == 0:
-                gui.clear()
-                gui.line((0, ground_height), (1, ground_height),
-                        color=0x000022,
-                        radius=3)
-                gui.line((0, target_h[t]), (1, target_h[t]), color = 0x002200)
+    for t in range(1, steps):
+        if (t + 1) % interval == 0:
+            gui.clear()
+            gui.line((0, ground_height), (1, ground_height),
+                    color=0x000022,
+                    radius=3)
+            gui.line((0, target_h[t]), (1, target_h[t]), color = 0x002200)
 
-                def circle(x, y, color):
-                    if simulator == "mass_spring":
-                        gui.circle((x, y), ti.rgb_to_hex(color), 7)
-                    else:
-                        gui.circle((x, y + 0.1 - dx * bound), ti.rgb_to_hex(color), 2)
-                    
+            def circle(x, y, color):
                 if simulator == "mass_spring":
-                    for i in range(n_springs):
-
-                        def get_pt(x):
-                            return (x[0], x[1])
-
-                        a = actuation[t - 1, 0, i] * 0.5
-                        r = 2
-                        if spring_actuation[i] == 0:
-                            a = 0
-                            c = 0x222222
-                        else:
-                            r = 4
-                            c = ti.rgb_to_hex((0.5 + a, 0.5 - abs(a), 0.5 - a))
-                        gui.line(get_pt(x[t, 0, spring_anchor_a[i]]),
-                                get_pt(x[t, 0, spring_anchor_b[i]]),
-                                color=c,
-                                radius=r)
-
-                aid = actuator_id.to_numpy()
-                for i in range(n_objects):
-                    color = (0.06640625, 0.06640625, 0.06640625)
-                    if simulator == "mpm" and aid[0, i] != -1:
-                        act_applied = actuation[t - 1, 0, aid[0, i]]
-                        color = (0.5 - act_applied, 0.5 - abs(act_applied), 0.5 + act_applied)
-                    circle(x[t, 0, i][0], x[t, 0, i][1], color)
-
-                if target_v[t, 0][0] > 0:
-                    circle(0.5, 0.5, (1, 0, 0))
-                    circle(0.6, 0.5, (1, 0, 0))
+                    gui.circle((x, y), ti.rgb_to_hex(color), 7)
                 else:
-                    circle(0.5, 0.5, (0, 0, 1))
-                    circle(0.4, 0.5, (0, 0, 1))
+                    gui.circle((x, y + 0.1 - dx * bound), ti.rgb_to_hex(color), 2)
+                
+            if simulator == "mass_spring":
+                for i in range(n_springs):
 
-                gui.show('video/{}/{:04d}.png'.format(prefix, t))
+                    def get_pt(x):
+                        return (x[0], x[1])
+
+                    a = actuation[t - 1, 0, i] * 0.5
+                    r = 2
+                    if spring_actuation[i] == 0:
+                        a = 0
+                        c = 0x222222
+                    else:
+                        r = 4
+                        c = ti.rgb_to_hex((0.5 + a, 0.5 - abs(a), 0.5 - a))
+                    gui.line(get_pt(x[t, 0, spring_anchor_a[i]]),
+                            get_pt(x[t, 0, spring_anchor_b[i]]),
+                            color=c,
+                            radius=r)
+
+            aid = actuator_id.to_numpy()
+            for i in range(n_objects):
+                color = (0.06640625, 0.06640625, 0.06640625)
+                if simulator == "mpm" and aid[0, i] != -1:
+                    act_applied = actuation[t - 1, 0, aid[0, i]]
+                    color = (0.5 - act_applied, 0.5 - abs(act_applied), 0.5 + act_applied)
+                circle(x[t, 0, i][0], x[t, 0, i][1], color)
+
+            if target_v[t, 0][0] > 0:
+                circle(0.5, 0.5, (1, 0, 0))
+                circle(0.6, 0.5, (1, 0, 0))
+            else:
+                circle(0.5, 0.5, (0, 0, 1))
+                circle(0.4, 0.5, (0, 0, 1))
+
+            gui.show('video/{}/{:04d}.png'.format(prefix, t))
 
 def output_mesh(steps, x_, fn):
     os.makedirs(fn + '_objs', exist_ok=True)
@@ -601,23 +594,23 @@ def output_mesh(steps, x_, fn):
         f.close()
 
 @debug
-def simulate(steps, output_v=None, output_h=None, visualize=True, train = True, iter = 0):
+def simulate(steps, output_v=None, output_h=None, train = True, iter = 0, *args, **kwargs):
     prefix = None
     if not train:
         prefix = str(output_v) + "_" + str(output_h)
-    init(steps, train, output_v, output_h, iter)
+    init(steps, train, output_v, output_h, iter, *args, **kwargs)
     if train:
         with ti.Tape(loss):
-            forward(steps)
-            get_loss(steps)
+            forward(steps, *args, **kwargs)
+            get_loss(steps, *args, **kwargs)
     else:
-        forward(steps, False)
+        forward(steps, False, *args, **kwargs)
         if dim == 3:
             x_ = x.to_numpy()
             t = threading.Thread(target=output_mesh,args=(steps, x_, str(output_v) + '_' + str(output_h)))
             t.start()
 
-        visualizer(steps, prefix = prefix, visualize = visualize)
+        visualizer(steps, prefix = prefix)
 
 @ti.kernel
 def copy_robot(steps: ti.i32):
@@ -667,7 +660,8 @@ def rounded_train(steps, iter):
     times = (batch_size + step - start) // step
     reset_robot(start, step, times)
 
-def optimize(iters = 100000, change_iter = 5000, prefix = None, root_dir = "./"):
+def optimize(iters = 100000, change_iter = 5000, prefix = None, root_dir = "./",\
+             load_path = None, *args, **kwargs):
     log_dir = os.path.join(root_dir, "logs")
     plot_dir = os.path.join(root_dir, "plots")
     weights_dir = os.path.join(root_dir, "weights")
@@ -681,17 +675,27 @@ def optimize(iters = 100000, change_iter = 5000, prefix = None, root_dir = "./")
 
     log_name = "training.log"
     if prefix is not None:
-        log_name = "training_{}.log".format(prefix)
+        log_name = "{}_training.log".format(prefix)
     log_path = os.path.join(log_dir, log_name)
 
     log_file = open(log_path, 'w')
     log_file.close()
 
-    weight_out = lambda x: os.path.join(weights_dir, x)
-    plot_out = lambda x: os.path.join(plot_dir, x)
+    plot_name = "training_curve.png"
+    plot200_name = "training_curve_last_200.png"
+    if prefix is not None:
+        plot_name = "{}_training_curve.png".format(prefix)
+        plot200_name = "{}_training_curve_last_200.png".format(prefix)
+    plot_path = os.path.join(plot_dir, plot_name)
+    plot200_path = os.path.join(plot_dir, plot200_name)
 
-    if os.path.exists("load.pkl"):
-        nn.load_weights("load.pkl")
+    weight_out = lambda x: os.path.join(weights_dir, x)
+
+    setup_robot()
+
+    if load_path is not None and os.path.exists(load_path):
+        print("load from {}".format(load_path))
+        nn.load_weights(load_path)
     else:
         nn.weights_init()
     
@@ -707,17 +711,20 @@ def optimize(iters = 100000, change_iter = 5000, prefix = None, root_dir = "./")
         if iter > change_iter:
             rounded_train(train_steps, iter)
 
-        print("-------------------- iter #{} --------------------".format(iter))
+        print("-------------------- {}iter #{} --------------------"\
+            .format(""if prefix is None else "{}, ".format(prefix), iter))
 
-        simulate(train_steps, visualize = (iter % 100 == 0) or (iter < 500 and iter % 10 == 0), iter = iter)
+        simulate(train_steps, iter = iter, *args, **kwargs)
 
         if iter <= change_iter and loss[None] < best:
             best = loss[None]
             nn.dump_weights(weight_out("best.pkl"))
+            nn.dump_weights(os.path.join(root_dir, "weight.pkl"))
         
         if iter > change_iter + reset_step and loss[None] < best_finetune:
             best_finetune = loss[None]
             nn.dump_weights(weight_out("best_finetune.pkl"))
+            nn.dump_weights(os.path.join(root_dir, "weight.pkl"))
 
         nn.dump_weights(weight_out("last.pkl"))
 
@@ -744,12 +751,24 @@ def optimize(iters = 100000, change_iter = 5000, prefix = None, root_dir = "./")
         losses.append(loss[None])
 
         if iter % 100 == 0 or iter % 10 == 0 and iter < 500:
-            plot_curve(losses, plot_out("training_curve.png"))
-            plot_curve(losses[-200:], plot_out("training_curve_last_200.png"))
+            plot_curve(losses, plot_path)
+            plot_curve(losses[-200:], plot200_path)
 
     return losses
 
-
 if __name__ == '__main__':
-    setup_robot()
-    optimize(root_dir = "robot_{}".format(robot_id))
+    root_dir = "robot_{}".format(robot_id)
+    load_path = os.path.join(root_dir, "weight")
+    if dim == 3:
+        loss_enable = ["rotation", "velocity"]
+        optimize(root_dir = root_dir, loss_enable = loss_enable)
+    else:
+        if os.path.exists(root_dir):
+            print()
+            s = load_string("{} exists, continue?(Y/N)".format(root_dir), ["Y", "N"])
+            if s == "N":
+                exit(0)
+            os.system('rm "{}" -r'.format(root_dir))
+        optimize(500, 250, "stage1", root_dir, loss_enable = {"height", "pose"}, max_height = 0.01)
+        optimize(2000, 1000, "stage2", root_dir, load_path = load_path, loss_enable = {"height", "pose"}, max_height = 0.1)
+        optimize(100000, 5000, "final", root_dir, load_path = load_path, loss_enable = {"velocity", "height", "actuation"}, max_height = 0.1)

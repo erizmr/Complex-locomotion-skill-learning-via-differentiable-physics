@@ -26,7 +26,7 @@ set_target.target_h = 0.1
 def make_decision():
     multitask.nn.clear_single(0)
     multitask.compute_center(0)
-    multitask.nn_input(0, offset)
+    multitask.nn_input(0, offset, 0.08, 0.1)
     multitask.nn.forward(0)
 
 def forward_mass_spring():
@@ -74,7 +74,7 @@ import os
 if __name__ == "__main__":
     os.makedirs("mass_spring", exist_ok = True)
     multitask.setup_robot()
-    multitask.nn.load_weights("results/5-13-robot-2/weight.pkl")
+    multitask.nn.load_weights("robot_3/weight.pkl")
     print(multitask.x.to_numpy()[0, :, :])
     visualizer()
     while gui.running:
