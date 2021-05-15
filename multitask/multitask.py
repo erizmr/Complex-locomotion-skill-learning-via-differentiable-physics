@@ -138,15 +138,12 @@ def compute_loss_final(l: ti.template()):
     loss[None] += l[None]
 
 def get_loss(steps, loss_enable, *args, **kwargs):
-    if duplicate_v > 0:
-        if "velocity" in loss_enable:
-            compute_loss_velocity(steps)
-
-    if duplicate_h > 0:
-        if "height" in loss_enable:
-            compute_loss_height(steps)
-        if "pose" in loss_enable:
-            compute_loss_pose(steps)
+    if "velocity" in loss_enable:
+        compute_loss_velocity(steps)
+    if "height" in loss_enable:
+        compute_loss_height(steps)
+    if "pose" in loss_enable:
+        compute_loss_pose(steps)
     if "actuation" in loss_enable:
         compute_loss_actuation(steps)
     if "rotation" in loss_enable:
