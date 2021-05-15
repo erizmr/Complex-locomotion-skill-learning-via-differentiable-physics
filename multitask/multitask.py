@@ -310,25 +310,27 @@ def reset_robot(start: ti.template(), step: ti.template(), times: ti.template())
     for k, i in ti.ndrange(times, n_objects):
         x[0, k * step + start, i] = initial_objects[i]
 
+@ti.kernel
+def get_center():
+    for I in ti.grouped(initial_objects):
+        initial_center[None] += initial_objects[I] / n_objects
+
 def setup_robot():
     print('n_objects=', n_objects, '   n_springs=', n_springs)
     initial_objects.from_numpy(np.array(objects))
     for i in range(n_objects):
         initial_objects[i][0] += 0.4
-    @ti.kernel
-    def get_center():
-        for I in ti.grouped(initial_objects):
-            initial_center[None] += initial_objects[I] / n_objects
     get_center()
     reset_robot(0, 1, batch_size)
     solver.initialize_robot()
 
+@ti.kernel
+def copy_robot(steps: ti.i32):
+    for k, i in ti.ndrange(batch_size, n_objects):
+        x[0, k, i] = x[steps, k, i]
+        v[0, k, i] = v[steps, k, i]
+
 def rounded_train(steps, iter, reset_step):
-    @ti.kernel
-    def copy_robot(steps: ti.i32):
-        for k, i in ti.ndrange(batch_size, n_objects):
-            x[0, k, i] = x[steps, k, i]
-            v[0, k, i] = v[steps, k, i]
     copy_robot(steps)
     start = iter % reset_step
     step = reset_step
