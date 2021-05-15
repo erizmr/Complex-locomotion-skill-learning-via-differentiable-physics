@@ -1,10 +1,12 @@
 import multitask
 import os
+from config import *
 
 os.system("rm video/* -r")
 
+root_dir = "robot_{}".format(robot_id)
 multitask.setup_robot()
-multitask.nn.load_weights("weights.pkl")
+multitask.nn.load_weights(root_dir + "/weight.pkl")
 
 def validate(steps):
     if multitask.dim == 2:
