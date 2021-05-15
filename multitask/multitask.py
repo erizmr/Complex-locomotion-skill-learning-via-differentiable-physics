@@ -3,7 +3,9 @@ from taichi.lang.impl import reset
 
 from utils import *
 from config import *
-from nn import Model
+from nn import *
+from solver_mass_spring import SolverMassSpring
+from solver_mpm import SolverMPM
 
 import random
 import sys
@@ -36,97 +38,34 @@ loss_dict = {'loss_v': loss_velocity,
              'loss_w': loss_weight,
              'loss_a': loss_act}
 losses = loss_dict.values()
-
-x = vec()
-v = vec()
-v_inc = vec()
-
-spring_anchor_a = ti.field(ti.i32)
-spring_anchor_b = ti.field(ti.i32)
-spring_length = scalar()
-spring_stiffness = scalar()
-spring_actuation = scalar()
+ti.root.place(loss)
+ti.root.place(*losses)
 
 initial_objects = vec()
 initial_center = vec()
-
-input_state = scalar()
-
-center = vec()
-height = scalar()
-rotation = scalar()
-head_center = vec()
-head_counter = scalar()
-tail_center = vec()
-tail_counter = scalar()
-target_v = vec()
-target_h = scalar()
-
-actuation = scalar()
-
-ti.root.dense(ti.ijk, (max_steps, batch_size, n_objects)).place(x, v, v_inc)
-ti.root.dense(ti.i, n_springs).place(spring_anchor_a, spring_anchor_b,
-                                     spring_length, spring_stiffness,
-                                     spring_actuation)
-
-
-actuator_id = ti.field(ti.i32)
-particle_type = ti.field(ti.i32)
-grid_v_in, grid_m_in = vec(), scalar()
-grid_v_out = vec()
-C, F = mat(), mat()
-
-ti.root.dense(ti.ij, (batch_size, n_particles)).place(actuator_id, particle_type)
-ti.root.dense(ti.ijk, (max_steps, batch_size, n_particles)).place(C, F)
-ti.root.dense(ti.ijk, (batch_size, n_grid, n_grid)).place(grid_v_in, grid_m_in, grid_v_out)
-
-ti.root.dense(ti.ijk, (max_steps, batch_size, n_input_states)).place(input_state)
-
 ti.root.dense(ti.i, n_objects).place(initial_objects)
 ti.root.place(initial_center)
 
-ti.root.dense(ti.ijk, (max_steps, batch_size, n_springs)).place(actuation)
-ti.root.dense(ti.ij, (max_steps, batch_size)).place(center, target_v, target_h, height, rotation, head_center, head_counter, tail_center, tail_counter)
-ti.root.place(loss)
-ti.root.place(*losses)
+input_state = scalar()
+ti.root.dense(ti.ijk, (max_steps, batch_size, n_input_states)).place(input_state)
+
+target_v, target_h = vec(), scalar()
+ti.root.dense(ti.ij, (max_steps, batch_size)).place(target_v, target_h)
+
+
+solver = SolverMPM() if simulator == "mpm" else SolverMassSpring()
+x = solver.x
+v = solver.v
+center = solver.center
+height = solver.height
+rotation = solver.rotation
+actuation = solver.actuation
 
 nn = Model(max_steps, batch_size, n_input_states, n_springs, input_state, actuation, n_hidden)
 
 ti.root.lazy_grad()
 
 pool = ti.field(ti.f64, shape = (5 * batch_size))
-
-@ti.kernel
-def compute_center(t: ti.i32):
-    n = ti.static(n_objects)
-    for k in range(batch_size):
-        center[t, k] = ti.Matrix.zero(real, dim, 1)
-    for k, i in ti.ndrange(batch_size, n):
-            center[t, k] += x[t, k, i] / n
-
-@ti.kernel
-def compute_height(t: ti.i32):
-    for k in range(batch_size):
-        h = 10.
-        for i in ti.static(range(n_objects)):
-            h = ti.min(h, x[t, k, i](1))
-        if t % jump_period == 0:
-            height[t, k] = h
-        else:
-            height[t, k] = ti.max(height[t - 1, k], h)
-
-@ti.kernel
-def compute_rotation(t: ti.i32):
-    for k in range(batch_size):
-        for i in ti.static(range(n_objects)):
-            if x[0, k, i](0) < center[0, k](0):
-                head_center[t, k] += x[t, k, i]
-                head_counter[t, k] += 1.
-            else:
-                tail_center[t, k] += x[t, k, i]
-                tail_counter[t, k] += 1.
-        direction = -head_center[t, k] * tail_counter[t, k] + tail_center[t, k] * head_counter[t, k]
-        rotation[t, k] = ti.atan2(direction[1], direction[0])
 
 @ti.kernel
 def nn_input(t: ti.i32, offset: ti.i32, max_speed: ti.f64, max_height: ti.f64):
@@ -154,147 +93,6 @@ def nn_input(t: ti.i32, offset: ti.i32, max_speed: ti.f64, max_height: ti.f64):
     if ti.static(duplicate_h > 0):
         for k, j in ti.ndrange(batch_size, duplicate_h):
             input_state[t, k, n_objects * dim * 2 + n_sin_waves + duplicate_v * (dim - 1) + j] = (target_h[t, k] - 0.1) / max_height * 2 - 1
-
-@ti.kernel
-def apply_spring_force(t: ti.i32):
-    for k, i in ti.ndrange(batch_size, n_springs):
-        a = spring_anchor_a[i]
-        b = spring_anchor_b[i]
-        pos_a = x[t, k, a]
-        pos_b = x[t, k, b]
-        dist = pos_a - pos_b
-        length = dist.norm(1e-8) + 1e-4
-
-        target_length = spring_length[i] * (1.0 + spring_actuation[i] * actuation[t, k, i])
-        impulse = dt * (length - target_length) * spring_stiffness[i] / length * dist
-
-        # Dashpot damping
-        x_ij = x[t, k, a] - x[t, k, b]
-        d = x_ij.normalized()
-        v_rel = (v[t, k, a] - v[t, k, b]).dot(d)
-        impulse += dashpot_damping * v_rel * d
-
-        ti.atomic_add(v_inc[t, k, a], -impulse)
-        ti.atomic_add(v_inc[t, k, b], impulse)
-
-
-@ti.kernel
-def advance_toi(t: ti.i32):
-    for k, i in ti.ndrange(batch_size, n_objects):
-        s = math.exp(-dt * drag_damping)
-        unitY = ti.Matrix.zero(real, dim, 1)
-        unitY[1] = 1.0
-        old_v = s * v[t - 1, k, i] + dt * gravity * unitY + v_inc[t - 1, k, i]
-        old_x = x[t - 1, k, i]
-        new_x = old_x + dt * old_v
-        toi = 0.0
-        new_v = old_v
-        if new_x[1] < ground_height and old_v[1] < -1e-4:
-            toi = -(old_x[1] - ground_height) / old_v[1]
-            new_v = ti.Matrix.zero(real, dim, 1)
-        new_x = old_x + toi * old_v + (dt - toi) * new_v
-
-        v[t, k, i] = new_v
-        x[t, k, i] = new_x
-
-
-@ti.kernel
-def clear_grid():
-    for k, i, j in ti.ndrange(batch_size, n_grid, n_grid):
-        grid_v_in[k, i, j] = ti.Matrix.zero(real, dim, 1)
-        grid_m_in[k, i, j] = 0
-        grid_v_out[k, i, j] = ti.Matrix.zero(real, dim, 1)
-        grid_v_in.grad[k, i, j] = ti.Matrix.zero(real, dim, 1)
-        grid_m_in.grad[k, i, j] = 0
-        grid_v_out.grad[k, i, j] = ti.Matrix.zero(real, dim, 1)
-
-
-@ti.kernel
-def p2g(f: ti.i32):
-    for k, p in ti.ndrange(batch_size, n_particles):
-        base = ti.cast(x[f, k, p] * inv_dx - 0.5, ti.i32)
-        fx = x[f, k, p] * inv_dx - ti.cast(base, ti.i32)
-        w = [0.5 * (1.5 - fx)**2, 0.75 - (fx - 1)**2, 0.5 * (fx - 0.5)**2]
-        new_F = (ti.Matrix.diag(dim=2, val=1) + dt * C[f, k, p]) @ F[f, k, p]
-        J = (new_F).determinant()
-        if particle_type[k, p] == 0:  # fluid
-            sqrtJ = ti.sqrt(J)
-            new_F = ti.Matrix([[sqrtJ, 0], [0, sqrtJ]])
-
-        F[f + 1, k, p] = new_F
-        r, s = ti.polar_decompose(new_F)
-
-        act_id = actuator_id[k, p]
-
-        act_applied = actuation[f, k, ti.max(0, act_id)] * act_strength
-        if act_id == -1:
-            act_applied = 0.0
-        # ti.print(actuation)
-
-        A = ti.Matrix([[0.0, 0.0], [0.0, 1.0]]) * act_applied
-        cauchy = ti.Matrix([[0.0, 0.0], [0.0, 0.0]])
-        mass = 0.0
-        if particle_type[k, p] == 0:
-            mass = 4
-            cauchy = ti.Matrix([[1.0, 0.0], [0.0, 0.1]]) * (J - 1) * E
-        else:
-            mass = 1
-            cauchy = 2 * mu * (new_F - r) @ new_F.transpose() + \
-                     ti.Matrix.diag(2, la * (J - 1) * J)
-        cauchy += new_F @ A @ new_F.transpose()
-        stress = -(dt * p_vol * 4 * inv_dx * inv_dx) * cauchy
-        affine = stress + mass * C[f, k, p]
-        for i in ti.static(range(3)):
-            for j in ti.static(range(3)):
-                offset = ti.Vector([i, j])
-                dpos = (ti.cast(ti.Vector([i, j]), real) - fx) * dx
-                weight = w[i](0) * w[j](1)
-                grid_v_in[k, base + offset] += weight * (mass * v[f, k, p] + affine @ dpos)
-                grid_m_in[k, base + offset] += weight * mass
-
-
-@ti.kernel
-def grid_op():
-    for k, i, j in grid_m_in:
-        inv_m = 1 / (grid_m_in[k, i, j] + 1e-10)
-        v_out = inv_m * grid_v_in[k, i, j]
-        v_out[1] += dt * gravity
-        if i < bound:
-            v_out[0] = 0
-            v_out[1] = 0
-        if i > n_grid - bound:
-            v_out[0] = 0
-            v_out[1] = 0
-        if j < bound:
-            v_out[0] = 0
-            v_out[1] = 0
-        if j > n_grid - bound:
-            v_out[0] = 0
-            v_out[1] = 0
-        grid_v_out[k, i, j] = v_out
-
-
-@ti.kernel
-def g2p(f: ti.i32):
-    for k, p in ti.ndrange(batch_size, n_particles):
-        base = ti.cast(x[f, k, p] * inv_dx - 0.5, ti.i32)
-        fx = x[f, k, p] * inv_dx - ti.cast(base, real)
-        w = [0.5 * (1.5 - fx)**2, 0.75 - (fx - 1.0)**2, 0.5 * (fx - 0.5)**2]
-        new_v = ti.Vector([0.0, 0.0])
-        new_C = ti.Matrix([[0.0, 0.0], [0.0, 0.0]])
-
-        for i in ti.static(range(3)):
-            for j in ti.static(range(3)):
-                dpos = ti.cast(ti.Vector([i, j]), real) - fx
-                g_v = grid_v_out[k, base(0) + i, base(1) + j]
-                weight = w[i](0) * w[j](1)
-                new_v += weight * g_v
-                new_C += 4 * weight * g_v.outer_product(dpos) * inv_dx
-
-        v[f + 1, k, p] = new_v
-        x[f + 1, k, p] = x[f, k, p] + dt * v[f + 1, k, p]
-        C[f + 1, k, p] = new_C
-
 
 @ti.kernel
 def compute_loss_velocity(steps: ti.template()):
@@ -453,84 +251,6 @@ def initialize_train(iter: ti.i32, steps: ti.template(), max_speed: ti.f64, max_
             target_v[t, k][2] = r * ti.sin(angle) * 0.05
             target_h[t, k] = 0.
 
-@ti.kernel
-def clear_states(steps: ti.template()):
-    for t, k, i in ti.ndrange(steps, batch_size, n_objects):
-        x.grad[t, k, i] = ti.Matrix.zero(real, dim, 1)
-        v.grad[t, k, i] = ti.Matrix.zero(real, dim, 1)
-        v_inc[t, k, i] = ti.Matrix.zero(real, dim, 1)
-        v_inc.grad[t, k, i] = ti.Matrix.zero(real, dim, 1)
-    for t, k, i in ti.ndrange(steps, batch_size, n_particles):
-        C[t, k, i] = ti.Matrix.zero(real, dim, dim)
-        C.grad[t, k, i] = ti.Matrix.zero(real, dim, dim)
-        if ti.static(dim == 2):
-            F[t, k, i] = [[1., 0.], [0., 1.]]
-        else:
-            F[t, k, i] = [[1., 0., 0.], [0., 1., 0.], [0., 0., 1.]]
-        F.grad[t, k, i] = ti.Matrix.zero(real, dim, dim)
-    for I in ti.grouped(head_center):
-        head_center[I] = ti.Matrix.zero(real, dim, 1)
-        head_counter[I] = 0.
-        tail_center[I] = ti.Matrix.zero(real, dim, 1)
-        tail_counter[I] = 0.
-        rotation[I] = 0.
-
-@debug
-def init(steps, train, output_v = None, output_h = None, iter = 0, \
-         max_speed = 0.08, max_height = 0.1, *args, **kwargs):
-    clear_states(steps)
-    nn.clear()
-
-    if train:
-        initialize_train(iter, steps, max_speed, max_height)
-    else:
-        if dim == 2:
-            initialize_validate(steps, output_v, output_h)
-        else:
-            initialize_script(steps, 0.04, 0, 0, 0.04, -0.04, 0, 0, -0.04)
-
-    loss[None] = 0.
-    for l in losses:
-        l[None] = 0.
-
-
-@ti.complex_kernel
-def advance_mpm(s):
-    clear_grid()
-    p2g(s)
-    grid_op()
-    g2p(s)
-
-
-@ti.complex_kernel_grad(advance_mpm)
-def advance_mpm_grad(s):
-    clear_grid()
-    p2g(s)
-    grid_op()
-
-    g2p.grad(s)
-    grid_op.grad()
-    p2g.grad(s)
-
-
-@debug
-def forward(steps, train = True, max_speed = 0.08, max_height = 0.1, *args, **kwargs):
-    for t in range(steps):
-        compute_center(t)
-        compute_height(t)
-        if dim == 3:
-            compute_rotation(t)
-        nn_input(t, 0, max_speed, max_height)
-        nn.forward(t)
-        if simulator == "mpm":
-            advance_mpm(t)
-        else:
-            apply_spring_force(t)
-            advance_toi(t + 1)
-
-    compute_center(steps)
-    compute_height(steps)
-
 @debug
 def visualizer(steps, prefix):
     interval = output_vis_interval
@@ -543,47 +263,7 @@ def visualizer(steps, prefix):
                     color=0x000022,
                     radius=3)
             gui.line((0, target_h[t]), (1, target_h[t]), color = 0x002200)
-
-            def circle(x, y, color):
-                if simulator == "mass_spring":
-                    gui.circle((x, y), ti.rgb_to_hex(color), 7)
-                else:
-                    gui.circle((x, y + 0.1 - dx * bound), ti.rgb_to_hex(color), 2)
-                
-            if simulator == "mass_spring":
-                for i in range(n_springs):
-
-                    def get_pt(x):
-                        return (x[0], x[1])
-
-                    a = actuation[t - 1, 0, i] * 0.5
-                    r = 2
-                    if spring_actuation[i] == 0:
-                        a = 0
-                        c = 0x222222
-                    else:
-                        r = 4
-                        c = ti.rgb_to_hex((0.5 + a, 0.5 - abs(a), 0.5 - a))
-                    gui.line(get_pt(x[t, 0, spring_anchor_a[i]]),
-                            get_pt(x[t, 0, spring_anchor_b[i]]),
-                            color=c,
-                            radius=r)
-
-            aid = actuator_id.to_numpy()
-            for i in range(n_objects):
-                color = (0.06640625, 0.06640625, 0.06640625)
-                if simulator == "mpm" and aid[0, i] != -1:
-                    act_applied = actuation[t - 1, 0, aid[0, i]]
-                    color = (0.5 - act_applied, 0.5 - abs(act_applied), 0.5 + act_applied)
-                circle(x[t, 0, i][0], x[t, 0, i][1], color)
-
-            if target_v[t, 0][0] > 0:
-                circle(0.5, 0.5, (1, 0, 0))
-                circle(0.6, 0.5, (1, 0, 0))
-            else:
-                circle(0.5, 0.5, (0, 0, 1))
-                circle(0.4, 0.5, (0, 0, 1))
-
+            solver.draw_robot(gui, t, target_v)
             gui.show('video/{}/{:04d}.png'.format(prefix, t))
 
 def output_mesh(steps, x_, fn):
@@ -597,29 +277,37 @@ def output_mesh(steps, x_, fn):
         f.close()
 
 @debug
-def simulate(steps, output_v=None, output_h=None, train = True, iter = 0, *args, **kwargs):
-    prefix = None
-    if not train:
-        prefix = str(output_v) + "_" + str(output_h)
-    init(steps, train, output_v, output_h, iter, *args, **kwargs)
+def simulate(steps, output_v=None, output_h=None, train = True, iter = 0, max_speed = 0.08, max_height = 0.1, *args, **kwargs):
+    # clean up cache and set up control sequence
+    solver.clear_states(steps)
+    nn.clear()
+    if train:
+        initialize_train(iter, steps, max_speed, max_height)
+    elif not train and dim == 2:
+        initialize_validate(steps, output_v, output_h)
+    elif not train and dim == 3:
+        initialize_script(steps, 0.04, 0, 0, 0.04, -0.04, 0, 0, -0.04)
+    loss[None] = 0.
+    for l in losses:
+        l[None] = 0.
+    # start simulation
     if train:
         with ti.Tape(loss):
-            forward(steps, *args, **kwargs)
+            for t in range(steps + 1):
+                nn_input(t, 0, max_speed, max_height)
+                nn.forward(t)
+                solver.advance(t)
             get_loss(steps, *args, **kwargs)
     else:
-        forward(steps, False, *args, **kwargs)
+        for t in range(steps + 1):
+            nn_input(t, 0, max_speed, max_height)
+            nn.forward(t)
+            solver.advance(t)
         if dim == 3:
             x_ = x.to_numpy()
             t = threading.Thread(target=output_mesh,args=(steps, x_, str(output_v) + '_' + str(output_h)))
             t.start()
-
-        visualizer(steps, prefix = prefix)
-
-@ti.kernel
-def copy_robot(steps: ti.i32):
-    for k, i in ti.ndrange(batch_size, n_objects):
-        x[0, k, i] = x[steps, k, i]
-        v[0, k, i] = v[steps, k, i]
+        visualizer(steps, prefix = str(output_v) + "_" + str(output_h))
 
 @ti.kernel
 def reset_robot(start: ti.template(), step: ti.template(), times: ti.template()):
@@ -628,35 +316,23 @@ def reset_robot(start: ti.template(), step: ti.template(), times: ti.template())
 
 def setup_robot():
     print('n_objects=', n_objects, '   n_springs=', n_springs)
-
     initial_objects.from_numpy(np.array(objects))
     for i in range(n_objects):
         initial_objects[i][0] += 0.4
-
     @ti.kernel
     def get_center():
         for I in ti.grouped(initial_objects):
             initial_center[None] += initial_objects[I] / n_objects
-
     get_center()
-
-    if simulator == "mpm":
-        reset_robot(0, 1, n_objects)
-        for k in range(batch_size):
-            for i in range(n_objects):
-                actuator_id[k, i] = springs[i]
-        particle_type.fill(1)
-    else:
-        reset_robot(0, 1, batch_size)
-        for i in range(n_springs):
-            s = springs[i]
-            spring_anchor_a[i] = s[0]
-            spring_anchor_b[i] = s[1]
-            spring_length[i] = s[2]
-            spring_stiffness[i] = s[3] / 10
-            spring_actuation[i] = s[4]
+    reset_robot(0, 1, batch_size)
+    solver.initialize_robot()
 
 def rounded_train(steps, iter, reset_step):
+    @ti.kernel
+    def copy_robot(steps: ti.i32):
+        for k, i in ti.ndrange(batch_size, n_objects):
+            x[0, k, i] = x[steps, k, i]
+            v[0, k, i] = v[steps, k, i]
     copy_robot(steps)
     start = iter % reset_step
     step = reset_step
