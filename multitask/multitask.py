@@ -19,7 +19,7 @@ import pickle as pkl
 
 debug = Debug(False)
 
-ti.init(arch=ti.gpu, default_fp=real)
+ti.init(arch=ti.gpu, default_fp=real, device_memory_GB=10, use_unified_memory=False)
 
 output_target = []
 output_sim = []
