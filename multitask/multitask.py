@@ -263,9 +263,9 @@ def visualizer(steps, prefix):
             gui.show('video/{}/{:04d}.png'.format(prefix, t))
 
 def output_mesh(steps, x_, fn):
-    os.makedirs(fn + '_objs', exist_ok=True)
+    os.makedirs('video/' + fn + '_objs', exist_ok=True)
     for t in range(1, steps):
-        f = open(fn + f'_objs/{t:06d}.obj', 'w')
+        f = open('video/' + fn + f'_objs/{t:06d}.obj', 'w')
         for i in range(n_objects):
             f.write('v %.6f %.6f %.6f\n' % (x_[t, 0, i, 0], x_[t, 0, i, 1], x_[t, 0, i, 2]))
         for [p0, p1, p2] in faces:
@@ -299,11 +299,11 @@ def simulate(steps, output_v=None, output_h=None, train = True, iter = 0, max_sp
             nn_input(t, 0, max_speed, max_height)
             nn.forward(t)
             solver.advance(t)
+        visualizer(steps, prefix = str(output_v) + "_" + str(output_h))
         if dim == 3:
             x_ = x.to_numpy()
             t = threading.Thread(target=output_mesh,args=(steps, x_, str(output_v) + '_' + str(output_h)))
             t.start()
-        visualizer(steps, prefix = str(output_v) + "_" + str(output_h))
 
 @ti.kernel
 def reset_robot(start: ti.template(), step: ti.template(), times: ti.template()):
