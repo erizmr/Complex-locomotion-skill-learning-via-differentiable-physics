@@ -48,7 +48,7 @@ def visualizer():
     gui.line((0, multitask.ground_height), (1, multitask.ground_height),
              color=0x000022,
              radius=3)
-    multitask.solver.draw_robot(gui, 0, multitask.target_v)
+    multitask.solver.draw_robot(gui, 1, multitask.target_v)
     gui.show('video/interactive/{:04d}.png'.format(visualizer.frame))
     visualizer.frame += 1
 visualizer.frame = 0
