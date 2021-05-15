@@ -9,7 +9,9 @@ class SolverMassSpring:
         self.v = vec()
         self.center = vec()
         self.actuation = scalar()
-        ti.root.dense(ti.ijk, (max_steps, batch_size, n_objects)).place(self.x, self.v, self.center, self.actuation)
+        ti.root.dense(ti.ijk, (max_steps, batch_size, n_objects)).place(self.x, self.v)
+        ti.root.dense(ti.ij, (max_steps, batch_size)).place(self.center)
+        ti.root.dense(ti.ijk, (max_steps, batch_size, n_springs)).place(self.actuation)
 
         self.height = scalar()
         self.rotation = scalar()

@@ -52,7 +52,6 @@ ti.root.dense(ti.ijk, (max_steps, batch_size, n_input_states)).place(input_state
 target_v, target_h = vec(), scalar()
 ti.root.dense(ti.ij, (max_steps, batch_size)).place(target_v, target_h)
 
-
 solver = SolverMPM() if simulator == "mpm" else SolverMassSpring()
 x = solver.x
 v = solver.v
@@ -65,7 +64,7 @@ nn = Model(max_steps, batch_size, n_input_states, n_springs, input_state, actuat
 
 ti.root.lazy_grad()
 
-pool = ti.field(ti.f64, shape = (5 * batch_size))
+pool = ti.field(ti.f64, shape = (5 * batch_size * (1000 // turn_period + 1)))
 
 @ti.kernel
 def nn_input(t: ti.i32, offset: ti.i32, max_speed: ti.f64, max_height: ti.f64):
@@ -377,7 +376,7 @@ def optimize(iters = 100000, change_iter = 5000, prefix = None, root_dir = "./",
         nn.load_weights(load_path)
     else:
         nn.weights_init()
-    
+
     nn.clear_adam()
 
     losses = []
@@ -386,7 +385,7 @@ def optimize(iters = 100000, change_iter = 5000, prefix = None, root_dir = "./",
     train_steps = 1000
     if dim == 3 and sys.argv[0] == "validate.py":
         train_steps = 4000
-    
+
     reset_step = 2
 
     for iter in range(iters):
@@ -403,7 +402,7 @@ def optimize(iters = 100000, change_iter = 5000, prefix = None, root_dir = "./",
         if iter <= change_iter and loss[None] < best:
             best = loss[None]
             nn.dump_weights(weight_out("best.pkl"))
-        
+
         if iter > change_iter + max_reset_step and loss[None] < best_finetune:
             best_finetune = loss[None]
             nn.dump_weights(weight_out("best_finetune.pkl"))
