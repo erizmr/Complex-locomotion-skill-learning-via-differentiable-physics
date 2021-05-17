@@ -79,6 +79,10 @@ class SolverMassSpring:
             ti.atomic_add(self.v_inc[t, k, b], impulse)
 
     @ti.kernel
+    def pass_actuation(self, t: ti.i32, k: ti.i32, i: ti.i32, act: ti.f32):
+        self.actuation[t, k, i] = act
+
+    @ti.kernel
     def advance_toi(self, t: ti.i32):
         for k, i in ti.ndrange(batch_size, n_objects):
             s = math.exp(-dt * drag_damping)
