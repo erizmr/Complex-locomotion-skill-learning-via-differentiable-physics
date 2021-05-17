@@ -21,7 +21,7 @@ class MassSpringEnv(gym.Env):
     def __init__(self):
         super(MassSpringEnv, self).__init__()
         self.action_space = spaces.Box(low=0, high=1, shape=(n_springs, ), dtype=np.float64)
-        self.observation_space = spaces.Box(low=-1, high=1, shape=(2, ), dtype=np.float64)
+        self.observation_space = spaces.Box(low=-5, high=5, shape=(n_input_states, ), dtype=np.float64)
         multitask.setup_robot()
         self.t = 0
 
@@ -33,19 +33,21 @@ class MassSpringEnv(gym.Env):
         multitask.solver.advance_toi(self.t+1)
         multitask.solver.compute_center(self.t+1)
         multitask.solver.compute_height(self.t+1)
+        multitask.nn_input(self.t+1, 0, 0.8, 0.2)
         # multitask.nn_input(self.t+1, 0, 0.08, 0.1)
         pos = multitask.solver.center.to_numpy()[self.t+1, 0][0]
         height = multitask.solver.height.to_numpy()[self.t+1, 0]
-        observation = np.array([pos, height])
+        observation = multitask.input_state.to_numpy()[self.t+1, 0]
         reward = self.get_reward()
 
         self.t += 1
 
         done = False
-        if self.t > 100:
+        if pos < -2 or pos > 2 or self.t == 1040:
             done = True
             print(reward)
-            print(observation)
+            print(pos, height)
+            print(action)
 
         info = {}
         return observation, reward, done, info
@@ -54,18 +56,20 @@ class MassSpringEnv(gym.Env):
         reward = 0.
         pos = multitask.solver.center.to_numpy()[self.t, 0][0]
         height = multitask.solver.height.to_numpy()[self.t, 0]
-        reward -= (0.2-height) ** 2
-        reward -= (0.9-pos) ** 2
+        # reward -= (0.2-height) ** 2
+        # reward -= (0.1-pos) ** 2
+        reward = height
         return reward
 
     def reset(self):
         self.t = 0
-        multitask.solver.clear_states(100)
+        multitask.solver.clear_states(1040)
+        multitask.nn_input(self.t, 0, 0.8, 0.2)
         multitask.solver.compute_center(self.t)
         multitask.solver.compute_height(self.t)
         pos = multitask.solver.center.to_numpy()[self.t, 0][0]
         height = multitask.solver.height.to_numpy()[self.t, 0]
-        observation = np.array([pos, height])
+        observation = multitask.input_state.to_numpy()[self.t, 0]
         return observation
     
     def render(self, mode):
@@ -83,13 +87,13 @@ def visualizer(t):
 visualizer.frame = 0
 
 env = MassSpringEnv()
-policy_kwargs = dict(activation_fn=torch.nn.ReLU, net_arch=[dict(pi=[128], vf=[64, 64])])
-model = PPO('MlpPolicy', env)
-model.learn(total_timesteps=100)
+policy_kwargs = dict(activation_fn=torch.nn.ReLU, net_arch=[dict(pi=[64, 64], vf=[64, 64])])
+model = PPO('MlpPolicy', env, gamma=0.99, learning_rate=1e-2, verbose=1)
+model.learn(total_timesteps=10000)
 
 # multitask.setup_robot()
 obs = env.reset()
-for i in range(100):
+for i in range(1040):
     action, _states = model.predict(obs, deterministic=True)
     action = action * np.random.random()
     obs, reward, done, info = env.step(action)
