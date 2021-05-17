@@ -41,6 +41,8 @@ class SolverMassSpring:
             self.spring_length[i] = s[2]
             self.spring_stiffness[i] = s[3] / 10
             self.spring_actuation[i] = s[4]
+            if s[4] > 0:
+                print("spring: ", i)
 
     @ti.kernel
     def clear_states(self, steps: ti.template()):
