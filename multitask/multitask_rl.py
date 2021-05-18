@@ -6,7 +6,7 @@ from stable_baselines3.common.callbacks import BaseCallback
 from stable_baselines3.common.env_checker import check_env
 from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.results_plotter import load_results, ts2xy, plot_results
-from stable_baselines3 import DDPG
+from stable_baselines3 import PPO
 import torch
 
 from config import *
@@ -30,10 +30,9 @@ class MassSpringEnv(gym.Env):
     def __init__(self):
         super(MassSpringEnv, self).__init__()
         self.act_spring = [0, 5, 6, 10, 15, 20, 21, 26, 30]
-        self.action_space = spaces.Box(low=-1, high=1, shape=(9, ), dtype=np.float32)
-        self.observation_space = spaces.Box(low=-1, high=1, shape=(1, ), dtype=np.float32)
+        self.action_space = spaces.MultiDiscrete([5 for _ in range(9)])
+        self.observation_space = spaces.Box(low=-1, high=1, shape=(n_input_states, ), dtype=np.float32)
         self.rollout_lenth = 1000
-        self.actions = [0. for i in range(9)]
         self.rewards = 0.
         multitask.setup_robot()
         self.t = 0
@@ -41,30 +40,28 @@ class MassSpringEnv(gym.Env):
     def step(self, action):
         for k in range(batch_size):
             for i in range(9):
-                multitask.solver.pass_actuation(self.t, k, self.act_spring[i], np.double(action[i]))
+                act = 0.5*action[i]-1
+                multitask.solver.pass_actuation(self.t, k, self.act_spring[i], np.double(act))
         multitask.solver.apply_spring_force(self.t)
         multitask.solver.advance_toi(self.t+1)
         multitask.solver.compute_center(self.t+1)
         multitask.solver.compute_height(self.t+1)
-        # multitask.nn_input(self.t+1, 0, 0.8, 0.2)
+        multitask.nn_input(self.t+1, 0, 0.8, 0.2)
         # observation = multitask.input_state.to_numpy()[self.t+1, 0]
-        reward = self.get_state()
-        observation = np.array([reward])
+        observation = self.get_state(self.t+1)
+        reward = self.get_reward()
 
         self.t += 1
 
-        self.actions += action
-        self.rewards += reward
         done = False
         if self.t == self.rollout_lenth:
             done = True
             #print(self.rewards)
-            #print(self.actions/self.rollout_lenth)
 
         info = {}
         return observation, reward, done, info
 
-    def get_state(self):
+    def get_reward(self):
         pos = multitask.solver.center.to_numpy()
         pos1 = pos[max(self.t-100, 0), 0][0]
         pos2 = pos[self.t, 0][0]
@@ -75,13 +72,17 @@ class MassSpringEnv(gym.Env):
         reward = (pos2-pos1)
         return reward
 
+    def get_state(self, t):
+        return multitask.input_state.to_numpy()[t, 0]
+
     def reset(self):
         self.t = 0
         multitask.solver.clear_states(self.rollout_lenth)
         # multitask.nn_input(self.t, 0, 0.8, 0.2)
         multitask.solver.compute_center(self.t)
         multitask.solver.compute_height(self.t)
-        observation = np.array([self.get_state()])
+        multitask.nn_input(self.t, 0, 0.1, 0.2)
+        observation = self.get_state(self.t)
         return observation
     
     def render(self, mode):
@@ -129,24 +130,21 @@ log_dir = "./log/"
 os.makedirs(log_dir, exist_ok=True)
 
 env = MassSpringEnv()
-check_env(env)
-env = Monitor(env, log_dir)
+# check_env(env)
+# env = Monitor(env, log_dir)
 
 policy_kwargs = dict(activation_fn=torch.nn.Tanh, net_arch=[dict(vf=[64, 64])])
-model = DDPG('MlpPolicy', env, gamma=1, learning_rate=1e-4, verbose=1, tensorboard_log=log_dir)
+model = PPO('MlpPolicy', env, gamma=1, learning_rate=3e-3, verbose=1, tensorboard_log=log_dir)
 
-callback = SaveBestTrainingRewardCallback(check_freq=50000, log_dir=log_dir)
+# callback = SaveBestTrainingRewardCallback(check_freq=50000, log_dir=log_dir)
 
-total_step = 10000
-model.learn(total_timesteps=total_step, callback=callback)
-plot_results([log_dir], total_step, results_plotter.X_TIMESTEPS, "Mass Spring")
-plt.show()
+total_step = 1000000
+model.learn(total_timesteps=total_step)
 
 # multitask.setup_robot()
 obs = env.reset()
-for i in range(1040):
+for i in range(1000):
     action, _states = model.predict(obs, deterministic=True)
-    action = action * np.random.random()
     obs, reward, done, info = env.step(action)
     env.render(mode="human")
     if done:
