@@ -82,7 +82,7 @@ class SolverMassSpring:
 
     @ti.kernel
     def pass_actuation(self, t: ti.i32, k: ti.i32, i: ti.i32, act: ti.f32):
-        self.actuation[t, k, i] = act
+            self.actuation[t, k, i] = act
 
     @ti.kernel
     def advance_toi(self, t: ti.i32):

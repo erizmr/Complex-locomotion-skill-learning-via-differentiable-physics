@@ -10,3 +10,5 @@ weights/
 *.log
 *.pkl
 *.png
+log/
+video*
