@@ -236,12 +236,12 @@ def initialize_train(iter: ti.i32, steps: ti.template(), max_speed: ti.f64, max_
                     target_h[t, k] = ((k - batch_size / 2) / (batch_size / 2 - 1)) * max_height + 0.1
             else:
                 '''
-                if pool[q + 0] < 0.5:
-                    target_v[t, k][0] = ((pool[q + 1] > 0.5) * 2 - 1) * max_speed
-                    target_h[t, k] = 0.1
-                else:
-                    target_v[t, k] *= 0.
-                    target_h[t, k] = pool[q + 1] * max_height + 0.1
+                #if pool[q + 0] < 0.5:
+                target_v[t, k][0] = ((pool[q + 1] > 0.5) * 2 - 1) * max_speed
+                target_h[t, k] = 0.1
+                #else:
+                #    target_v[t, k] *= 0.
+                #    target_h[t, k] = pool[q + 1] * max_height + 0.1
         else:
             r = ti.sqrt(pool[q + 1])
             angle = pool[q + 2] * 2 * 3.1415926

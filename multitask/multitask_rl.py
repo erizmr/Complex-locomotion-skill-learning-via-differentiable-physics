@@ -75,13 +75,17 @@ class MassSpringEnv(gym.Env):
 
     def get_reward(self):
         reward = 0.
-        target_v = multitask.target_v[self.t - 100, 0][0]
+        target_v = multitask.target_v[self.t, 0][0]
         target_h = multitask.target_h[self.t, 0]
-        if abs(target_v) > 1e-4 and self.t % 500 > 99:
-            pos = multitask.solver.center[self.t, 0][0]
-            pos2 = multitask.solver.center[self.t - 100, 0][0]
-            v = pos - pos2
-            reward += (1 - ((v - target_v) / (target_v * 2)) ** 2) / 400.
+        if abs(target_v) > 1e-4:
+            d = self.t // 500 * 500
+            post = multitask.solver.center[self.t, 0][0]
+            post_ = multitask.solver.center[self.t - 1, 0][0]
+            for i in range(max(self.t - 100, d), self.t):
+                pos = multitask.solver.center[i][0]
+                pre_r = -(post_ - pos - target_v) ** 2 
+                now_r = -(post - pos - target_v) ** 2
+                reward += (now_r - pre_r) / (target_v ** 2) / 400.
         #reward += (pos - pos2) - 0.08 / 100
         if target_h > 0.1 + 1e-4:
             height = multitask.solver.height[self.t]
