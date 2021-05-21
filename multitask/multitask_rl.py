@@ -28,21 +28,20 @@ torch.autograd.set_detect_anomaly(True)
 class MassSpringEnv(gym.Env):
     metadata = {'render.modes': ['human']}
 
-    def __init__(self):
+    def __init__(self, act_list):
         super(MassSpringEnv, self).__init__()
-        self.act_spring = [0, 5, 6, 10, 15, 20, 21, 26, 30]
-        self.action_space = spaces.Box(low=-1, high=1, shape=(9, ), dtype=np.float32)
+        self.act_spring = act_list
+        self.action_space = spaces.Box(low=-1, high=1, shape=(len(self.act_spring), ), dtype=np.float32)
         self.observation_space = spaces.Box(low=-1, high=1, shape=(n_input_states, ), dtype=np.float32)
         self.rollout_length = 1000
         self.rollout_times = 0
         self.rewards = 0.
         self.last_height = 0.
-        multitask.setup_robot()
         self.t = 0
 
     def step(self, action):
         for k in range(batch_size):
-            for i in range(9):
+            for i in range(len(self.act_spring)):
                 multitask.solver.pass_actuation(self.t, k, self.act_spring[i], np.double(action[i]))
         multitask.solver.apply_spring_force(self.t)
         multitask.solver.advance_toi(self.t+1)
@@ -155,12 +154,15 @@ def visualizer(t):
     visualizer.frame += 1
 
 if __name__ == '__main__':
+    import sys
+    robot_id = sys.argv[1]
     gui = ti.GUI(background_color=0xFFFFFF, show_gui = False)
     visualizer.frame = 0
     log_dir = "./log/"
     os.makedirs(log_dir, exist_ok=True)
 
-    env = MassSpringEnv()
+    multitask.setup_robot()
+    env = MassSpringEnv(multitask.solver.act_list)
     # check_env(env)
     env = Monitor(env, log_dir)
 
