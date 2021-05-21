@@ -33,12 +33,11 @@ class MassSpringEnv(gym.Env):
         self.act_spring = [0, 5, 6, 10, 15, 20, 21, 26, 30]
         self.action_space = spaces.Box(low=-1, high=1, shape=(9, ), dtype=np.float32)
         self.observation_space = spaces.Box(low=-1, high=1, shape=(n_input_states, ), dtype=np.float32)
-        self.rollout_lenth = 1000
+        self.rollout_length = 1000
         self.rollout_times = 0
         self.rewards = 0.
         self.last_height = 0.
         multitask.setup_robot()
-        multitask.initialize_train(0, self.rollout_lenth, 0.08, 0.1)
         self.t = 0
 
     def step(self, action):
@@ -52,46 +51,55 @@ class MassSpringEnv(gym.Env):
         multitask.nn_input(self.t+1, 0, 0.8, 0.1)
         # observation = multitask.input_state.to_numpy()[self.t+1, 0]
         observation = self.get_state(self.t+1)
-        reward = self.get_reward()
 
         self.t += 1
+
+        if self.t % 500 == 0:
+            self.last_height = 0.1
+
+        reward = self.get_reward()
         if self.rollout_times % 100 == 1:
-            os.makedirs("video/new_reward/rl_{:04d}".format(self.rollout_times//100), exist_ok = True)
+            os.makedirs("video/new_reward/rl_{:04d}".format(self.rollout_times), exist_ok = True)
             multitask.gui.clear()
             multitask.gui.line((0, multitask.ground_height), (1, multitask.ground_height),
                      color=0x000022,
                      radius=3)
             multitask.solver.draw_robot(multitask.gui, self.t, multitask.target_v)
-            multitask.gui.show('video/new_reward/rl_{:04d}/{:04d}.png'.format(self.rollout_times//100, self.t))
+            multitask.gui.show('video/new_reward/rl_{:04d}/{:04d}.png'.format(self.rollout_times, self.t))
         done = False
-        if self.t == self.rollout_lenth:
+        if self.t == self.rollout_length:
             done = True
-            print(reward)
 
         info = {}
         return observation, reward, done, info
 
     def get_reward(self):
         reward = 0.
-        pos = multitask.solver.center[self.t+1, 0][0]
-        pos2 = multitask.solver.center[self.t, 0][0]
-        height = multitask.solver.height[self.t+1]
-        target_v = multitask.target_v[self.t, 0][0]
-        target_h = multitask.target_h[self.t+1, 0]
-        reward += (pos - pos2) - 0.08 / 100
-        if height > self.last_height:
-            reward -= (height - target_h) ** 2 - (self.last_height - target_h) ** 2
-            self.last_height = height
+        target_v = multitask.target_v[self.t - 100, 0][0]
+        target_h = multitask.target_h[self.t, 0]
+        if abs(target_v) > 1e-4 and self.t % 500 > 99:
+            pos = multitask.solver.center[self.t, 0][0]
+            pos2 = multitask.solver.center[self.t - 100, 0][0]
+            v = pos - pos2
+            reward += (1 - ((v - target_v) / (target_v * 2)) ** 2) / 400.
+        #reward += (pos - pos2) - 0.08 / 100
+        if target_h > 0.1 + 1e-4:
+            height = multitask.solver.height[self.t]
+            if height > self.last_height:
+                reward -= ((height - target_h) ** 2 - (self.last_height - target_h) ** 2) / (target_h ** 2)
+                self.last_height = height
         return reward
 
     def get_state(self, t):
         return multitask.input_state.to_numpy()[t, 0]
 
     def reset(self):
+        multitask.initialize_train(0, self.rollout_length, 0.04, 0.05)
         self.t = 0
         self.rollout_times += 1
+        self.last_height = 0.1
         print('Starting rollout times: ', self.rollout_times)
-        multitask.solver.clear_states(self.rollout_lenth)
+        multitask.solver.clear_states(self.rollout_length)
         # multitask.nn_input(self.t, 0, 0.8, 0.2)
         multitask.solver.compute_center(self.t)
         multitask.solver.compute_height(self.t)
@@ -101,7 +109,6 @@ class MassSpringEnv(gym.Env):
         return observation
     
     def render(self, mode):
-        pass
         visualizer(self.t)
 
 class SaveBestTrainingRewardCallback(BaseCallback):
@@ -111,6 +118,8 @@ class SaveBestTrainingRewardCallback(BaseCallback):
         self.log_dir = log_dir
         self.save_path = os.path.join(log_dir, "best_model")
         self.best_mean_reward = -np.inf
+        self.models_dir = os.path.join(log_dir, "rl")
+        os.makedirs(self.models_dir, exist_ok = True)
 
     def _init_callback(self) -> None:
         if self.save_path is not None:
@@ -124,6 +133,11 @@ class SaveBestTrainingRewardCallback(BaseCallback):
                 if self.verbose > 0:
                     print("Num timesteps: {}".format(self.num_timesteps))
                     print("Best mean reward: {:.2f} - Last mean reward per episode: {:.2f}".format(self.best_mean_reward, mean_reward))
+
+                save_path = os.path.join(self.models_dir, "model_{}".format(self.num_timesteps))
+                #print("Saving model to {}".format(save_path))
+                self.model.save(save_path)
+
                 if mean_reward > self.best_mean_reward:
                     self.best_mean_reward = mean_reward
                     if self.verbose > 0:
@@ -141,7 +155,7 @@ def visualizer(t):
     visualizer.frame += 1
 
 if __name__ == '__main__':
-    gui = ti.GUI(background_color=0xFFFFFF)
+    gui = ti.GUI(background_color=0xFFFFFF, show_gui = False)
     visualizer.frame = 0
     log_dir = "./log/"
     os.makedirs(log_dir, exist_ok=True)
@@ -150,17 +164,18 @@ if __name__ == '__main__':
     # check_env(env)
     env = Monitor(env, log_dir)
 
-    policy_kwargs = dict(activation_fn=torch.nn.Tanh, net_arch=[dict(vf=[64, 64])])
-    model = PPO('MlpPolicy', env, gamma=1, learning_rate=3e-3, verbose=1, tensorboard_log=log_dir)
+    policy_kwargs = dict(activation_fn=torch.nn.Tanh, net_arch=[64])
+    model = PPO('MlpPolicy', env, gamma=1, learning_rate=3e-3, verbose=1, tensorboard_log=log_dir, policy_kwargs = policy_kwargs)
 
     callback = SaveBestTrainingRewardCallback(check_freq=50000, log_dir=log_dir)
 
-    total_step = 500000
+    total_step = 200000000
     model.learn(total_timesteps=total_step, callback=callback)
 
     # multitask.setup_robot()
-    multitask.initialize_validate(1000, 0.08, 0.1)
+    #multitask.initialize_validate(1000, 0.08, 0.1)
     obs = env.reset()
+    os.makedirs("interactive3", exist_ok=True)
     for i in range(1000):
         action, _states = model.predict(obs, deterministic=True)
         obs, reward, done, info = env.step(action)

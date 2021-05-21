@@ -47,10 +47,10 @@ class SolverMassSpring:
     @ti.kernel
     def clear_states(self, steps: ti.template()):
         for t, k, i in ti.ndrange(steps, batch_size, n_objects):
-            self.x.grad[t, k, i] = ti.Matrix.zero(real, dim, 1)
-            self.v.grad[t, k, i] = ti.Matrix.zero(real, dim, 1)
+            #self.x.grad[t, k, i] = ti.Matrix.zero(real, dim, 1)
+            #self.v.grad[t, k, i] = ti.Matrix.zero(real, dim, 1)
             self.v_inc[t, k, i] = ti.Matrix.zero(real, dim, 1)
-            self.v_inc.grad[t, k, i] = ti.Matrix.zero(real, dim, 1)
+            #self.v_inc.grad[t, k, i] = ti.Matrix.zero(real, dim, 1)
         for t, k in ti.ndrange(steps, batch_size):
             self.head_center[t, k] = ti.Matrix.zero(real, dim, 1)
             self.head_counter[t, k] = 0.
@@ -117,10 +117,7 @@ class SolverMassSpring:
             h = 10.
             for i in ti.static(range(n_objects)):
                 h = ti.min(h, self.x[t, k, i](1))
-            if t % jump_period == 0:
-                self.height[t, k] = h
-            else:
-                self.height[t, k] = ti.max(self.height[t - 1, k], h)
+            self.height[t, k] = h
 
     @ti.kernel
     def compute_rotation(self, t: ti.i32):

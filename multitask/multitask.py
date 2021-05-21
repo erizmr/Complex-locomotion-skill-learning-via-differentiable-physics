@@ -60,9 +60,9 @@ height = solver.height
 rotation = solver.rotation
 actuation = solver.actuation
 
-nn = Model(max_steps, batch_size, n_input_states, n_springs, input_state, actuation, n_hidden)
+#nn = Model(max_steps, batch_size, n_input_states, n_springs, input_state, actuation, n_hidden)
 
-ti.root.lazy_grad()
+#ti.root.lazy_grad()
 
 pool = ti.field(ti.f64, shape = (5 * batch_size * (1000 // turn_period + 1)))
 
@@ -197,12 +197,12 @@ def initialize_validate(steps: ti.template(), output_v: ti.f64, output_h: ti.f64
             target_h[t, k] = 0
     '''
     for t, k in ti.ndrange(steps, batch_size): # jump
-        if steps < 500:
+        #if steps < 500:
             target_v[t, k][0] = 0
             target_h[t, k] = output_h
-        else:
-            target_v[t, k][0] = output_v
-            target_h[t, k] = 0
+        #else:
+        #    target_v[t, k][0] = output_v
+        #    target_h[t, k] = 0
     '''
     if output_h < 1.0 + 1e-8:
         for t, k in ti.ndrange(steps, batch_size):
@@ -237,11 +237,11 @@ def initialize_train(iter: ti.i32, steps: ti.template(), max_speed: ti.f64, max_
             else:
                 '''
                 if pool[q + 0] < 0.5:
-                    target_v[t, k][0] = (pool[q + 1] * 2 - 1) * max_speed
+                    target_v[t, k][0] = ((pool[q + 1] > 0.5) * 2 - 1) * max_speed
                     target_h[t, k] = 0.1
                 else:
-                    target_h[t, k] = pool[q + 1] * max_height + 0.1
                     target_v[t, k] *= 0.
+                    target_h[t, k] = pool[q + 1] * max_height + 0.1
         else:
             r = ti.sqrt(pool[q + 1])
             angle = pool[q + 2] * 2 * 3.1415926
