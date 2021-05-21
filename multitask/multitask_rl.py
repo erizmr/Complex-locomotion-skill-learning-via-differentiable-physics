@@ -1,3 +1,5 @@
+import config
+
 import gym
 from gym import spaces
 from numpy.random import get_state
@@ -58,13 +60,15 @@ class MassSpringEnv(gym.Env):
 
         reward = self.get_reward()
         if self.rollout_times % 100 == 1:
-            os.makedirs("video/new_reward/rl_{:04d}".format(self.rollout_times), exist_ok = True)
+            video_dir = "video/robot_{}".format(config.robot_id)
+            save_dir = os.path.join(video_dir, "rl_{:04d}".format(self.rollout_times))
+            os.makedirs(save_dir, exist_ok = True)
             multitask.gui.clear()
             multitask.gui.line((0, multitask.ground_height), (1, multitask.ground_height),
                      color=0x000022,
                      radius=3)
             multitask.solver.draw_robot(multitask.gui, self.t, multitask.target_v)
-            multitask.gui.show('video/new_reward/rl_{:04d}/{:04d}.png'.format(self.rollout_times, self.t))
+            multitask.gui.show(os.path.join(save_dir, '{:04d}.png'.format(self.t)))
         done = False
         if self.t == self.rollout_length:
             done = True
@@ -119,9 +123,9 @@ class SaveBestTrainingRewardCallback(BaseCallback):
         super(SaveBestTrainingRewardCallback, self).__init__(verbose=verbose)
         self.check_freq = check_freq
         self.log_dir = log_dir
-        self.save_path = os.path.join(log_dir, "best_model")
         self.best_mean_reward = -np.inf
-        self.models_dir = os.path.join(log_dir, "rl")
+        self.models_dir = os.path.join(log_dir, "rl_robot_{}".format(config.robot_id))
+        self.save_path = os.path.join(self.models_dir, "best_model")
         os.makedirs(self.models_dir, exist_ok = True)
 
     def _init_callback(self) -> None:
@@ -147,7 +151,7 @@ class SaveBestTrainingRewardCallback(BaseCallback):
                         print("Saving new best model to {}".format(self.save_path))
                     self.model.save(self.save_path)
         return True
-
+'''
 def visualizer(t):
     gui.clear()
     gui.line((0, multitask.ground_height), (1, multitask.ground_height),
@@ -156,13 +160,13 @@ def visualizer(t):
     multitask.solver.draw_robot(gui, t, multitask.target_v)
     gui.show('video/interactive3/{:04d}.png'.format(visualizer.frame))
     visualizer.frame += 1
-
+'''
 if __name__ == '__main__':
     import sys
     robot_id = sys.argv[1]
     gui = ti.GUI(background_color=0xFFFFFF, show_gui = False)
-    visualizer.frame = 0
-    log_dir = "./log/"
+    #visualizer.frame = 0
+    log_dir = "./log"
     os.makedirs(log_dir, exist_ok=True)
 
     multitask.setup_robot()
@@ -180,6 +184,7 @@ if __name__ == '__main__':
 
     # multitask.setup_robot()
     #multitask.initialize_validate(1000, 0.08, 0.1)
+    '''
     obs = env.reset()
     os.makedirs("interactive3", exist_ok=True)
     for i in range(1000):
@@ -191,3 +196,4 @@ if __name__ == '__main__':
             obs = env.reset()
 
     env.close()
+    '''
