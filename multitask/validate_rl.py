@@ -19,7 +19,10 @@ def visualizer(t):
     multitask.solver.draw_robot(gui, t, multitask.target_v)
     gui.show()
 
-env = multitask_rl.MassSpringEnv()
+import sys
+config.robot_id = sys.argv[1]
+multitask.setup_robot()
+env = multitask_rl.MassSpringEnv(multitask.solver.act_list)
 model = PPO.load("./log/best_model.zip", env)
 
 multitask.initialize_validate(1000, 0.04, 0.05)

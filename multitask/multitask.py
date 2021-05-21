@@ -198,8 +198,8 @@ def initialize_validate(steps: ti.template(), output_v: ti.f64, output_h: ti.f64
     '''
     for t, k in ti.ndrange(steps, batch_size): # jump
         #if steps < 500:
-            target_v[t, k][0] = 0
-            target_h[t, k] = output_h
+            target_v[t, k][0] = output_v
+            target_h[t, k] = 0.1
         #else:
         #    target_v[t, k][0] = output_v
         #    target_h[t, k] = 0

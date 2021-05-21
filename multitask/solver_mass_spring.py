@@ -9,6 +9,7 @@ class SolverMassSpring:
         self.v = vec()
         self.center = vec()
         self.actuation = scalar()
+        self.act_list = []
         ti.root.dense(ti.ijk, (max_steps, batch_size, n_objects)).place(self.x, self.v)
         ti.root.dense(ti.ij, (max_steps, batch_size)).place(self.center)
         ti.root.dense(ti.ijk, (max_steps, batch_size, n_springs)).place(self.actuation)
@@ -42,7 +43,7 @@ class SolverMassSpring:
             self.spring_stiffness[i] = s[3] / 10
             self.spring_actuation[i] = s[4]
             if s[4] > 0:
-                print("spring: ", i)
+                self.act_list.append(i)
 
     @ti.kernel
     def clear_states(self, steps: ti.template()):
