@@ -12,7 +12,6 @@ from stable_baselines3 import PPO
 import torch
 
 from config import *
-batch_size = 1
 from nn import *
 from solver_mass_spring import SolverMassSpring
 
@@ -21,6 +20,7 @@ import matplotlib.pyplot as plt
 import taichi as ti
 import numpy as np
 import os
+import shutil
 
 from taichi.lang.ops import mul, sin
 
@@ -30,7 +30,7 @@ torch.autograd.set_detect_anomaly(True)
 class MassSpringEnv(gym.Env):
     metadata = {'render.modes': ['human']}
 
-    def __init__(self, act_list):
+    def __init__(self, act_list, video_dir):
         super(MassSpringEnv, self).__init__()
         self.act_spring = act_list
         self.action_space = spaces.Box(low=-1, high=1, shape=(len(self.act_spring), ), dtype=np.float32)
@@ -40,28 +40,29 @@ class MassSpringEnv(gym.Env):
         self.rewards = 0.
         self.last_height = 0.
         self.t = 0
+        self.video_dir = video_dir
 
     def step(self, action):
         for k in range(batch_size):
             for i in range(len(self.act_spring)):
                 multitask.solver.pass_actuation(self.t, k, self.act_spring[i], np.double(action[i]))
         multitask.solver.apply_spring_force(self.t)
-        multitask.solver.advance_toi(self.t+1)
-        multitask.solver.compute_center(self.t+1)
-        multitask.solver.compute_height(self.t+1)
-        multitask.nn_input(self.t+1, 0, 0.8, 0.1)
-        # observation = multitask.input_state.to_numpy()[self.t+1, 0]
-        observation = self.get_state(self.t+1)
 
         self.t += 1
+        
+        multitask.solver.advance_toi(self.t)
+        multitask.solver.compute_center(self.t)
+        multitask.solver.compute_height(self.t)
+        multitask.nn_input(self.t, 0, max_speed, max_height)
+        # observation = multitask.input_state.to_numpy()[self.t+1, 0]
+        observation = self.get_state(self.t)
 
         if self.t % 500 == 0:
             self.last_height = 0.1
 
         reward = self.get_reward()
         if self.rollout_times % 100 == 1:
-            video_dir = "video/robot_{}".format(config.robot_id)
-            save_dir = os.path.join(video_dir, "rl_{:04d}".format(self.rollout_times))
+            save_dir = os.path.join(self.video_dir, "rl_{:04d}".format(self.rollout_times))
             os.makedirs(save_dir, exist_ok = True)
             multitask.gui.clear()
             multitask.gui.line((0, multitask.ground_height), (1, multitask.ground_height),
@@ -85,15 +86,15 @@ class MassSpringEnv(gym.Env):
             post = multitask.solver.center[self.t, 0][0]
             post_ = multitask.solver.center[self.t - 1, 0][0]
             for i in range(max(self.t - 100, d), self.t):
-                pos = multitask.solver.center[i][0]
-                pre_r = -(post_ - pos - target_v) ** 2 
-                now_r = -(post - pos - target_v) ** 2
+                tar = multitask.solver.center[i][0] + target_v
+                pre_r = -(post_ - tar) ** 2 
+                now_r = -(post - tar) ** 2
                 reward += (now_r - pre_r) / (target_v ** 2) / 400.
-        #reward += (pos - pos2) - 0.08 / 100
-        if target_h > 0.1 + 1e-4:
+        elif target_h > max_height + 1e-4:
             height = multitask.solver.height[self.t]
             if height > self.last_height:
-                reward -= ((height - target_h) ** 2 - (self.last_height - target_h) ** 2) / (target_h ** 2)
+                d_reward = ((height - target_h) ** 2 - (self.last_height - target_h) ** 2) / (target_h ** 2)
+                reward -= d_reward
                 self.last_height = height
         return reward
 
@@ -101,17 +102,17 @@ class MassSpringEnv(gym.Env):
         return multitask.input_state.to_numpy()[t, 0]
 
     def reset(self):
-        multitask.initialize_train(0, self.rollout_length, 0.04, 0.05)
+        multitask.initialize_train(0, self.rollout_length, max_speed, max_height)
         self.t = 0
         self.rollout_times += 1
         self.last_height = 0.1
         print('Starting rollout times: ', self.rollout_times)
         multitask.solver.clear_states(self.rollout_length)
-        # multitask.nn_input(self.t, 0, 0.8, 0.2)
+        # multitask.nn_input(self.t, 0, max_speed, 0.2)
         multitask.solver.compute_center(self.t)
         multitask.solver.compute_height(self.t)
         self.las_pos = multitask.solver.center[0, 0][0]
-        multitask.nn_input(self.t, 0, 0.8, 0.1)
+        multitask.nn_input(self.t, 0, max_speed, max_height)
         observation = self.get_state(self.t)
         return observation
     
@@ -126,6 +127,8 @@ class SaveBestTrainingRewardCallback(BaseCallback):
         self.best_mean_reward = -np.inf
         self.models_dir = os.path.join(log_dir, "rl_robot_{}".format(config.robot_id))
         self.save_path = os.path.join(self.models_dir, "best_model")
+        if os.path.exists(self.models_dir):
+            shutil.rmtree(self.models_dir)
         os.makedirs(self.models_dir, exist_ok = True)
 
     def _init_callback(self) -> None:
@@ -141,7 +144,7 @@ class SaveBestTrainingRewardCallback(BaseCallback):
                     print("Num timesteps: {}".format(self.num_timesteps))
                     print("Best mean reward: {:.2f} - Last mean reward per episode: {:.2f}".format(self.best_mean_reward, mean_reward))
 
-                save_path = os.path.join(self.models_dir, "model_{}".format(self.num_timesteps))
+                save_path = os.path.join(self.models_dir, "model_{}".format(self.num_timesteps // 1000))
                 #print("Saving model to {}".format(save_path))
                 self.model.save(save_path)
 
@@ -167,10 +170,14 @@ if __name__ == '__main__':
     gui = ti.GUI(background_color=0xFFFFFF, show_gui = False)
     #visualizer.frame = 0
     log_dir = "./log"
-    os.makedirs(log_dir, exist_ok=True)
+    video_dir = "video/robot_{}".format(config.robot_id)
+    if os.path.exists(video_dir):
+        shutil.rmtree(video_dir)
+    os.makedirs(video_dir, exist_ok = True)
+    os.makedirs(log_dir, exist_ok = True)
 
     multitask.setup_robot()
-    env = MassSpringEnv(multitask.solver.act_list)
+    env = MassSpringEnv(multitask.solver.act_list, video_dir = video_dir)
     # check_env(env)
     env = Monitor(env, log_dir)
 
