@@ -89,7 +89,7 @@ class MassSpringEnv(gym.Env):
                 tar = multitask.solver.center[i][0] + target_v
                 pre_r = -(post_ - tar) ** 2 
                 now_r = -(post - tar) ** 2
-                reward += (now_r - pre_r) / (target_v ** 2) / 400.
+                reward += (now_r - pre_r) / (max_speed ** 2) / 400.
         elif target_h > max_height + 1e-4:
             height = multitask.solver.height[self.t]
             if height > self.last_height:
@@ -182,7 +182,7 @@ if __name__ == '__main__':
     env = Monitor(env, log_dir)
 
     policy_kwargs = dict(activation_fn=torch.nn.Tanh, net_arch=[64])
-    model = PPO('MlpPolicy', env, gamma=1, learning_rate=3e-3, verbose=1, tensorboard_log=log_dir, policy_kwargs = policy_kwargs)
+    model = PPO('MlpPolicy', env, gamma=1, learning_rate=3e-3, verbose=1, tensorboard_log=log_dir, policy_kwargs = policy_kwargs, batch_size = 64)
 
     callback = SaveBestTrainingRewardCallback(check_freq=50000, log_dir=log_dir)
 
