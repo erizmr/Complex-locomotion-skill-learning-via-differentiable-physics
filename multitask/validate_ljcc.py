@@ -1,58 +1,60 @@
 import config
-config.batch_size = 1
+config.max_steps = 4050
 import multitask
+import multitask_rl
+from stable_baselines3 import PPO
 import os
 import taichi as ti
 import pickle as pkl
 import sys
 import matplotlib.pyplot as plt
+import time
 
 total_task_num = 27
 v_num = 9
 p_num = 3
 
-@ti.kernel
-def initialize_task(task_id: ti.template()):
-    velocities = ti.Vector([-0.04, -0.03, -0.02, -0.01, 0.0, 0.01, 0.02, 0.03, 0.04])
-    heights = ti.Vector([0.1, 0.15, 0.1])
-    crawlings = ti.Vector([0., 0., 1.])
-    for t, k in ti.ndrange(config.max_steps, config.batch_size):
-        multitask.target_v[t, k][0] = velocities[task_id % v_num]
-        multitask.target_h[t, k] = heights[(task_id // v_num) % p_num]
-        multitask.target_c[t, k] = crawlings[(task_id // v_num) % p_num]
+def initialize_task(task_id):
+    velocities = [-0.04, -0.03, -0.02, -0.01, 0.0, 0.01, 0.02, 0.03, 0.04]
+    heights = [0.1, 0.15, 0.1]
+    crawlings = [0., 0., 1.]
+    multitask.initialize_validate(config.max_steps, velocities[task_id % v_num], heights[task_id // v_num])
 
 if __name__ == "__main__":
     interval = 50
     task_iter = [[] for _ in range(total_task_num)]
     task_loss = [[] for _ in range(total_task_num)]
     cnt = 0
+    start_time = time.time()
 
     if len(sys.argv) == 2:
         # os.system('rm "{}" -r'.format('validate_plots/' + str(config.robot_id)))
         for stage in ['walk', 'jump', 'crawl']:
-            for iter_num in range(0, 10000, 50):
-                weight_path = '../../remote_result/robot_' + str(config.robot_id) + '/weights/' + stage + '/iter' + str(iter_num) +'.pkl'
+            for iter_num in range(50, 40000, 50):
+                weight_path = '../../remote_result_rl/rl_robot_' + str(config.robot_id) + '/model_' + str(iter_num) +'.zip'
+                if not os.path.exists(weight_path):
+                    continue
                 multitask.setup_robot()
                 print("load from {}".format(weight_path))
-                multitask.nn.load_weights(weight_path)
+                env = multitask_rl.MassSpringEnv(multitask.solver.act_list, '../../remote_result_rl_video/')
+                model = PPO.load(weight_path, env)
 
                 for task_id in range(total_task_num):
                     initialize_task(task_id)
-                    multitask.nn.clear()
                     multitask.solver.clear_states(config.max_steps)
 
                     multitask.loss[None] = 0.
                     for l in multitask.losses:
                         l[None] = 0.
 
+                    obs = env.reset()
                     for t in range(0, config.max_steps - 1):
-                        multitask.nn_input(t, 0, config.max_speed, config.max_height)
-                        multitask.nn.forward(t)
-                        multitask.solver.advance(t)
+                        action, _states = model.predict(obs, deterministic=True)
+                        obs, reward, done, info = env.step(action)
 
                     multitask.get_loss(config.max_steps + 1, loss_enable = {"crawl", "walk", "jump"})
                     cnt += 1
-                    print('{:.2f}%  '.format(cnt / 3 / 200 / total_task_num * 100), stage, iter_num, task_id, multitask.loss[None])
+                    print('{:.2f}%  ({:.2f})'.format(cnt / 3 / 200 / total_task_num * 100, time.time() - start_time), stage, iter_num, task_id, multitask.loss[None])
                     task_iter[task_id].append(iter_num)
                     task_loss[task_id].append(multitask.loss[None])
         os.makedirs('validate_plots/' + str(config.robot_id), exist_ok = True)
