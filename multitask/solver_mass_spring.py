@@ -86,6 +86,12 @@ class SolverMassSpring:
             self.actuation[t, k, i] = act
 
     @ti.kernel
+    def pass_actuation_fast(self, t: ti.i32, act_spring: ti.ext_arr(), action: ti.ext_arr()):
+        for k in ti.static(range(batch_size)):
+            for i in range(act_spring.shape[0]):
+                self.actuation[t, k, act_spring[i]] = action[i]
+
+    @ti.kernel
     def advance_toi(self, t: ti.i32):
         for k, i in ti.ndrange(batch_size, n_objects):
             s = math.exp(-dt * drag_damping)

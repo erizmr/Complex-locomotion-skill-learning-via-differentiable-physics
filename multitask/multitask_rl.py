@@ -46,6 +46,7 @@ class MassSpringEnv(gym.Env):
         for k in range(batch_size):
             for i in range(len(self.act_spring)):
                 multitask.solver.pass_actuation(self.t, k, self.act_spring[i], np.double(action[i]))
+        # multitask.solver.pass_actuation_fast(self.t, np.array(self.act_spring, dtype=np.int32), action)
         multitask.solver.apply_spring_force(self.t)
 
         self.t += 1
