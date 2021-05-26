@@ -183,7 +183,18 @@ if __name__ == '__main__':
     env = Monitor(env, log_dir)
 
     policy_kwargs = dict(activation_fn=torch.nn.Tanh, net_arch=[64])
-    model = PPO('MlpPolicy', env, gamma=1, learning_rate=3e-3, verbose=1, tensorboard_log=log_dir, policy_kwargs = policy_kwargs, batch_size = 64)
+    model = None
+    load_path = "log/rl_robot_{}".format(robot_id)
+    if os.path.exists(load_path):
+        name_list = os.listdir(load_path)
+        t = 0
+        for name in name_list:
+            if name[:6] == 'model_' and name[-4:] == ".zip":
+                t = max(t, int(name[6:-4]))
+        model = PPO.load(os.path.join(load_path, "model_{}.zip".format(t)), env)
+        env.env.rollout_times = t
+    else:
+        model = PPO('MlpPolicy', env, gamma=1, learning_rate=3e-3, verbose=1, tensorboard_log=log_dir, policy_kwargs = policy_kwargs, batch_size = 64, device = "cuda")
 
     callback = SaveBestTrainingRewardCallback(check_freq=50000, log_dir=log_dir)
 
