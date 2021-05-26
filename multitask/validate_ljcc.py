@@ -37,7 +37,7 @@ if __name__ == "__main__":
                 multitask.setup_robot()
                 print("load from {}".format(weight_path))
                 env = multitask_rl.MassSpringEnv(multitask.solver.act_list, '../../remote_result_rl_video/')
-                model = PPO.load(weight_path, env)
+                model = PPO.load(weight_path, env, device = "cuda")
 
                 for task_id in range(total_task_num):
                     initialize_task(task_id)

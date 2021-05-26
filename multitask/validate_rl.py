@@ -22,8 +22,8 @@ def visualizer(t):
 import sys
 config.robot_id = sys.argv[1]
 multitask.setup_robot()
-env = multitask_rl.MassSpringEnv(multitask.solver.act_list)
-model = PPO.load("./log/best_model.zip", env)
+env = multitask_rl.MassSpringEnv(multitask.solver.act_list, "../../")
+model = PPO.load("../../../best_model.zip", env)
 
 multitask.initialize_validate(1000, 0.04, 0.05)
 obs = env.reset()

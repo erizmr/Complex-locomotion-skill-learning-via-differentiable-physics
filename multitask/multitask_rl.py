@@ -50,7 +50,7 @@ class MassSpringEnv(gym.Env):
         multitask.solver.apply_spring_force(self.t)
 
         self.t += 1
-        
+
         multitask.solver.advance_toi(self.t)
         multitask.solver.compute_center(self.t)
         multitask.solver.compute_height(self.t)
