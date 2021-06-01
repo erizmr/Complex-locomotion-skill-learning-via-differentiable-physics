@@ -9,7 +9,7 @@ import math
 robot_id = 2
 
 if len(sys.argv) >= 2:
-    robot_id = int(sys.argv[1])
+    robot_id = 5
     print("Run robot", robot_id)
 simulator = ""
 if robot_id >= 10000:
