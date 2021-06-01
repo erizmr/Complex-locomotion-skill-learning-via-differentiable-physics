@@ -42,7 +42,7 @@ def make_env(env_id, seed, rank, log_dir, allow_early_resets):
             # env = gym.make(env_id)
 
             import sys
-            sys.path.append('../difftaichi2/multitask/')
+            sys.path.append('../multitask/')
             from multitask_rl import ti, config, multitask, MassSpringEnv, shutil
             robot_id = 5
             gui = ti.GUI(background_color=0xFFFFFF, show_gui = False)
