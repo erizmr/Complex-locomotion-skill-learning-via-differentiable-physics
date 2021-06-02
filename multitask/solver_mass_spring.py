@@ -82,8 +82,8 @@ class SolverMassSpring:
             ti.atomic_add(self.v_inc[t, k, b], impulse)
 
     @ti.kernel
-    def pass_actuation(self, t: ti.i32, k: ti.i32, i: ti.i32, act: ti.f32):
-            self.actuation[t, k, i] = act
+    def pass_actuation(self, t: ti.i32, k: ti.i32, i: ti.i32, act: real):
+            self.actuation[t, k, i] = max(min(act, 1), -1)
 
     @ti.kernel
     def pass_actuation_fast(self, t: ti.i32, act_spring: ti.ext_arr(), action: ti.ext_arr()):

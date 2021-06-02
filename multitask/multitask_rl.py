@@ -33,8 +33,10 @@ class MassSpringEnv(gym.Env):
     def __init__(self, act_list, video_dir):
         super(MassSpringEnv, self).__init__()
         self.act_spring = act_list
-        self.action_space = spaces.Box(low=-1, high=1, shape=(len(self.act_spring), ), dtype=np.float32)
-        self.observation_space = spaces.Box(low=-1, high=1, shape=(n_input_states, ), dtype=np.float32)
+        max_act = np.ones(len(self.act_spring), dtype = np.float64)
+        max_obs = np.ones(n_input_states, dtype = np.float64)
+        self.action_space = spaces.Box(-max_act, max_act)
+        self.observation_space = spaces.Box(-max_obs, max_obs)
         self.rollout_length = 1000
         self.rollout_times = 0
         self.rewards = 0.
@@ -102,6 +104,7 @@ class MassSpringEnv(gym.Env):
     def get_state(self, t):
         np_state = multitask.input_state.to_numpy()[t, 0]
         if np.amax(np_state) > 1. or np.amin(np_state) < -1.:
+            print('action range error')
             print(np_state)
             assert False
         return np_state
