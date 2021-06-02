@@ -47,8 +47,8 @@ def make_env(env_id, seed, rank, log_dir, allow_early_resets):
             robot_id = 5
             gui = ti.GUI(background_color=0xFFFFFF, show_gui = False)
             #visualizer.frame = 0
-            log_dir = "/home/squarefk/log_seed{}".format(multitask.random_seed)
-            video_dir = "video/robot_{}_seed{}".format(config.robot_id, multitask.random_seed)
+            log_dir = "../xujie_results/log_{}_seed{}".format(config.robot_id, multitask.random_seed)
+            video_dir = "../xujie_results/video_{}_seed{}".format(config.robot_id, multitask.random_seed)
             if os.path.exists(video_dir):
                 shutil.rmtree(video_dir)
             os.makedirs(video_dir, exist_ok = True)
