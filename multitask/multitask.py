@@ -78,8 +78,8 @@ def nn_input(t: ti.i32, offset: ti.i32, max_speed: ti.f64, max_height: ti.f64):
         vec_x = x[t, k, j] - center[t, k]
         for d in ti.static(range(dim)):
             if ti.static(dim == 2):
-                input_state[t, k, j * dim * 2 + n_sin_waves + d] = vec_x[d] / 0.05
-                input_state[t, k, j * dim * 2 + n_sin_waves + dim + d] = v[t, k, j][d]
+                input_state[t, k, j * dim * 2 + n_sin_waves + d] = vec_x[d] / 0.2
+                input_state[t, k, j * dim * 2 + n_sin_waves + dim + d] = 0
             else:
                 input_state[t, k, j * dim * 2 + n_sin_waves + d] = vec_x[d] * float(sys.argv[2])
                 input_state[t, k, j * dim * 2 + n_sin_waves + dim + d] = 0

@@ -62,7 +62,7 @@ class MassSpringEnv(gym.Env):
             self.last_height = 0.1
 
         reward = self.get_reward()
-        if self.rollout_times % 100 == 1:
+        if self.rollout_times % 50 == 1:
             save_dir = os.path.join(self.video_dir, "rl_{:04d}".format(self.rollout_times))
             os.makedirs(save_dir, exist_ok = True)
             multitask.gui.clear()
@@ -72,7 +72,7 @@ class MassSpringEnv(gym.Env):
             multitask.solver.draw_robot(multitask.gui, self.t, multitask.target_v)
             multitask.gui.show(os.path.join(save_dir, '{:04d}.png'.format(self.t)))
         done = False
-        if self.t == self.rollout_length:
+        if self.t == self.rollout_length - 1:
             done = True
 
         info = {}
@@ -100,7 +100,11 @@ class MassSpringEnv(gym.Env):
         return reward
 
     def get_state(self, t):
-        return multitask.input_state.to_numpy()[t, 0]
+        np_state = multitask.input_state.to_numpy()[t, 0]
+        if np.amax(np_state) > 1. or np.amin(np_state) < -1.:
+            print(np_state)
+            assert False
+        return np_state
 
     def reset(self):
         multitask.initialize_train(0, self.rollout_length, max_speed, max_height)
