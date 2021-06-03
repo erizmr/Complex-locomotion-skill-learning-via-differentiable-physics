@@ -102,6 +102,36 @@ def main():
     start = time.time()
     num_updates = int(
         args.num_env_steps) // args.num_steps // args.num_processes
+
+    if args.validate >= 0:
+        load_path = os.path.join(args.save_dir, args.algo)
+        [actor_critic, envs.venv.obs_rms] = torch.load(os.path.join(load_path, args.env_name + str(args.validate) + ".pt"))
+        print("load ", os.path.join(load_path, args.env_name + str(args.validate) + ".pt"))
+
+        for step in range(args.num_steps):
+            # Sample actions
+            with torch.no_grad():
+                value, action, action_log_prob, recurrent_hidden_states = actor_critic.act(
+                    rollouts.obs[step], rollouts.recurrent_hidden_states[step],
+                    rollouts.masks[step])
+
+            # Obser reward and next obs
+            obs, reward, done, infos = envs.step(action)
+
+            for info in infos:
+                if 'episode' in info.keys():
+                    episode_rewards.append(info['episode']['r'])
+
+            # If done then clean the history of observations.
+            masks = torch.FloatTensor(
+                [[0.0] if done_ else [1.0] for done_ in done])
+            bad_masks = torch.FloatTensor(
+                [[0.0] if 'bad_transition' in info.keys() else [1.0]
+                 for info in infos])
+            rollouts.insert(obs, recurrent_hidden_states, action,
+                            action_log_prob, value, reward, masks, bad_masks)
+
+
     for j in range(num_updates):
 
         if args.use_linear_lr_decay:
