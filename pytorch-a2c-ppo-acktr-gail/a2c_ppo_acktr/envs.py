@@ -16,6 +16,10 @@ from stable_baselines3.common.vec_env import (DummyVecEnv, SubprocVecEnv,
 from stable_baselines3.common.vec_env.vec_normalize import \
     VecNormalize as VecNormalize_
 
+import sys
+sys.path.append('../multitask/')
+from multitask_rl import ti, config, multitask, MassSpringEnv, shutil
+
 try:
     import dmc2gym
 except ImportError:
@@ -41,9 +45,6 @@ def make_env(env_id, seed, rank, log_dir, allow_early_resets):
         else:
             # env = gym.make(env_id)
 
-            import sys
-            sys.path.append('../multitask/')
-            from multitask_rl import ti, config, multitask, MassSpringEnv, shutil
             robot_id = 5
             gui = ti.GUI(background_color=0xFFFFFF, show_gui = False)
             #visualizer.frame = 0

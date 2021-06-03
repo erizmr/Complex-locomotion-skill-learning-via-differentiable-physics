@@ -110,6 +110,7 @@ class MassSpringEnv(gym.Env):
         return np_state
 
     def reset(self):
+        print("reset called")
         multitask.initialize_train(0, self.rollout_length, max_speed, max_height)
         self.t = 0
         self.rollout_times += 1

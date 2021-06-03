@@ -14,7 +14,7 @@ import torch.optim as optim
 from a2c_ppo_acktr import algo, utils
 from a2c_ppo_acktr.algo import gail
 from a2c_ppo_acktr.arguments import get_args
-from a2c_ppo_acktr.envs import make_vec_envs
+from a2c_ppo_acktr.envs import *
 from a2c_ppo_acktr.model import Policy
 from a2c_ppo_acktr.storage import RolloutStorage
 from evaluation import evaluate
@@ -104,33 +104,60 @@ def main():
         args.num_env_steps) // args.num_steps // args.num_processes
 
     if args.validate >= 0:
-        load_path = os.path.join(args.save_dir, args.algo)
-        [actor_critic, envs.venv.obs_rms] = torch.load(os.path.join(load_path, args.env_name + str(args.validate) + ".pt"))
-        print("load ", os.path.join(load_path, args.env_name + str(args.validate) + ".pt"))
+        task_iter = []
+        task_loss = []
+        gui = ti.GUI(background_color=0xFFFFFF)
+        for iter_num in range(0, 10000, 50):
+            load_path = os.path.join(args.save_dir, args.algo)
+            [actor_critic, envs.venv.obs_rms] = torch.load(os.path.join(load_path, args.env_name + str(iter_num) + ".pt"))
+            print("load ", os.path.join(load_path, args.env_name + str(iter_num) + ".pt"))
 
-        for step in range(args.num_steps):
-            # Sample actions
-            with torch.no_grad():
-                value, action, action_log_prob, recurrent_hidden_states = actor_critic.act(
-                    rollouts.obs[step], rollouts.recurrent_hidden_states[step],
-                    rollouts.masks[step])
+            multitask.loss[None] = 0.
+            for l in multitask.losses:
+                l[None] = 0.
+            multitask.solver.clear_states(config.max_steps)
 
-            # Obser reward and next obs
-            obs, reward, done, infos = envs.step(action)
+            for step in range(args.num_steps):
+                # Sample actions
+                with torch.no_grad():
+                    value, action, action_log_prob, recurrent_hidden_states = actor_critic.act(
+                        rollouts.obs[step], rollouts.recurrent_hidden_states[step],
+                        rollouts.masks[step])
+                # Obser reward and next obs
+                obs, reward, done, infos = envs.step(action)
+                for info in infos:
+                    if 'episode' in info.keys():
+                        episode_rewards.append(info['episode']['r'])
+                # If done then clean the history of observations.
+                masks = torch.FloatTensor(
+                    [[0.0] if done_ else [1.0] for done_ in done])
+                bad_masks = torch.FloatTensor(
+                    [[0.0] if 'bad_transition' in info.keys() else [1.0]
+                     for info in infos])
+                rollouts.insert(obs, recurrent_hidden_states, action,
+                                action_log_prob, value, reward, masks, bad_masks)
 
-            for info in infos:
-                if 'episode' in info.keys():
-                    episode_rewards.append(info['episode']['r'])
+            def visualizer(t, folder):
+                gui.clear()
+                gui.line((0, multitask.ground_height), (1, multitask.ground_height),
+                         color=0x000022,
+                         radius=3)
+                multitask.solver.draw_robot(gui, t, multitask.target_v)
+                gui.show('{}/{:04d}.png'.format(folder, t))
+            folder = "../xujie_results/video/{}".format(iter_num)
+            os.makedirs(folder, exist_ok=True)
+            for i in range(1000):
+                if i % 10 == 0:
+                    visualizer(i, folder)
 
-            # If done then clean the history of observations.
-            masks = torch.FloatTensor(
-                [[0.0] if done_ else [1.0] for done_ in done])
-            bad_masks = torch.FloatTensor(
-                [[0.0] if 'bad_transition' in info.keys() else [1.0]
-                 for info in infos])
-            rollouts.insert(obs, recurrent_hidden_states, action,
-                            action_log_prob, value, reward, masks, bad_masks)
 
+            multitask.get_loss(config.max_steps + 1, loss_enable = {"velocity"})
+
+            task_iter.append(iter_num)
+            task_loss.append(multitask.loss[None])
+
+            print(task_iter)
+            print(task_loss)
 
     for j in range(num_updates):
 
