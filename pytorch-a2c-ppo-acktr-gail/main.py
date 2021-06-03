@@ -146,7 +146,7 @@ def main():
                 gui.show('{}/{:04d}.png'.format(folder, t))
             folder = "../xujie_results/video/{}".format(iter_num)
             os.makedirs(folder, exist_ok=True)
-            for i in range(1000):
+            for i in range(config.max_steps):
                 if i % 10 == 0:
                     visualizer(i, folder)
 
