@@ -29,7 +29,7 @@ else:
     n_springs = len(springs)
 
 # process------------------------------------------------------------
-max_steps = 1050
+max_steps = 1000
 if dim == 3 and sys.argv[0] == "validate.py":
     max_steps = 4050
 vis_interval = 256

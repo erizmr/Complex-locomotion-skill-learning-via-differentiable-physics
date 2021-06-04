@@ -229,8 +229,8 @@ def initialize_train(iter: ti.i32, steps: ti.template(), max_speed: ti.f64, max_
     for t, k in ti.ndrange(steps, batch_size):
         q = (t // turn_period * batch_size + k) * 3
         #if pool[q + 0] < 0.5:
-        target_v[t, k][0] = (pool[q + 1] * 2 - 1) * max_speed
-        target_h[t, k] = pool[q + 2] * max_height + 0.1
+        target_v[t, k][0] = 0.04
+        target_h[t, k] = 0.1
         #else:
         #    target_v[t, k] *= 0.
         #    target_h[t, k] = max_height + 0.1
