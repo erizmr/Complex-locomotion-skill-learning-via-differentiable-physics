@@ -1,6 +1,6 @@
 import taichi as ti
-from config import *
-from utils import *
+from multitask.config import *
+from multitask.utils import *
 
 @ti.data_oriented
 class SolverMassSpring:

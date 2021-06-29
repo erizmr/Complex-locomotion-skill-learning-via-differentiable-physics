@@ -1,5 +1,7 @@
 import os
+import sys
 
+sys.path.append('../env_difftaichi/lib/python3.8/site-packages')
 import gym
 import numpy as np
 import torch
@@ -18,7 +20,7 @@ from stable_baselines3.common.vec_env.vec_normalize import \
 
 import sys
 sys.path.append('../multitask/')
-from multitask_rl import ti, config, multitask, MassSpringEnv, shutil
+from multitask.multitask_rl import ti, config, multitask, MassSpringEnv, shutil
 
 try:
     import dmc2gym
@@ -36,8 +38,13 @@ except ImportError:
     pass
 
 
-def make_env(env_id, seed, rank, log_dir, allow_early_resets):
-    def _thunk():
+def make_env(env_id,
+             seed,
+             rank,
+             allow_early_resets,
+             log_dir="../RL_results/"):
+
+    def _thunk(log_dir=log_dir):
         if env_id.startswith("dm"):
             _, domain, task = env_id.split('.')
             env = dmc2gym.make(domain_name=domain, task_name=task)
@@ -45,18 +52,21 @@ def make_env(env_id, seed, rank, log_dir, allow_early_resets):
         else:
             # env = gym.make(env_id)
 
-            robot_id = 5
             gui = ti.GUI(background_color=0xFFFFFF, show_gui = False)
             #visualizer.frame = 0
-            log_dir = "../xujie_results/log_{}_seed{}".format(config.robot_id, multitask.random_seed)
-            video_dir = "../xujie_results/video_{}_seed{}".format(config.robot_id, multitask.random_seed)
+            video_dir = os.path.join(log_dir, "video_{}_seed{}".format(config.robot_id, multitask.random_seed))
+            log_dir = os.path.join(log_dir, "log_{}_seed{}".format(config.robot_id, multitask.random_seed))
+            print(video_dir, log_dir)
+            # log_dir = "../xujie_results/log_{}_seed{}".format(config.robot_id, multitask.random_seed)
+            # video_dir = "../xujie_results/video_{}_seed{}".format(config.robot_id, multitask.random_seed)
             if os.path.exists(video_dir):
                 shutil.rmtree(video_dir)
-            os.makedirs(video_dir, exist_ok = True)
-            os.makedirs(log_dir, exist_ok = True)
 
+            os.makedirs(video_dir, exist_ok=True)
+            os.makedirs(log_dir, exist_ok=True)
             multitask.setup_robot()
-            env = MassSpringEnv(multitask.solver.act_list, video_dir = video_dir)
+
+            env = MassSpringEnv(multitask.solver.act_list, video_dir=video_dir)
             # check_env(env)
             env = Monitor(env, log_dir)
 
@@ -108,7 +118,7 @@ def make_vec_envs(env_name,
                   allow_early_resets,
                   num_frame_stack=None):
     envs = [
-        make_env(env_name, seed, i, log_dir, allow_early_resets)
+        make_env(env_name, seed, i, allow_early_resets, log_dir)
         for i in range(num_processes)
     ]
 

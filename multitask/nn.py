@@ -1,8 +1,8 @@
 import taichi as ti
 import pickle as pkl
 
-from utils import *
-from config import learning_rate, adam_a, adam_b1, adam_b2, dim
+from multitask.utils import scalar, vec, mat
+from multitask.config import learning_rate, adam_a, adam_b1, adam_b2, dim
 
 @ti.kernel
 def compute_TNS(w: ti.template(), s: ti.template()):
@@ -72,7 +72,6 @@ class Model:
             weights2[i, j] = np.random.randn() * math.sqrt(
                 2 / (n_hidden + n_springs)) * 2
         '''
-
 
     def __init__(self, steps, batch_size, n_input, n_output, \
                  input, output, n_hidden = 64, method = "adam"):

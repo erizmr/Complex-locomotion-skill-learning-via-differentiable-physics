@@ -1,0 +1,122 @@
+{
+    "train": {
+        "save_dir": "/home/mingrui/difftaichi/difftaichi2/saved_results/sim_config_RL"
+    },
+    "robot": {
+        "dim": 2,
+        "robot_id": 2,
+        "simulator": "mass_spring",
+        "objects": [
+            [
+                0.2,
+                0.1
+            ],
+            [
+                0.2,
+                0.15000000000000002
+            ],
+            [
+                0.25,
+                0.1
+            ],
+            [
+                0.25,
+                0.15000000000000002
+            ],
+            [
+                0.1,
+                0.1
+            ],
+            [
+                0.1,
+                0.15000000000000002
+            ],
+            [
+                0.15000000000000002,
+                0.1
+            ],
+            [
+                0.15000000000000002,
+                0.15000000000000002
+            ],
+            [
+                0.1,
+                0.2
+            ],
+            [
+                0.15000000000000002,
+                0.2
+            ],
+            [
+                0.2,
+                0.2
+            ],
+            [
+                0.25,
+                0.2
+            ],
+            [
+                0.2,
+                0.25
+            ],
+            [
+                0.25,
+                0.25
+            ],
+            [
+                0.2,
+                0.30000000000000004
+            ],
+            [
+                0.25,
+                0.30000000000000004
+            ]
+        ],
+        "n_objects": 16,
+        "n_springs": 36
+    },
+    "process": {
+        "max_steps": 1000,
+        "vis_interval": 256,
+        "output_vis_interval": 8,
+        "run_period": 100,
+        "jump_period": 500,
+        "turn_period": 500,
+        "max_speed": 0.08,
+        "max_height": 0.1,
+        "dt": 0.004,
+        "spring_omega": 15.707963267948964
+    },
+    "simulator": {
+        "mpm": {
+            "n_grid": 32
+        },
+        "ground_height": 0.1,
+        "gravity": -1.8,
+        "drag_damping": 0,
+        "dash_damping": 0.2,
+        "p_vol": 1,
+        "E": 40,
+        "mu": 40,
+        "la": 40,
+        "act_strength": 40,
+        "bound": 3,
+        "coeff": 5,
+        "dashpot_damping": 0.2,
+        "n_particles": 16,
+        "inv_dx": 0.03125
+    },
+    "nn": {
+        "n_sin_waves": 10,
+        "n_hidden": 64,
+        "duplicate_v": 30,
+        "duplicate_h": 30,
+        "batch_size": 1,
+        "max_reset_step": 4,
+        "learning_rate": 0.0003,
+        "adam_b1": 0.9,
+        "adam_b2": 0.9,
+        "n_input_states": 134,
+        "adam_a": 0.0003
+    }
+}

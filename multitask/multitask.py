@@ -15,10 +15,10 @@ import math
 import numpy as np
 import os
 import time
-
 import pickle as pkl
 
 debug = Debug(False)
+
 
 random_seed = int(time.time()*1e6)%10000
 
@@ -226,11 +226,13 @@ def initialize_train(iter: ti.i32, steps: ti.template(), max_speed: ti.f64, max_
     times = steps // turn_period + 1
     for _ in range(batch_size * times * 3):
         pool[_] = ti.random()
+    # Define different tasks here
     for t, k in ti.ndrange(steps, batch_size):
         q = (t // turn_period * batch_size + k) * 3
         #if pool[q + 0] < 0.5:
         target_v[t, k][0] = 0.04
-        target_h[t, k] = 0.1
+        # target_h[t, k] = 0.1
+        target_h[t, k] = max_height + 0.1
         #else:
         #    target_v[t, k] *= 0.
         #    target_h[t, k] = max_height + 0.1

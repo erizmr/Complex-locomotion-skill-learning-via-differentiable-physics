@@ -7,7 +7,7 @@ from scipy.ndimage.filters import gaussian_filter
 
 import taichi as ti
 
-from config import *
+from multitask.config import *
 
 real = ti.f64
 

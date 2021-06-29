@@ -1,4 +1,4 @@
-import config
+import multitask.config as config
 
 import gym
 from gym import spaces
@@ -11,9 +11,9 @@ from stable_baselines3.common.results_plotter import load_results, ts2xy, plot_r
 from stable_baselines3 import PPO
 import torch
 
-from config import *
-from nn import *
-from solver_mass_spring import SolverMassSpring
+from multitask.config import *
+from multitask.nn import *
+from multitask.solver_mass_spring import SolverMassSpring
 
 import multitask
 import matplotlib.pyplot as plt
@@ -84,21 +84,38 @@ class MassSpringEnv(gym.Env):
         reward = 0.
         target_v = multitask.target_v[self.t, 0][0]
         target_h = multitask.target_h[self.t, 0]
-        if abs(target_v) > 1e-4:
-            d = self.t // 500 * 500
-            post = multitask.solver.center[self.t, 0][0]
-            post_ = multitask.solver.center[self.t - 1, 0][0]
-            for i in range(max(self.t - 100, d), self.t):
-                tar = multitask.solver.center[i][0] + target_v
-                pre_r = -(post_ - tar) ** 2 
-                now_r = -(post - tar) ** 2
-                reward += (now_r - pre_r) / (max_speed ** 2) / 400.
-        elif target_h > max_height + 1e-4:
-            height = multitask.solver.height[self.t]
-            if height > self.last_height:
-                d_reward = ((height - target_h) ** 2 - (self.last_height - target_h) ** 2) / (target_h ** 2)
-                reward -= d_reward
-                self.last_height = height
+        # if abs(target_v) > 1e-4:
+        #     d = self.t // 500 * 500
+        #     post = multitask.solver.center[self.t, 0][0]
+        #     post_ = multitask.solver.center[self.t - 1, 0][0]
+        #     for i in range(max(self.t - 100, d), self.t):
+        #         tar = multitask.solver.center[i][0] + target_v
+        #         pre_r = -(post_ - tar) ** 2
+        #         now_r = -(post - tar) ** 2
+        #         reward += (now_r - pre_r) / (max_speed ** 2) / 400.
+        # elif target_h > max_height + 1e-4:
+        #     height = multitask.solver.height[self.t]
+        #     if height > self.last_height:
+        #         d_reward = ((height - target_h) ** 2 - (self.last_height - target_h) ** 2) / (target_h ** 2)
+        #         reward -= d_reward
+        #         self.last_height = height
+
+        # Reward for moving forward
+        d = self.t // 500 * 500
+        post = multitask.solver.center[self.t, 0][0]
+        post_ = multitask.solver.center[self.t - 1, 0][0]
+        for i in range(max(self.t - 100, d), self.t):
+            tar = multitask.solver.center[i][0] + target_v
+            pre_r = -(post_ - tar) ** 2
+            now_r = -(post - tar) ** 2
+            reward += (now_r - pre_r) / (max_speed ** 2) / 400.
+
+        # Reward for jumping
+        height = multitask.solver.height[self.t]
+        if height > self.last_height:
+            d_reward = ((height - target_h) ** 2 - (self.last_height - target_h) ** 2) / (target_h ** 2)
+            reward -= d_reward
+            self.last_height = height
         return reward
 
     def get_state(self, t):

@@ -3,13 +3,16 @@ import glob
 import os
 import time
 from collections import deque
+import sys
 
+sys.path.append('../../env_difftaichi/lib/python3.8/site-packages')
 import gym
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
+import json
 
 from a2c_ppo_acktr import algo, utils
 from a2c_ppo_acktr.algo import gail
@@ -19,9 +22,34 @@ from a2c_ppo_acktr.model import Policy
 from a2c_ppo_acktr.storage import RolloutStorage
 from evaluation import evaluate
 
+# import logging
+# from logger import TensorboardWriter
+# from parse_config import ConfigParser
+# from util import inf_loop, MetricTracker
+
+
+# def get_logger(name, verbosity=2):
+#     log_levels = {
+#         0: logging.WARNING,
+#         1: logging.INFO,
+#         2: logging.DEBUG
+#     }
+#     msg_verbosity = 'verbosity option {} is invalid. Valid options are {}.'.format(verbosity, log_levels.keys())
+#     assert verbosity in log_levels, msg_verbosity
+#     logger = logging.getLogger(name)
+#     logger.setLevel(log_levels[verbosity])
+#     return logger
+
 
 def main():
     args = get_args()
+
+    # logger = get_logger('trainer', verbosity=2)
+    # log_writer = TensorboardWriter(args.log_dir, logger, enabled=True)
+    #
+    # train_metrics = MetricTracker('loss', *[m.__name__ for m in self.metric_ftns],
+    #                                    writer=log_writer)
+    # metrics = [getattr(module_metric, met) for met in config['metrics']]
 
     torch.manual_seed(args.seed)
     torch.cuda.manual_seed_all(args.seed)
@@ -107,7 +135,7 @@ def main():
         task_iter = []
         task_loss = []
         gui = ti.GUI(background_color=0xFFFFFF)
-        for iter_num in range(0, 10000, 50):
+        for iter_num in range(9950, 10000, args.save_interval):
             load_path = os.path.join(args.save_dir, args.algo)
             [actor_critic, envs.venv.obs_rms] = torch.load(os.path.join(load_path, args.env_name + str(iter_num) + ".pt"))
             print("load ", os.path.join(load_path, args.env_name + str(iter_num) + ".pt"))
@@ -144,21 +172,27 @@ def main():
                          radius=3)
                 multitask.solver.draw_robot(gui, t, multitask.target_v)
                 gui.show('{}/{:04d}.png'.format(folder, t))
-            folder = "../xujie_results/video/{}".format(iter_num)
+
+            folder = os.path.join(args.log_dir, "video_{}/{}".format(args.env_name,
+                                                                     iter_num))
             os.makedirs(folder, exist_ok=True)
             for i in range(config.max_steps):
                 if i % 10 == 0:
                     visualizer(i, folder)
-
 
             multitask.get_loss(config.max_steps + 1, loss_enable = {"velocity"})
 
             task_iter.append(iter_num)
             task_loss.append(multitask.loss[None])
 
-            print(task_iter)
-            print(task_loss)
+            print("Task iteration: ", task_iter)
+            print("Task loss: ", task_loss)
+            # if iter_num == 9950:
+            #     data_dict = {'iters':task_iter,'validation loss':task_loss}
+            #     with open(args.log_dir+f"video_{args.env_name}/loss.json", 'w') as f:
+            #         json.dump(data_dict, f)
 
+    # Training
     for j in range(num_updates):
 
         if args.use_linear_lr_decay:
@@ -244,6 +278,17 @@ def main():
                         np.median(episode_rewards), np.min(episode_rewards),
                         np.max(episode_rewards), dist_entropy, value_loss,
                         action_loss))
+
+        # log_writer.set_step((j - 1) * num_updates)
+        # train_metrics.update('mean_reward', np.mean(episode_rewards))
+        # train_metrics.update('max_reward', np.max(episode_rewards))
+        # train_metrics.update('min_reward', np.min(episode_rewards))
+        # train_metrics.update('value_loss', value_loss)
+        # train_metrics.update('action_loss', action_loss)
+        # train_metrics.update('dist_entropy', dist_entropy)
+
+        # for met in self.metric_ftns:
+        #     self.train_metrics.update(met.__name__, met(out_v, gt_v))
 
         if (args.eval_interval is not None and len(episode_rewards) > 1
                 and j % args.eval_interval == 0):

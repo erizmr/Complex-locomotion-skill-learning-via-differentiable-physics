@@ -1,6 +1,6 @@
-from robot_config import robots
-from robot3d_config import robots3d
-from robot_mpm import robots_mpm, n_grid, dx
+from multitask.robot_config import robots
+from multitask.robot3d_config import robots3d
+from multitask.robot_mpm import robots_mpm, n_grid, dx
 
 import sys
 import math
