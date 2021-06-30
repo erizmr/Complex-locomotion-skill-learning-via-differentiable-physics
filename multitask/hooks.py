@@ -1,5 +1,6 @@
 import os
 import time
+from util import MetricTracker
 
 
 class HookBase:
@@ -58,6 +59,32 @@ class Timer(HookBase):
 
     def after_train(self):
         self.train_end = time.time()
+
+
+class MetricWriter(HookBase):
+    def __init__(self):
+        super(MetricWriter, self).__init__()
+        self.writer = None
+        self.train_metrics = None
+        self.valid_metrics = None
+
+    def before_train(self):
+        if self.writer is None:
+            self.writer = self.trainer.writer
+            self.train_metrics = MetricTracker(*[m for m in self.trainer.metrics_train], writer=self.writer)
+            self.valid_metrics = MetricTracker(*[m for m in self.trainer.metrics_validation], writer=self.writer)
+        self.train_metrics.reset()
+
+    # def before_step(self):
+    #     pass
+    #
+    # def after_step(self):
+    #     pass
+    #
+    # def after_train(self):
+    #     pass
+
+
 
 
 

@@ -1,17 +1,30 @@
 import taichi as ti
-from multitask.config import *
+# from multitask.config import *
 from multitask.utils import vec, scalar, mat, real
 
 @ti.data_oriented
 class SolverMPM:
-    def __init__(self):
+    def __init__(self, config):
+        self.config = config
+        self.max_steps = config.get_config()["process"]["max_steps"]
+        self.dt = config.get_config()["process"]["dt"]
+        self.ground_height = config.get_config()["simulator"]["ground_height"]
+        self.gravity = config.get_config()["simulator"]["gravity"]
+        self.drag_damping = config.get_config()["simulator"]["drag_damping"]
+        self.dashpot_damping = config.get_config()["simulator"]["dashpot_damping"]
+        self.batch_size = config.get_config()["nn"]["batch_size"]
+        self.n_objects = config.get_config()["robot"]["n_objects"]
+        self.n_springs = config.get_config()["robot"]["n_springs"]
+        self.springs = config.get_config()["robot"]["springs"]
+        self.dim = config.get_config()["robot"]["dim"]
+
         self.x = vec()
         self.v = vec()
         self.center = vec()
         self.actuation = scalar()
-        ti.root.dense(ti.ijk, (max_steps, batch_size, n_objects)).place(self.x, self.v)
-        ti.root.dense(ti.ij, (max_steps, batch_size)).place(self.center)
-        ti.root.dense(ti.ijk, (max_steps, batch_size, n_springs)).place(self.actuation)
+        ti.root.dense(ti.ijk, (self.max_steps, self.batch_size, self.n_objects)).place(self.x, self.v)
+        ti.root.dense(ti.ij, (self.max_steps, self.batch_size)).place(self.center)
+        ti.root.dense(ti.ijk, (self.max_steps, self.batch_size, self.n_springs)).place(self.actuation)
 
         self.height = None
         self.rotation = None
@@ -20,9 +33,9 @@ class SolverMPM:
         self.C, self.F = mat(), mat()
         self.grid_v_in, self.grid_m_in = vec(), scalar()
         self.grid_v_out = vec()
-        ti.root.dense(ti.ij, (batch_size, n_particles)).place(self.actuator_id, self.particle_type)
-        ti.root.dense(ti.ijk, (max_steps, batch_size, n_particles)).place(self.C, self.F)
-        ti.root.dense(ti.ijk, (batch_size, n_grid, n_grid)).place(self.grid_v_in, self.grid_m_in, self.grid_v_out)
+        ti.root.dense(ti.ij, (self.batch_size, self.n_particles)).place(self.actuator_id, self.particle_type)
+        ti.root.dense(ti.ijk, (self.max_steps, batch_size, n_particles)).place(self.C, self.F)
+        ti.root.dense(ti.ijk, (self.batch_size, n_grid, n_grid)).place(self.grid_v_in, self.grid_m_in, self.grid_v_out)
 
     def initialize_robot(self):
         for k in range(batch_size):

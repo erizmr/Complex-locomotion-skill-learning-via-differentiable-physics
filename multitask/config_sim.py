@@ -1,5 +1,6 @@
 import os
-
+from datetime import datetime
+from pathlib import Path
 from multitask.robot_config import robots
 from multitask.robot3d_config import robots3d
 from multitask.robot_mpm import robots_mpm, n_grid, dx
@@ -7,6 +8,8 @@ from multitask.robot_mpm import robots_mpm, n_grid, dx
 from util import read_json, write_json
 import sys
 import math
+import logging
+from logger import setup_logging
 
 
 class ConfigSim:
@@ -17,14 +20,35 @@ class ConfigSim:
         save_dir = self._config["train"]["save_dir"]
         save_dir = os.path.join(save_dir, self.file_name)
         self._config["train"]["save_dir"] = save_dir
-        os.makedirs(self._config["train"]["save_dir"], exist_ok=True)
-        write_json(self._config, os.path.join(save_dir, "config.json"))
+        # os.makedirs(self._config["train"]["save_dir"], exist_ok=True)
+
+        exper_name = self._config["train"]["name"]
+        save_dir = Path(save_dir)
+        run_id = datetime.now().strftime(r'%m%d_%H%M%S')
+        self._save_dir = save_dir / 'models' / exper_name / run_id
+        self._log_dir = save_dir / 'log' / exper_name / run_id
+
+        # make directory for saving checkpoints and log.
+        exist_ok = run_id == ''
+        self.save_dir.mkdir(parents=True, exist_ok=exist_ok)
+        self.log_dir.mkdir(parents=True, exist_ok=exist_ok)
+
+        # save updated config file to the checkpoint dir
+        write_json(self.config, self.save_dir / 'config.json')
+
+        # configure logging module
+        setup_logging(save_dir)
+        self.log_levels = {
+            0: logging.WARNING,
+            1: logging.INFO,
+            2: logging.DEBUG
+        }
 
     def _add_adaptive_configs(self):
         # Robot
         robot_id = self._config["robot"]["robot_id"]
         faces = []
-        if robot_id > 10000:
+        if robot_id >= 10000:
             self._config["robot"]["simulator"] = "mpm"
             self._config["robot"]["dim"] = 2
             objects, springs, n_springs = robots_mpm[robot_id - 10000]()
@@ -79,3 +103,23 @@ class ConfigSim:
 
     def get_config(self):
         return self._config
+
+    def get_logger(self, name, verbosity=2):
+        msg_verbosity = 'verbosity option {} is invalid. Valid options are {}.'.format(verbosity, self.log_levels.keys())
+        assert verbosity in self.log_levels, msg_verbosity
+        logger = logging.getLogger(name)
+        logger.setLevel(self.log_levels[verbosity])
+        return logger
+
+    # setting read-only attributes
+    @property
+    def config(self):
+        return self._config
+
+    @property
+    def save_dir(self):
+        return self._save_dir
+
+    @property
+    def log_dir(self):
+        return self._log_dir

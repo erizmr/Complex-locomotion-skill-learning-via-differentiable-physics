@@ -15,7 +15,7 @@ from multitask.utils import Debug, real, plot_curve, load_string, scalar, vec, m
 from multitask.nn import Model
 from multitask.solver_mass_spring import SolverMassSpring
 from multitask.solver_mpm import SolverMPM
-
+from logger import TensorboardWriter
 
 debug = Debug(False)
 
@@ -46,6 +46,7 @@ class BaseTrainer:
         self.initial_objects = vec()
         self.initial_center = vec()
 
+        self.logger = config.get_logger(name="DiffTaichi")
         self.config = config.get_config()
         self.n_objects = self.config["robot"]["n_objects"]
         # n_objects = self.config["robot"]["n_objects"]
@@ -88,7 +89,19 @@ class BaseTrainer:
 
         self.gui = ti.GUI(show_gui=False, background_color=0xFFFFFF)
 
+        self.writer = TensorboardWriter(self.config["train"]["save_dir"],
+                                        self.logger,
+                                        enabled=True)
+
         self._hooks = []
+
+    def get_logger(self, name, verbosity=2):
+        msg_verbosity = 'verbosity option {} is invalid. Valid options are {}.'.format(verbosity,
+                                                                                       self.log_levels.keys())
+        assert verbosity in self.log_levels, msg_verbosity
+        logger = logging.getLogger(name)
+        logger.setLevel(self.log_levels[verbosity])
+        return logger
 
     @ti.kernel
     def nn_input(self, t: ti.i32, offset: ti.i32, max_speed: ti.f64, max_height: ti.f64):

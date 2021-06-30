@@ -1,11 +1,10 @@
 {
   "train": {
-    "name": "DiffTaichi_RL",
     "save_dir": "/home/mingrui/difftaichi/difftaichi2/saved_results"
   },
   "robot": {
     "dim": 2,
-    "robot_id": 5,
+    "robot_id": 10000,
     "simulator": "mass_spring"
   },
   "process":{
