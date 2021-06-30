@@ -89,19 +89,11 @@ class BaseTrainer:
 
         self.gui = ti.GUI(show_gui=False, background_color=0xFFFFFF)
 
-        self.writer = TensorboardWriter(self.config["train"]["save_dir"],
+        self.writer = TensorboardWriter(config.log_dir,
                                         self.logger,
                                         enabled=True)
 
         self._hooks = []
-
-    def get_logger(self, name, verbosity=2):
-        msg_verbosity = 'verbosity option {} is invalid. Valid options are {}.'.format(verbosity,
-                                                                                       self.log_levels.keys())
-        assert verbosity in self.log_levels, msg_verbosity
-        logger = logging.getLogger(name)
-        logger.setLevel(self.log_levels[verbosity])
-        return logger
 
     @ti.kernel
     def nn_input(self, t: ti.i32, offset: ti.i32, max_speed: ti.f64, max_height: ti.f64):
@@ -119,8 +111,6 @@ class BaseTrainer:
                 if ti.static(self.dim == 2):
                     self.input_state[t, k, j * dim * 2 + n_sin_waves + d] = vec_x[d] / 0.2
                     self.input_state[t, k, j * dim * 2 + n_sin_waves + dim + d] = 0
-                    if float(vec_x[d] / 0.2) > 1.0 or float(vec_x[d] / 0.2) < -1.0:
-                        print("I am wrong at first", j, k, d, vec_x[d])
                 else:
                     self.input_state[t, k, j * dim * 2 + n_sin_waves + d] = vec_x[d] * float(sys.argv[2])
                     self.input_state[t, k, j * dim * 2 + n_sin_waves + dim + d] = 0
@@ -129,8 +119,6 @@ class BaseTrainer:
             if ti.static(self.dim == 2):
                 for k, j in ti.ndrange(self.batch_size, self.duplicate_v):
                     self.input_state[t, k, n_objects * dim * 2 + n_sin_waves + j * (dim - 1)] = self.target_v[t, k][0] / max_speed
-                    if float(self.target_v[t, k][0] / max_speed) < -1.0 or float(self.target_v[t, k][0] / max_speed) > 1.0:
-                        print(f"I am wrong du v {n_objects * dim * 2 + n_sin_waves + j * (dim - 1)}")
             else:
                 for k, j in ti.ndrange(batch_size, duplicate_v):
                     self.input_state[t, k, n_objects * dim * 2 + n_sin_waves + j * (dim - 1)] = self.target_v[t, k][0] * float(
@@ -142,8 +130,6 @@ class BaseTrainer:
             for k, j in ti.ndrange(self.batch_size, self.duplicate_h):
                 self.input_state[t, k, n_objects * dim * 2 + n_sin_waves + duplicate_v * (dim - 1) + j] = (self.target_h[
                                                                                                           t, k] - 0.1) / max_height * 2 - 1
-                if float((self.target_h[t, k] - 0.1) / max_height * 2 - 1) > 1.0 or float((self.target_h[t, k] - 0.1) / max_height * 2 - 1) < -1.0:
-                    print(f"I am wrong du k {n_objects * dim * 2 + n_sin_waves + duplicate_v * (dim - 1) + j}")
 
     @ti.kernel
     def compute_loss_velocity(self, steps: ti.template()):
@@ -314,7 +300,8 @@ class BaseTrainer:
             self.initial_center[None] += self.initial_objects[I] / self.n_objects
 
     def setup_robot(self):
-        print('n_objects=', self.n_objects, '   n_springs=', self.n_springs)
+        # print('n_objects=', self.n_objects, '   n_springs=', self.n_springs)
+        self.logger.info('n_objects=   n_springs=')
         self.initial_objects.from_numpy(np.array(self.objects))
         for i in range(self.n_objects):
             self.initial_objects[i][0] += 0.4

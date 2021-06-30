@@ -107,8 +107,22 @@ class ConfigSim:
     def get_logger(self, name, verbosity=2):
         msg_verbosity = 'verbosity option {} is invalid. Valid options are {}.'.format(verbosity, self.log_levels.keys())
         assert verbosity in self.log_levels, msg_verbosity
+
         logger = logging.getLogger(name)
         logger.setLevel(self.log_levels[verbosity])
+
+        # create console handler and set level to debug
+        ch = logging.StreamHandler()
+        ch.setLevel(logging.DEBUG)
+
+        # create formatter
+        formatter = logging.Formatter('%(asctime)s - %(name)s - %(module) - %(levelname)s - %(message)s')
+
+        # add formatter to ch
+        ch.setFormatter(formatter)
+
+        # add ch to logger
+        logger.addHandler(ch)
         return logger
 
     # setting read-only attributes

@@ -13,7 +13,7 @@ from a2c_ppo_acktr.model import Policy
 from a2c_ppo_acktr.storage import RolloutStorage
 from evaluation import evaluate
 from multitask.hooks import Checkpointer, InfoPrinter, Timer, MetricWriter
-from multitask.config import *
+# from multitask.config import *
 
 
 class CheckpointerRL(Checkpointer):
@@ -179,7 +179,6 @@ class RLTrainer(BaseTrainer):
             for info in infos:
                 if 'episode' in info.keys():
                     self.episode_rewards.append(info['episode']['r'])
-                    self.metric_writer.train_metrics.update("mean_reward", np.mean(self.episode_rewards))
 
             # If done then clean the history of observations.
             masks = torch.FloatTensor(
@@ -217,8 +216,7 @@ class RLTrainer(BaseTrainer):
         value_loss, action_loss, dist_entropy = self.agent.update(self.rollouts)
         self.rollouts.after_update()
 
-        # Compute training loss
-        # self.get_loss(self.max_steps + 1, loss_enable={"velocity", "height"})
+        self.metric_writer.train_metrics.update("mean_reward", np.mean(self.episode_rewards))
 
     def validate(self):
         task_iter = []
