@@ -1,6 +1,6 @@
 import taichi as ti
 from multitask.config import *
-from multitask.utils import *
+from multitask.utils import vec, scalar, mat, real
 
 @ti.data_oriented
 class SolverMPM:

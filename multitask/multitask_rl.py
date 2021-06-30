@@ -11,11 +11,11 @@ from stable_baselines3.common.results_plotter import load_results, ts2xy, plot_r
 from stable_baselines3 import PPO
 import torch
 
-from multitask.config import *
+# from multitask.config import *
 from multitask.nn import *
 from multitask.solver_mass_spring import SolverMassSpring
 
-import multitask
+# import multitask
 import matplotlib.pyplot as plt
 import taichi as ti
 import numpy as np
@@ -27,14 +27,19 @@ from taichi.lang.ops import mul, sin
 np.seterr(all='raise')
 torch.autograd.set_detect_anomaly(True)
 
+
 class MassSpringEnv(gym.Env):
     metadata = {'render.modes': ['human']}
 
-    def __init__(self, act_list, video_dir):
+    def __init__(self, video_dir, trainer):
         super(MassSpringEnv, self).__init__()
-        self.act_spring = act_list
-        max_act = np.ones(len(self.act_spring), dtype = np.float64)
-        max_obs = np.ones(n_input_states, dtype = np.float64)
+        self.trainer = trainer
+        self.act_spring = trainer.solver.act_list
+        self.max_speed = trainer.config.get_config()["process"]["max_speed"]
+        self.max_height = trainer.config.get_config()["process"]["max_height"]
+
+        max_act = np.ones(len(self.act_spring), dtype=np.float64)
+        max_obs = np.ones(self.trainer.n_input_states, dtype=np.float64)
         self.action_space = spaces.Box(-max_act, max_act)
         self.observation_space = spaces.Box(-max_obs, max_obs)
         self.rollout_length = config.max_steps
@@ -45,18 +50,18 @@ class MassSpringEnv(gym.Env):
         self.video_dir = video_dir
 
     def step(self, action):
-        for k in range(batch_size):
+        for k in range(self.trainer.batch_size):
             for i in range(len(self.act_spring)):
-                multitask.solver.pass_actuation(self.t, k, self.act_spring[i], np.double(action[i]))
+                self.trainer.solver.pass_actuation(self.t, k, self.act_spring[i], np.double(action[i]))
         # multitask.solver.pass_actuation_fast(self.t, np.array(self.act_spring, dtype=np.int32), action)
-        multitask.solver.apply_spring_force(self.t)
+        self.trainer.solver.apply_spring_force(self.t)
 
         self.t += 1
 
-        multitask.solver.advance_toi(self.t)
-        multitask.solver.compute_center(self.t)
-        multitask.solver.compute_height(self.t)
-        multitask.nn_input(self.t, 0, max_speed, max_height)
+        self.trainer.solver.advance_toi(self.t)
+        self.trainer.solver.compute_center(self.t)
+        self.trainer.solver.compute_height(self.t)
+        self.trainer.nn_input(self.t, 0, self.max_speed, self.max_height)
         # observation = multitask.input_state.to_numpy()[self.t+1, 0]
         observation = self.get_state(self.t)
 
@@ -67,12 +72,13 @@ class MassSpringEnv(gym.Env):
         if self.rollout_times % 50 == 1:
             save_dir = os.path.join(self.video_dir, "rl_{:04d}".format(self.rollout_times))
             os.makedirs(save_dir, exist_ok = True)
-            multitask.gui.clear()
-            multitask.gui.line((0, multitask.ground_height), (1, multitask.ground_height),
+            self.trainer.gui.clear()
+            self.trainer.gui.line((0, self.trainer.config.get_config()["simulator"]["ground_height"]),
+                                  (1, self.trainer.config.get_config()["simulator"]["ground_height"]),
                      color=0x000022,
                      radius=3)
-            multitask.solver.draw_robot(multitask.gui, self.t, multitask.target_v)
-            multitask.gui.show(os.path.join(save_dir, '{:04d}.png'.format(self.t)))
+            self.trainer.solver.draw_robot(self.trainer.gui, self.t, self.trainer.target_v)
+            self.trainer.gui.show(os.path.join(save_dir, '{:04d}.png'.format(self.t)))
         done = False
         if self.t == self.rollout_length - 1:
             done = True
@@ -82,8 +88,8 @@ class MassSpringEnv(gym.Env):
 
     def get_reward(self):
         reward = 0.
-        target_v = multitask.target_v[self.t, 0][0]
-        target_h = multitask.target_h[self.t, 0]
+        target_v = self.trainer.target_v[self.t, 0][0]
+        target_h = self.trainer.target_h[self.t, 0]
         # if abs(target_v) > 1e-4:
         #     d = self.t // 500 * 500
         #     post = multitask.solver.center[self.t, 0][0]
@@ -102,16 +108,16 @@ class MassSpringEnv(gym.Env):
 
         # Reward for moving forward
         d = self.t // 500 * 500
-        post = multitask.solver.center[self.t, 0][0]
-        post_ = multitask.solver.center[self.t - 1, 0][0]
+        post = self.trainer.solver.center[self.t, 0][0]
+        post_ = self.trainer.solver.center[self.t - 1, 0][0]
         for i in range(max(self.t - 100, d), self.t):
-            tar = multitask.solver.center[i][0] + target_v
+            tar = self.trainer.solver.center[i][0] + target_v
             pre_r = -(post_ - tar) ** 2
             now_r = -(post - tar) ** 2
-            reward += (now_r - pre_r) / (max_speed ** 2) / 400.
+            reward += (now_r - pre_r) / (self.max_speed ** 2) / 400.
 
         # Reward for jumping
-        height = multitask.solver.height[self.t]
+        height = self.trainer.solver.height[self.t]
         if height > self.last_height:
             d_reward = ((height - target_h) ** 2 - (self.last_height - target_h) ** 2) / (target_h ** 2)
             reward -= d_reward
@@ -119,7 +125,7 @@ class MassSpringEnv(gym.Env):
         return reward
 
     def get_state(self, t):
-        np_state = multitask.input_state.to_numpy()[t, 0]
+        np_state = self.trainer.input_state.to_numpy()[t, 0]
         if np.amax(np_state) > 1. or np.amin(np_state) < -1.:
             print('action range error')
             print(np_state)
@@ -128,22 +134,23 @@ class MassSpringEnv(gym.Env):
 
     def reset(self):
         print("reset called")
-        multitask.initialize_train(0, self.rollout_length, max_speed, max_height)
+        self.trainer.initialize_train(0, self.rollout_length, self.max_speed, self.max_height)
         self.t = 0
         self.rollout_times += 1
         self.last_height = 0.1
         print('Starting rollout times: ', self.rollout_times)
-        multitask.solver.clear_states(self.rollout_length)
+        self.trainer.solver.clear_states(self.rollout_length)
         # multitask.nn_input(self.t, 0, max_speed, 0.2)
-        multitask.solver.compute_center(self.t)
-        multitask.solver.compute_height(self.t)
-        self.las_pos = multitask.solver.center[0, 0][0]
-        multitask.nn_input(self.t, 0, max_speed, max_height)
+        self.trainer.solver.compute_center(self.t)
+        self.trainer.solver.compute_height(self.t)
+        self.las_pos = self.trainer.solver.center[0, 0][0]
+        self.trainer.nn_input(self.t, 0, self.max_speed, self.max_height)
         observation = self.get_state(self.t)
         return observation
     
     def render(self, mode):
-        visualizer(self.t)
+        # TODO: seems like lacking the second argument
+        self.trainer.visualizer(self.t)
 
 class SaveBestTrainingRewardCallback(BaseCallback):
     def __init__(self, check_freq: int, log_dir: str, verbose=1):

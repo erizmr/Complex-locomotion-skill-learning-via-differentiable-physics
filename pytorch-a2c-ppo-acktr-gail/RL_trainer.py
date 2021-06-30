@@ -1,5 +1,6 @@
 import os
 import torch
+from collections import deque
 import numpy as np
 import taichi as ti
 
@@ -20,11 +21,15 @@ class CheckpointerRL(Checkpointer):
         super(CheckpointerRL, self).__init__(save_path)
 
     def after_step(self):
-        torch.save([
-            self.trainer.actor_critic,
-            getattr(utils.get_vec_normalize(self.trainer.envs), 'obs_rms', None)
-        ], os.path.join(self.save_path, self.trainer.args.env_name + str(self.trainer.iter) + ".pt"))
-        print("save {}......".format(self.trainer.iter))
+        if (self.trainer.iter % self.trainer.args.save_interval == 0 or
+            self.trainer.iter == self.trainer.num_updates - 1) and \
+                self.trainer.args.save_dir != "":
+
+            torch.save([
+                self.trainer.actor_critic,
+                getattr(utils.get_vec_normalize(self.trainer.envs), 'obs_rms', None)
+            ], os.path.join(self.save_path, self.trainer.args.env_name + str(self.trainer.iter) + ".pt"))
+            print("save {}......".format(self.trainer.iter))
 
 
 class InfoPrinterRL(InfoPrinter):
@@ -32,6 +37,7 @@ class InfoPrinterRL(InfoPrinter):
         super(InfoPrinterRL, self).__init__()
 
     def after_step(self):
+        print('iteration: ', self.trainer.iter)
         if self.trainer.iter % self.trainer.args.log_interval == 0 and len(self.trainer.episode_rewards) > 1:
             total_num_steps = (self.trainer.iter + 1) * self.trainer.args.num_processes * self.trainer.args.num_steps
             print(
@@ -49,11 +55,11 @@ class RLTrainer(BaseTrainer):
         self.args = args
         self.config = config
         self.device = torch.device("cuda:0" if args.cuda else "cpu")
-        self.envs = make_vec_envs(args.env_name,
+        self.envs = make_vec_envs(self,
+                                  args.env_name,
                                   args.seed,
                                   args.num_processes,
                                   args.gamma,
-                                  args.log_dir,
                                   self.device, False)
         self.actor_critic = Policy(
             self.envs.observation_space.shape,
@@ -79,7 +85,7 @@ class RLTrainer(BaseTrainer):
         self.rollouts.to(self.device)
 
         self.episode_rewards_len = 10
-        self.episode_rewards = self.deque(maxlen=self.episode_rewards_len)
+        self.episode_rewards = deque(maxlen=self.episode_rewards_len)
 
         self.num_updates = int(
             args.num_env_steps) // args.num_steps // args.num_processes
@@ -91,10 +97,10 @@ class RLTrainer(BaseTrainer):
 
         save_path = os.path.join(args.save_dir, args.algo)
         self.checkpointer = CheckpointerRL(save_path)
-
+        self.info_printer = InfoPrinterRL()
         self.timer = Timer()
 
-        self.register_hooks([self.Timer, self.checkpointer])
+        self.register_hooks([self.timer, self.checkpointer, self.info_printer])
 
     def _select_algorithm(self):
         args = self.args
@@ -218,7 +224,7 @@ class RLTrainer(BaseTrainer):
             self.loss[None] = 0.
             for l in self.losses:
                 l[None] = 0.
-            self.solver.clear_states(config.max_steps)
+            self.solver.clear_states(self.max_steps)
 
             for step in range(self.args.num_steps):
                 # Sample actions
@@ -248,13 +254,13 @@ class RLTrainer(BaseTrainer):
                 self.solver.draw_robot(gui, t, self.target_v)
                 gui.show('{}/{:04d}.png'.format(folder, t))
 
-            folder = os.path.join(args.log_dir, "video/{}".format(iter_num))
+            folder = os.path.join(self.config.get_config()["train"]["save_dir"], "validation_output_video/{}".format(iter_num))
             os.makedirs(folder, exist_ok=True)
-            for i in range(config.max_steps):
+            for i in range(self.max_steps):
                 if i % 10 == 0:
                     visualizer(i, folder)
 
-            self.get_loss(config.max_steps + 1, loss_enable={"velocity"})
+            self.get_loss(self.max_steps + 1, loss_enable={"velocity"})
 
             task_iter.append(iter_num)
             task_loss.append(self.loss[None])

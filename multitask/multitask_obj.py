@@ -12,7 +12,6 @@ from taichi.lang.impl import reset
 from multitask.hooks import HookBase
 
 from multitask.utils import Debug, real, plot_curve, load_string, scalar, vec, mat
-# from multitask.config import *
 from multitask.nn import Model
 from multitask.solver_mass_spring import SolverMassSpring
 from multitask.solver_mpm import SolverMPM
@@ -26,7 +25,6 @@ class BaseTrainer:
     def __init__(self, config):
         self.random_seed = int(time.time()*1e6) % 10000
         self.iter = 0
-
         self.loss = scalar()
         loss_velocity = scalar()
         loss_height = scalar()
@@ -49,15 +47,16 @@ class BaseTrainer:
         self.initial_center = vec()
 
         self.config = config.get_config()
-        n_objects = self.config["robot"]["n_objects"]
-        ti.root.dense(ti.i, n_objects).place(self.initial_objects)
+        self.n_objects = self.config["robot"]["n_objects"]
+        # n_objects = self.config["robot"]["n_objects"]
+        ti.root.dense(ti.i, self.n_objects).place(self.initial_objects)
         ti.root.place(self.initial_center)
 
         self.input_state = scalar()
         self.max_steps = self.config["process"]["max_steps"]
         self.batch_size = self.config["nn"]["batch_size"]
+        self.robot_id = self.config["robot"]["robot_id"]
         self.n_input_states = self.config["nn"]["n_input_states"]
-        self.n_objects = self.config["robot"]["n_objects"]
         self.n_springs = self.config["robot"]["n_springs"]
         self.objects = self.config["robot"]["objects"]
         self.simulator = self.config["robot"]["simulator"]
@@ -78,7 +77,7 @@ class BaseTrainer:
         ti.root.dense(ti.ij, (self.max_steps, self.batch_size)).place(self.target_v, self.target_h)
 
         # Initialize simulation
-        self.solver = SolverMPM() if self.simulator == "mpm" else SolverMassSpring()
+        self.solver = SolverMPM() if self.simulator == "mpm" else SolverMassSpring(config)
         self.x = self.solver.x
         self.v = self.solver.v
         self.center = self.solver.center
@@ -95,7 +94,7 @@ class BaseTrainer:
     def nn_input(self, t: ti.i32, offset: ti.i32, max_speed: ti.f64, max_height: ti.f64):
         for k, j in ti.ndrange(self.batch_size, self.n_sin_waves):
             self.input_state[t, k, j] = ti.sin(self.spring_omega * (t + offset) * self.dt + 2 * math.pi / self.n_sin_waves * j)
-        dim = self.dim
+        dim = int(self.dim)
         n_sin_waves = self.n_sin_waves
         duplicate_v = self.duplicate_v
         duplicate_h = self.duplicate_h
@@ -103,18 +102,22 @@ class BaseTrainer:
         batch_size = self.batch_size
         for k, j in ti.ndrange(self.batch_size, self.n_objects):
             vec_x = self.x[t, k, j] - self.center[t, k]
-            for d in ti.static(range(dim)):
-                if ti.static(dim == 2):
+            for d in ti.static(range(self.dim)):
+                if ti.static(self.dim == 2):
                     self.input_state[t, k, j * dim * 2 + n_sin_waves + d] = vec_x[d] / 0.2
                     self.input_state[t, k, j * dim * 2 + n_sin_waves + dim + d] = 0
+                    if float(vec_x[d] / 0.2) > 1.0 or float(vec_x[d] / 0.2) < -1.0:
+                        print("I am wrong at first", j, k, d, vec_x[d])
                 else:
                     self.input_state[t, k, j * dim * 2 + n_sin_waves + d] = vec_x[d] * float(sys.argv[2])
                     self.input_state[t, k, j * dim * 2 + n_sin_waves + dim + d] = 0
 
-        if ti.static(duplicate_v > 0):
-            if ti.static(dim == 2):
-                for k, j in ti.ndrange(batch_size, duplicate_v):
+        if ti.static(self.duplicate_v > 0):
+            if ti.static(self.dim == 2):
+                for k, j in ti.ndrange(self.batch_size, self.duplicate_v):
                     self.input_state[t, k, n_objects * dim * 2 + n_sin_waves + j * (dim - 1)] = self.target_v[t, k][0] / max_speed
+                    if float(self.target_v[t, k][0] / max_speed) < -1.0 or float(self.target_v[t, k][0] / max_speed) > 1.0:
+                        print(f"I am wrong du v {n_objects * dim * 2 + n_sin_waves + j * (dim - 1)}")
             else:
                 for k, j in ti.ndrange(batch_size, duplicate_v):
                     self.input_state[t, k, n_objects * dim * 2 + n_sin_waves + j * (dim - 1)] = self.target_v[t, k][0] * float(
@@ -122,10 +125,12 @@ class BaseTrainer:
                     self.input_state[t, k, n_objects * dim * 2 + n_sin_waves + j * (dim - 1) + 1] = self.target_v[t, k][
                                                                                                    2] * float(
                         sys.argv[3])
-        if ti.static(duplicate_h > 0):
-            for k, j in ti.ndrange(batch_size, duplicate_h):
+        if ti.static(self.duplicate_h > 0):
+            for k, j in ti.ndrange(self.batch_size, self.duplicate_h):
                 self.input_state[t, k, n_objects * dim * 2 + n_sin_waves + duplicate_v * (dim - 1) + j] = (self.target_h[
                                                                                                           t, k] - 0.1) / max_height * 2 - 1
+                if float((self.target_h[t, k] - 0.1) / max_height * 2 - 1) > 1.0 or float((self.target_h[t, k] - 0.1) / max_height * 2 - 1) < -1.0:
+                    print(f"I am wrong du k {n_objects * dim * 2 + n_sin_waves + duplicate_v * (dim - 1) + j}")
 
     @ti.kernel
     def compute_loss_velocity(self, steps: ti.template()):

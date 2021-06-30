@@ -23,6 +23,7 @@ class ConfigSim:
     def _add_adaptive_configs(self):
         # Robot
         robot_id = self._config["robot"]["robot_id"]
+        faces = []
         if robot_id > 10000:
             self._config["robot"]["simulator"] = "mpm"
             self._config["robot"]["dim"] = 2
@@ -40,6 +41,8 @@ class ConfigSim:
             n_springs = len(springs)
 
         self._config["robot"]["objects"] = objects
+        self._config["robot"]["springs"] = springs
+        self._config["robot"]["faces"] = faces
         self._config["robot"]["n_objects"] = n_objects
         self._config["robot"]["n_springs"] = n_springs
 
@@ -65,7 +68,7 @@ class ConfigSim:
         duplicate_h = self._config["nn"]["duplicate_h"]
         duplicate_v = self._config["nn"]["duplicate_v"]
 
-        self._config["nn"]["n_input_states"]= n_sin_waves + dim * 2 * n_objects + duplicate_v * (dim - 1) + duplicate_h
+        self._config["nn"]["n_input_states"] = n_sin_waves + dim * 2 * n_objects + duplicate_v * (dim - 1) + duplicate_h
 
         self._config["nn"]["adam_a"] = self._config["nn"]["learning_rate"]
 

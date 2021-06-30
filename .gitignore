@@ -10,6 +10,8 @@ weights/
 *.log
 *.pkl
 *.png
+*.pt
+*.csv
 log/
 video*
 xujie_results/
