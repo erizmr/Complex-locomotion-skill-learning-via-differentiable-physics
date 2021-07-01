@@ -27,11 +27,15 @@ class ConfigSim:
         run_id = datetime.now().strftime(r'%m%d_%H%M%S')
         self._save_dir = save_dir / 'models' / exper_name / run_id
         self._log_dir = save_dir / 'log' / exper_name / run_id
+        self._monitor_dir = save_dir / 'monitor' / exper_name / run_id
+        self._video_dir = save_dir / 'video' / exper_name / run_id
 
         # make directory for saving checkpoints and log.
         exist_ok = run_id == ''
         self.save_dir.mkdir(parents=True, exist_ok=exist_ok)
         self.log_dir.mkdir(parents=True, exist_ok=exist_ok)
+        self.monitor_dir.mkdir(parents=True, exist_ok=exist_ok)
+        self.video_dir.mkdir(parents=True, exist_ok=exist_ok)
 
         # save updated config file to the checkpoint dir
         write_json(self.config, self.save_dir / 'config.json')
@@ -139,3 +143,11 @@ class ConfigSim:
     @property
     def log_dir(self):
         return self._log_dir
+
+    @property
+    def monitor_dir(self):
+        return self._monitor_dir
+
+    @property
+    def video_dir(self):
+        return self._video_dir

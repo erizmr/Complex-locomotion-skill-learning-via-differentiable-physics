@@ -21,7 +21,9 @@ from stable_baselines3.common.vec_env.vec_normalize import \
 import sys
 sys.path.append('../multitask/')
 # from multitask.multitask_rl import ti, config, multitask, MassSpringEnv, shutil
-from multitask.multitask_rl import ti, MassSpringEnv, shutil
+import taichi as ti
+from multitask.multitask_rl import MassSpringEnv
+import shutil
 
 try:
     import dmc2gym
@@ -46,9 +48,8 @@ def make_env(trainer,
              allow_early_resets):
 
     def _thunk(trainer=trainer):
-        log_dir = os.path.join(trainer.config.get_config()["train"]["save_dir"], 'monitor')
-        robot_id = trainer.robot_id
-        sim_seed = trainer.random_seed
+        monitor_dir = trainer.config.monitor_dir
+        log_dir = trainer.config.log_dir
         if env_id.startswith("dm"):
             _, domain, task = env_id.split('.')
             env = dmc2gym.make(domain_name=domain, task_name=task)
@@ -56,20 +57,10 @@ def make_env(trainer,
         else:
             # env = gym.make(env_id)
             gui = ti.GUI(background_color=0xFFFFFF, show_gui = False)
-
-            video_dir = os.path.join(log_dir, "video_{}_seed{}".format(robot_id, sim_seed))
-            log_dir = os.path.join(log_dir, "log_{}_seed{}".format(robot_id, sim_seed))
-            print(video_dir, log_dir)
-            if os.path.exists(video_dir):
-                shutil.rmtree(video_dir)
-
-            os.makedirs(video_dir, exist_ok=True)
-            os.makedirs(log_dir, exist_ok=True)
-            # multitask.setup_robot()
             trainer.setup_robot()
-            env = MassSpringEnv(video_dir=video_dir, trainer=trainer)
+            env = MassSpringEnv(trainer=trainer)
             # check_env(env)
-            env = Monitor(env, log_dir)
+            env = Monitor(env, str(monitor_dir))
 
         is_atari = hasattr(gym.envs, 'atari') and isinstance(
             env.unwrapped, gym.envs.atari.atari_env.AtariEnv)
@@ -84,7 +75,7 @@ def make_env(trainer,
 
         if log_dir is not None:
             env = Monitor(env,
-                          os.path.join(log_dir, str(rank)),
+                          os.path.join(str(log_dir), str(rank)),
                           allow_early_resets=allow_early_resets)
 
         if is_atari:

@@ -1,7 +1,8 @@
 {
   "train": {
     "name": "DiffTaichi_RL",
-    "save_dir": "/home/mingrui/difftaichi/difftaichi2/saved_results"
+    "save_dir": "/home/mingrui/difftaichi/difftaichi2/saved_results",
+    "output_video": true
   },
   "robot": {
     "dim": 2,

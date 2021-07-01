@@ -47,7 +47,6 @@ class BaseTrainer:
         self.logger = config.get_logger(name="DiffTaichi")
         self.config = config.get_config()
         self.n_objects = self.config["robot"]["n_objects"]
-        # n_objects = self.config["robot"]["n_objects"]
         ti.root.dense(ti.i, self.n_objects).place(self.initial_objects)
         ti.root.place(self.initial_center)
 

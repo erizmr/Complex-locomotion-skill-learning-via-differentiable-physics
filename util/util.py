@@ -7,15 +7,6 @@ from collections import OrderedDict
 import torch
 from typing import Any, Callable, Dict, IO, List, Optional, Tuple, Union
 import math
-import taichi as ti
-
-@ti.kernel
-def h2l(h2l_f: ti.template(), h_f: ti.template()):
-    for I_h in ti.static(h2l_f):
-        W = h2l_f.getW(I_h)
-        # to low resolution grid
-        # interpolate
-        h2l_f[I_h] = h_f.interpolate(W)
 
 
 def ensure_dir(dirname):

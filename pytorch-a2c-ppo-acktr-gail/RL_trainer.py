@@ -224,7 +224,7 @@ class RLTrainer(BaseTrainer):
         task_loss = []
         gui = ti.GUI(background_color=0xFFFFFF)
         for iter_num in range(0, self.args.validate, self.args.save_interval):
-            load_path = os.path.join(self.args.save_dir, self.args.algo)
+            load_path = self.config.save_dir
             [actor_critic, self.envs.venv.obs_rms] = torch.load(
                 os.path.join(load_path, self.args.env_name + str(iter_num) + ".pt"))
             print("load ", os.path.join(load_path, self.args.env_name + str(iter_num) + ".pt"))
@@ -262,7 +262,7 @@ class RLTrainer(BaseTrainer):
                 self.solver.draw_robot(gui, t, self.target_v)
                 gui.show('{}/{:04d}.png'.format(folder, t))
 
-            folder = os.path.join(self.config.get_config()["train"]["save_dir"], "validation_output_video/{}".format(iter_num))
+            folder = os.path.join(self.config.save_dir, "validation_output_video/{}".format(iter_num))
             os.makedirs(folder, exist_ok=True)
             for i in range(self.max_steps):
                 if i % 10 == 0:
