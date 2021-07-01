@@ -75,14 +75,6 @@ class MetricWriter(HookBase):
             self.valid_metrics = MetricTracker(*[m for m in self.trainer.metrics_validation], writer=self.writer)
         self.train_metrics.reset()
 
-    # def before_step(self):
-    #     pass
-    #
-    # def after_step(self):
-    #     pass
-    #
-    # def after_train(self):
-    #     pass
 
 
 

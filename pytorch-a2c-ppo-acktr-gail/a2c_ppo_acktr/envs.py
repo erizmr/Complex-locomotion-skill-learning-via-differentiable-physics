@@ -46,7 +46,7 @@ def make_env(trainer,
              allow_early_resets):
 
     def _thunk(trainer=trainer):
-        log_dir = trainer.config.get_config()["train"]["save_dir"]
+        log_dir = os.path.join(trainer.config.get_config()["train"]["save_dir"], 'monitor')
         robot_id = trainer.robot_id
         sim_seed = trainer.random_seed
         if env_id.startswith("dm"):
@@ -56,7 +56,7 @@ def make_env(trainer,
         else:
             # env = gym.make(env_id)
             gui = ti.GUI(background_color=0xFFFFFF, show_gui = False)
-            #visualizer.frame = 0
+
             video_dir = os.path.join(log_dir, "video_{}_seed{}".format(robot_id, sim_seed))
             log_dir = os.path.join(log_dir, "log_{}_seed{}".format(robot_id, sim_seed))
             print(video_dir, log_dir)

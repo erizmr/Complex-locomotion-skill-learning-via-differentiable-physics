@@ -95,15 +95,15 @@ class RLTrainer(BaseTrainer):
         utils.cleanup_log_dir(log_dir)
         utils.cleanup_log_dir(eval_log_dir)
 
-        save_path = os.path.join(args.save_dir, args.algo)
+        save_path = self.config.save_dir
         self.checkpointer = CheckpointerRL(save_path)
         self.info_printer = InfoPrinterRL()
         self.timer = Timer()
         self.metric_writer = MetricWriter()
 
         # Metrics to tracking during training
-        self.metrics_train = ["mean_reward"]
-        self.metrics_validation = []
+        self.metrics_train = ["mean_reward", "max_reward", "min_reward"]
+        self.metrics_validation = ["task_loss"]
 
         self.register_hooks([self.timer, self.checkpointer, self.info_printer, self.metric_writer])
 
@@ -216,7 +216,12 @@ class RLTrainer(BaseTrainer):
         value_loss, action_loss, dist_entropy = self.agent.update(self.rollouts)
         self.rollouts.after_update()
 
+        # Write to tensorboard
+        self.metric_writer.writer.set_step(step=self.iter - 1)
         self.metric_writer.train_metrics.update("mean_reward", np.mean(self.episode_rewards))
+        self.metric_writer.train_metrics.update("max_reward", np.amax(self.episode_rewards))
+        self.metric_writer.train_metrics.update("min_reward", np.amin(self.episode_rewards))
+
 
     def validate(self):
         task_iter = []
