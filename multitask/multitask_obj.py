@@ -8,11 +8,9 @@ import weakref
 import threading
 import logging
 
-# from taichi.lang.impl import reset
 from multitask.hooks import HookBase
 
 from multitask.utils import Debug, real, plot_curve, load_string, scalar, vec, mat
-# from multitask.nn import Model
 from multitask.solver_mass_spring import SolverMassSpring
 from multitask.solver_mpm import SolverMPM
 from logger import TensorboardWriter

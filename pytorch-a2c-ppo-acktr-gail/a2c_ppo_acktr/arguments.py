@@ -5,6 +5,9 @@ import torch
 
 def get_args():
     parser = argparse.ArgumentParser(description='RL')
+    parser.add_argument('--config_file',
+                        default='./cfg/sim_config_RL.json',
+                        help='experiment config file')
     parser.add_argument(
         '--validate',
         type=int,

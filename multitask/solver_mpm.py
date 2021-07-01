@@ -6,6 +6,8 @@ from multitask.utils import vec, scalar, mat, real
 class SolverMPM:
     def __init__(self, config):
         self.config = config
+        self.simulator = 'mpm'
+        # General parameters
         self.max_steps = config.get_config()["process"]["max_steps"]
         self.dt = config.get_config()["process"]["dt"]
         self.ground_height = config.get_config()["simulator"]["ground_height"]
@@ -17,6 +19,18 @@ class SolverMPM:
         self.n_springs = config.get_config()["robot"]["n_springs"]
         self.springs = config.get_config()["robot"]["springs"]
         self.dim = config.get_config()["robot"]["dim"]
+
+        # Parameters for MPM
+        self.n_particles = config.get_config()["simulator"]["n_particles"]
+        self.n_grid = config.get_config()["simulator"]["mpm"]["n_grid"]
+        self.dx = config.get_config()["simulator"]["mpm"]["dx"]
+        self.inv_dx = config.get_config()["simulator"]["mpm"]["inv_dx"]
+        self.act_strength = config.get_config()["simulator"]["act_strength"]
+        self.p_vol = config.get_config()["simulator"]["p_vol"]
+        self.E = config.get_config()["simulator"]["E"]
+        self.mu = config.get_config()["simulator"]["mu"]
+        self.la = config.get_config()["simulator"]["la"]
+        self.bound = config.get_config()["simulator"]["bound"]
 
         self.x = vec()
         self.v = vec()
@@ -34,45 +48,45 @@ class SolverMPM:
         self.grid_v_in, self.grid_m_in = vec(), scalar()
         self.grid_v_out = vec()
         ti.root.dense(ti.ij, (self.batch_size, self.n_particles)).place(self.actuator_id, self.particle_type)
-        ti.root.dense(ti.ijk, (self.max_steps, batch_size, n_particles)).place(self.C, self.F)
-        ti.root.dense(ti.ijk, (self.batch_size, n_grid, n_grid)).place(self.grid_v_in, self.grid_m_in, self.grid_v_out)
+        ti.root.dense(ti.ijk, (self.max_steps, self.batch_size, self.n_particles)).place(self.C, self.F)
+        ti.root.dense(ti.ijk, (self.batch_size, self.n_grid, self.n_grid)).place(self.grid_v_in, self.grid_m_in, self.grid_v_out)
 
     def initialize_robot(self):
-        for k in range(batch_size):
-            for i in range(n_objects):
-                self.actuator_id[k, i] = springs[i]
+        for k in range(self.batch_size):
+            for i in range(self.n_objects):
+                self.actuator_id[k, i] = self.springs[i]
         self.particle_type.fill(1)
 
     @ti.kernel
     def clear_states(self, steps: ti.template()):
-        for t, k, i in ti.ndrange(steps, batch_size, n_particles):
-            self.x.grad[t, k, i] = ti.Matrix.zero(real, dim, 1)
-            self.v.grad[t, k, i] = ti.Matrix.zero(real, dim, 1)
-            self.C[t, k, i] = ti.Matrix.zero(real, dim, dim)
-            self.C.grad[t, k, i] = ti.Matrix.zero(real, dim, dim)
-            if ti.static(dim == 2):
+        for t, k, i in ti.ndrange(steps, self.batch_size, self.n_particles):
+            self.x.grad[t, k, i] = ti.Matrix.zero(real, self.dim, 1)
+            self.v.grad[t, k, i] = ti.Matrix.zero(real, self.dim, 1)
+            self.C[t, k, i] = ti.Matrix.zero(real, self.dim, self.dim)
+            self.C.grad[t, k, i] = ti.Matrix.zero(real, self.dim, self.dim)
+            if ti.static(self.dim == 2):
                 self.F[t, k, i] = [[1., 0.], [0., 1.]]
             else:
                 self.F[t, k, i] = [[1., 0., 0.], [0., 1., 0.], [0., 0., 1.]]
-            self.F.grad[t, k, i] = ti.Matrix.zero(real, dim, dim)
+            self.F.grad[t, k, i] = ti.Matrix.zero(real, self.dim, self.dim)
 
     @ti.kernel
     def clear_grid(self):
-        for k, i, j in ti.ndrange(batch_size, n_grid, n_grid):
-            self.grid_v_in[k, i, j] = ti.Matrix.zero(real, dim, 1)
+        for k, i, j in ti.ndrange(self.batch_size, self.n_grid, self.n_grid):
+            self.grid_v_in[k, i, j] = ti.Matrix.zero(real, self.dim, 1)
             self.grid_m_in[k, i, j] = 0
-            self.grid_v_out[k, i, j] = ti.Matrix.zero(real, dim, 1)
-            self.grid_v_in.grad[k, i, j] = ti.Matrix.zero(real, dim, 1)
+            self.grid_v_out[k, i, j] = ti.Matrix.zero(real, self.dim, 1)
+            self.grid_v_in.grad[k, i, j] = ti.Matrix.zero(real, self.dim, 1)
             self.grid_m_in.grad[k, i, j] = 0
-            self.grid_v_out.grad[k, i, j] = ti.Matrix.zero(real, dim, 1)
+            self.grid_v_out.grad[k, i, j] = ti.Matrix.zero(real, self.dim, 1)
 
     @ti.kernel
     def p2g(self, f: ti.i32):
-        for k, p in ti.ndrange(batch_size, n_particles):
-            base = ti.cast(self.x[f, k, p] * inv_dx - 0.5, ti.i32)
-            fx = self.x[f, k, p] * inv_dx - ti.cast(base, ti.i32)
+        for k, p in ti.ndrange(self.batch_size, self.n_particles):
+            base = ti.cast(self.x[f, k, p] * self.inv_dx - 0.5, ti.i32)
+            fx = self.x[f, k, p] * self.inv_dx - ti.cast(base, ti.i32)
             w = [0.5 * (1.5 - fx)**2, 0.75 - (fx - 1)**2, 0.5 * (fx - 0.5)**2]
-            new_F = (ti.Matrix.diag(dim=2, val=1) + dt * self.C[f, k, p]) @ self.F[f, k, p]
+            new_F = (ti.Matrix.diag(dim=2, val=1) + self.dt * self.C[f, k, p]) @ self.F[f, k, p]
             J = (new_F).determinant()
             if self.particle_type[k, p] == 0:  # fluid
                 sqrtJ = ti.sqrt(J)
@@ -83,7 +97,7 @@ class SolverMPM:
 
             act_id = self.actuator_id[k, p]
 
-            act_applied = self.actuation[f, k, ti.max(0, act_id)] * act_strength
+            act_applied = self.actuation[f, k, ti.max(0, act_id)] * self.act_strength
             if act_id == -1:
                 act_applied = 0.0
             # ti.print(act_applied)
@@ -93,18 +107,18 @@ class SolverMPM:
             mass = 0.0
             if self.particle_type[k, p] == 0:
                 mass = 4
-                cauchy = ti.Matrix([[1.0, 0.0], [0.0, 0.1]]) * (J - 1) * E
+                cauchy = ti.Matrix([[1.0, 0.0], [0.0, 0.1]]) * (J - 1) * self.E
             else:
                 mass = 1
-                cauchy = 2 * mu * (new_F - r) @ new_F.transpose() + \
-                         ti.Matrix.diag(2, la * (J - 1) * J)
+                cauchy = 2 * self.mu * (new_F - r) @ new_F.transpose() + \
+                         ti.Matrix.diag(2, self.la * (J - 1) * J)
             cauchy += new_F @ A @ new_F.transpose()
-            stress = -(dt * p_vol * 4 * inv_dx * inv_dx) * cauchy
+            stress = -(self.dt * self.p_vol * 4 * self.inv_dx * self.inv_dx) * cauchy
             affine = stress + mass * self.C[f, k, p]
             for i in ti.static(range(3)):
                 for j in ti.static(range(3)):
                     offset = ti.Vector([i, j])
-                    dpos = (ti.cast(ti.Vector([i, j]), real) - fx) * dx
+                    dpos = (ti.cast(ti.Vector([i, j]), real) - fx) * self.dx
                     weight = w[i](0) * w[j](1)
                     self.grid_v_in[k, base + offset] += weight * (mass * self.v[f, k, p] + affine @ dpos)
                     self.grid_m_in[k, base + offset] += weight * mass
@@ -114,26 +128,26 @@ class SolverMPM:
         for k, i, j in self.grid_m_in:
             inv_m = 1 / (self.grid_m_in[k, i, j] + 1e-10)
             v_out = inv_m * self.grid_v_in[k, i, j]
-            v_out[1] += dt * gravity
-            if i < bound:
+            v_out[1] += self.dt * self.gravity
+            if i < self.bound:
                 v_out[0] = 0
                 v_out[1] = 0
-            if i > n_grid - bound:
+            if i > self.n_grid - self.bound:
                 v_out[0] = 0
                 v_out[1] = 0
-            if j < bound:
+            if j < self.bound:
                 v_out[0] = 0
                 v_out[1] = 0
-            if j > n_grid - bound:
+            if j > self.n_grid - self.bound:
                 v_out[0] = 0
                 v_out[1] = 0
             self.grid_v_out[k, i, j] = v_out
 
     @ti.kernel
     def g2p(self, f: ti.i32):
-        for k, p in ti.ndrange(batch_size, n_particles):
-            base = ti.cast(self.x[f, k, p] * inv_dx - 0.5, ti.i32)
-            fx = self.x[f, k, p] * inv_dx - ti.cast(base, real)
+        for k, p in ti.ndrange(self.batch_size, self.n_particles):
+            base = ti.cast(self.x[f, k, p] * self.inv_dx - 0.5, ti.i32)
+            fx = self.x[f, k, p] * self.inv_dx - ti.cast(base, real)
             w = [0.5 * (1.5 - fx)**2, 0.75 - (fx - 1.0)**2, 0.5 * (fx - 0.5)**2]
             new_v = ti.Vector([0.0, 0.0])
             new_C = ti.Matrix([[0.0, 0.0], [0.0, 0.0]])
@@ -144,18 +158,18 @@ class SolverMPM:
                     g_v = self.grid_v_out[k, base(0) + i, base(1) + j]
                     weight = w[i](0) * w[j](1)
                     new_v += weight * g_v
-                    new_C += 4 * weight * g_v.outer_product(dpos) * inv_dx
+                    new_C += 4 * weight * g_v.outer_product(dpos) * self.inv_dx
 
             self.v[f + 1, k, p] = new_v
-            self.x[f + 1, k, p] = self.x[f, k, p] + dt * self.v[f + 1, k, p]
+            self.x[f + 1, k, p] = self.x[f, k, p] + self.dt * self.v[f + 1, k, p]
             self.C[f + 1, k, p] = new_C
 
     @ti.kernel
     def compute_center(self, t: ti.i32):
-        n = ti.static(n_objects)
-        for k in range(batch_size):
-            self.center[t, k] = ti.Matrix.zero(real, dim, 1)
-        for k, i in ti.ndrange(batch_size, n):
+        n = ti.static(self.n_objects)
+        for k in range(self.batch_size):
+            self.center[t, k] = ti.Matrix.zero(real, self.dim, 1)
+        for k, i in ti.ndrange(self.batch_size, n):
             self.center[t, k] += self.x[t, k, i] / n
 
     @ti.complex_kernel
@@ -181,11 +195,11 @@ class SolverMPM:
 
     def draw_robot(self, gui, t, target_v):
         def circle(x, y, color):
-            gui.circle((x, y + 0.1 - dx * bound), ti.rgb_to_hex(color), 2)
+            gui.circle((x, y + 0.1 - self.dx * self.bound), ti.rgb_to_hex(color), 2)
         aid = self.actuator_id.to_numpy()
-        for i in range(n_objects):
+        for i in range(self.n_objects):
             color = (0.06640625, 0.06640625, 0.06640625)
-            if simulator == "mpm" and aid[0, i] != -1:
+            if self.simulator == "mpm" and aid[0, i] != -1:
                 act_applied = self.actuation[t - 1, 0, aid[0, i]]
                 color = (0.5 - act_applied, 0.5 - abs(act_applied), 0.5 + act_applied)
             circle(self.x[t, 0, i][0], self.x[t, 0, i][1], color)

@@ -7,13 +7,11 @@ import taichi as ti
 from multitask.multitask_obj import BaseTrainer
 from a2c_ppo_acktr import algo, utils
 from a2c_ppo_acktr.algo import gail
-from a2c_ppo_acktr.arguments import get_args
 from a2c_ppo_acktr.envs import make_env, make_vec_envs
 from a2c_ppo_acktr.model import Policy
 from a2c_ppo_acktr.storage import RolloutStorage
 from evaluation import evaluate
 from multitask.hooks import Checkpointer, InfoPrinter, Timer, MetricWriter
-# from multitask.config import *
 
 
 class CheckpointerRL(Checkpointer):
@@ -159,7 +157,6 @@ class RLTrainer(BaseTrainer):
                 drop_last=drop_last)
 
     def run_step(self):
-        # for j in range(self.num_updates):
         if self.args.use_linear_lr_decay:
             # decrease learning rate linearly
             utils.update_linear_schedule(
@@ -222,12 +219,11 @@ class RLTrainer(BaseTrainer):
         self.metric_writer.train_metrics.update("max_reward", np.amax(self.episode_rewards))
         self.metric_writer.train_metrics.update("min_reward", np.amin(self.episode_rewards))
 
-
     def validate(self):
         task_iter = []
         task_loss = []
         gui = ti.GUI(background_color=0xFFFFFF)
-        for iter_num in range(0, 10000, self.args.save_interval):
+        for iter_num in range(0, self.args.validate, self.args.save_interval):
             load_path = os.path.join(self.args.save_dir, self.args.algo)
             [actor_critic, self.envs.venv.obs_rms] = torch.load(
                 os.path.join(load_path, self.args.env_name + str(iter_num) + ".pt"))

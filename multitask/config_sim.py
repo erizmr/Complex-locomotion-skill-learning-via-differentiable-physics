@@ -79,7 +79,9 @@ class ConfigSim:
         self._config["simulator"]["dashpot_damping"] = 0.2 if self._config["robot"]["dim"] == 2 else 0.1
 
         self._config["simulator"]["n_particles"] = self._config["robot"]["n_objects"]
-        self._config["simulator"]["inv_dx"] = 1 / self._config["simulator"]["mpm"]["n_grid"]
+
+        self._config["simulator"]["mpm"]["dx"] = 1 / self._config["simulator"]["mpm"]["n_grid"]
+        self._config["simulator"]["mpm"]["inv_dx"] = 1 / self._config["simulator"]["mpm"]["dx"]
 
         # NN
         if self._config["robot"]["dim"] == 3:
