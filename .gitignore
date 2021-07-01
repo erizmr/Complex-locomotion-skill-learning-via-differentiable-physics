@@ -12,6 +12,8 @@ weights/
 *.png
 *.pt
 *.csv
+saved_results/
+remote_results/
 log/
 video*
 xujie_results/
