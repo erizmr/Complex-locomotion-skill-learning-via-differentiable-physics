@@ -71,8 +71,8 @@ class BaseTrainer:
 
         ti.root.dense(ti.ijk, (self.max_steps, self.batch_size, self.n_input_states)).place(self.input_state)
 
-        self.target_v, self.target_h = vec(), scalar()
-        ti.root.dense(ti.ij, (self.max_steps, self.batch_size)).place(self.target_v, self.target_h)
+        self.target_v, self.target_h, self.target_c = vec(), scalar(), scalar()
+        ti.root.dense(ti.ij, (self.max_steps, self.batch_size)).place(self.target_v, self.target_h, self.target_c)
 
         # Initialize simulation
         self.solver = SolverMPM() if self.simulator == "mpm" else SolverMassSpring(config)
@@ -255,20 +255,39 @@ class BaseTrainer:
         '''
 
     @ti.kernel
-    def initialize_train(self, iter: ti.i32, steps: ti.template(), max_speed: ti.f64, max_height: ti.f64):
+    def initialize_train(self, iter: ti.i32, steps: ti.template(), max_velocity: ti.f64, max_height: ti.f64):
         times = steps // self.turn_period + 1
         for _ in range(self.batch_size * times * 3):
             self.pool[_] = ti.random()
-        # Define different tasks here
+        # Define multi-tasks here
         for t, k in ti.ndrange(steps, self.batch_size):
             q = (t // self.turn_period * self.batch_size + k) * 3
-            # if pool[q + 0] < 0.5:
-            self.target_v[t, k][0] = 0.04
-            # target_h[t, k] = 0.1
-            self.target_h[t, k] = max_height + 0.1
-            # else:
-            #    target_v[t, k] *= 0.
-            #    target_h[t, k] = max_height + 0.1
+            if ti.static(self.dim == 2):
+                target_id = int(self.pool[q] * 4)
+                if target_id == 1:
+                    self.target_v[t, k][0] = (self.pool[q + 1] * 2 - 1) * max_velocity
+                    self.target_h[t, k] = 0.1
+                    self.target_c[t, k] = 0
+                elif target_id == 2:
+                    self.target_v[t, k][0] = (self.pool[q + 1] * 2 - 1) * max_velocity
+                    self.target_h[t, k] = self.pool[q + 2] * max_height + 0.1
+                    self.target_c[t, k] = 0
+                elif target_id == 3:
+                    self.target_v[t, k][0] = (self.pool[q + 1] * 2 - 1) * max_velocity
+                    self.target_h[t, k] = 0.1
+                    self.target_c[t, k] = 1.
+                else:
+                    self.target_v[t, k][0] = 0
+                    self.target_h[t, k] = 0.1
+                    self.target_c[t, k] = 0
+            else:
+                r = ti.sqrt(self.pool[q + 1])
+                angle = self.pool[q + 2] * 2 * 3.1415926
+                # r = 1.
+                # angle = 0.
+                self.target_v[t, k][0] = r * ti.cos(angle) * 0.05
+                self.target_v[t, k][2] = r * ti.sin(angle) * 0.05
+                self.target_h[t, k] = 0.
 
     @debug
     def visualizer(self, steps, prefix):

@@ -1,4 +1,4 @@
-import multitask.config as config
+
 
 import gym
 from gym import spaces
@@ -30,7 +30,7 @@ class MassSpringEnv(gym.Env):
         max_obs = np.ones(self.trainer.n_input_states, dtype=np.float64)
         self.action_space = spaces.Box(-max_act, max_act)
         self.observation_space = spaces.Box(-max_obs, max_obs)
-        self.rollout_length = config.max_steps
+        self.rollout_length = trainer.max_steps
         self.rollout_times = 0
         self.rewards = 0.
         self.last_height = 0.

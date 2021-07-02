@@ -50,15 +50,21 @@ def make_env(trainer,
     def _thunk(trainer=trainer):
         monitor_dir = trainer.config.monitor_dir
         log_dir = trainer.config.log_dir
+        simulator = trainer.simulator
         if env_id.startswith("dm"):
             _, domain, task = env_id.split('.')
             env = dmc2gym.make(domain_name=domain, task_name=task)
             env = ClipAction(env)
         else:
             # env = gym.make(env_id)
-            gui = ti.GUI(background_color=0xFFFFFF, show_gui = False)
+            gui = ti.GUI(background_color=0xFFFFFF, show_gui=False)
             trainer.setup_robot()
-            env = MassSpringEnv(trainer=trainer)
+            if simulator == "mass_spring":
+                env = MassSpringEnv(trainer=trainer)
+            elif simulator == "mpm":
+                raise NotImplementedError
+            else:
+                raise NotImplementedError
             # check_env(env)
             env = Monitor(env, str(monitor_dir))
 
