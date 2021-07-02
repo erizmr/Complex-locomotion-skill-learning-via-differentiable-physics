@@ -21,36 +21,9 @@ debug = Debug(False)
 @ti.data_oriented
 class BaseTrainer:
     def __init__(self, config):
-        self.random_seed = int(time.time()*1e6) % 10000
-        self.iter = 0
-        self.loss = scalar()
-        loss_velocity = scalar()
-        loss_height = scalar()
-        loss_pose = scalar()
-        loss_rotation = scalar()
-        loss_weight = scalar()
-        loss_act = scalar()
-        self.loss_dict = {'loss_v': loss_velocity,
-                          'loss_h': loss_height,
-                          'loss_p': loss_pose,
-                          'loss_r': loss_rotation,
-                          'loss_w': loss_weight,
-                          'loss_a': loss_act}
-        self.losses = self.loss_dict.values()
-
-        ti.root.place(self.loss)
-        ti.root.place(*self.losses)
-
-        self.initial_objects = vec()
-        self.initial_center = vec()
-
         self.logger = config.get_logger(name="DiffTaichi")
         self.config = config.get_config()
-        self.n_objects = self.config["robot"]["n_objects"]
-        ti.root.dense(ti.i, self.n_objects).place(self.initial_objects)
-        ti.root.place(self.initial_center)
-
-        self.input_state = scalar()
+        self.dim = self.config["robot"]["dim"]
         self.max_steps = self.config["process"]["max_steps"]
         self.batch_size = self.config["nn"]["batch_size"]
         self.robot_id = self.config["robot"]["robot_id"]
@@ -64,14 +37,44 @@ class BaseTrainer:
         self.n_sin_waves = self.config["nn"]["n_sin_waves"]
         self.spring_omega = self.config["process"]["spring_omega"]
         self.dt = self.config["process"]["dt"]
-        self.dim = self.config["robot"]["dim"]
         self.duplicate_v = self.config["nn"]["duplicate_v"]
         self.duplicate_h = self.config["nn"]["duplicate_h"]
         self.output_vis_interval = self.config["process"]["output_vis_interval"]
+        self.ground_height = self.config["simulator"]["ground_height"]
+
+        self.random_seed = int(time.time() * 1e6) % 10000
+        self.iter = 0
+        self.max_iter = 10000  # Default training iterations, can be overwrote by args
+        self.loss = scalar()
+        self.loss_velocity = scalar()
+        self.loss_height = scalar()
+        self.loss_pose = scalar()
+        self.loss_rotation = scalar()
+        self.loss_weight = scalar()
+        self.loss_act = scalar()
+        self.loss_dict = {'loss_v': self.loss_velocity,
+                          'loss_h': self.loss_height,
+                          'loss_p': self.loss_pose,
+                          'loss_r': self.loss_rotation,
+                          'loss_w': self.loss_weight,
+                          'loss_a': self.loss_act}
+        self.losses = self.loss_dict.values()
+
+        ti.root.place(self.loss)
+        ti.root.place(*self.losses)
+
+        self.initial_objects = vec(self.dim)
+        self.initial_center = vec(self.dim)
+
+        self.n_objects = self.config["robot"]["n_objects"]
+        ti.root.dense(ti.i, self.n_objects).place(self.initial_objects)
+        ti.root.place(self.initial_center)
+
+        self.input_state = scalar()
 
         ti.root.dense(ti.ijk, (self.max_steps, self.batch_size, self.n_input_states)).place(self.input_state)
 
-        self.target_v, self.target_h, self.target_c = vec(), scalar(), scalar()
+        self.target_v, self.target_h, self.target_c = vec(self.dim), scalar(), scalar()
         ti.root.dense(ti.ij, (self.max_steps, self.batch_size)).place(self.target_v, self.target_h, self.target_c)
 
         # Initialize simulation
@@ -147,7 +150,7 @@ class BaseTrainer:
     def compute_loss_height(self, steps: ti.template()):
         for t, k in ti.ndrange((1, steps + 1), self.batch_size):
             if t % self.jump_period == self.jump_period - 1 and self.target_h[t, k] > 0.1:
-                self.loss_height[None] += (self.height[t, k] - self.target_h[t, k]) ** 2 / self.batch_size / (self.steps // self.jump_period) * 100
+                self.loss_height[None] += (self.height[t, k] - self.target_h[t, k]) ** 2 / self.batch_size / (steps // self.jump_period) * 100
 
     @ti.kernel
     def compute_loss_pose(self, steps: ti.template()):
@@ -265,18 +268,22 @@ class BaseTrainer:
             if ti.static(self.dim == 2):
                 target_id = int(self.pool[q] * 4)
                 if target_id == 1:
+                    # Move backward or forward
                     self.target_v[t, k][0] = (self.pool[q + 1] * 2 - 1) * max_velocity
                     self.target_h[t, k] = 0.1
                     self.target_c[t, k] = 0
                 elif target_id == 2:
+                    # Move backward or forward & jump
                     self.target_v[t, k][0] = (self.pool[q + 1] * 2 - 1) * max_velocity
                     self.target_h[t, k] = self.pool[q + 2] * max_height + 0.1
                     self.target_c[t, k] = 0
                 elif target_id == 3:
+                    # Move backward or forward & crawl
                     self.target_v[t, k][0] = (self.pool[q + 1] * 2 - 1) * max_velocity
                     self.target_h[t, k] = 0.1
                     self.target_c[t, k] = 1.
                 else:
+                    # Keep still
                     self.target_v[t, k][0] = 0
                     self.target_h[t, k] = 0.1
                     self.target_c[t, k] = 0
@@ -350,8 +357,8 @@ class BaseTrainer:
         raise NotImplementedError
 
     def train(self, start_iter, max_iter):
-        logger = logging.getLogger(__name__)
-        logger.info("Starting training from iteration {}".format(start_iter))
+        # logger = logging.getLogger(__name__)
+        self.logger.info("Starting training from iteration {}".format(start_iter))
 
         self.iter = self.start_iter = start_iter
         self.max_iter = max_iter
@@ -367,7 +374,7 @@ class BaseTrainer:
             # due to exceptions.
             self.iter += 1
         except Exception:
-            logger.exception("Exception during training:")
+            self.logger.exception("Exception during training:")
             raise
         finally:
             self.after_train()

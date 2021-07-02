@@ -9,28 +9,38 @@ def get_args():
                         default='./cfg/sim_config_RL.json',
                         help='experiment config file')
     parser.add_argument(
+        '--train',
+        action='store_true',
+        help='whether train model, default false')
+    parser.add_argument(
         '--validate',
-        type=int,
-        default=-1,
-        help='validate model')
+        action='store_true',
+        help='whether validate model, default false')
+    parser.add_argument(
+        '--evaluate',
+        action='store_true',
+        help='whether evaluate model, default false')
+    parser.add_argument(
+        '--evaluate_path',
+        default='',
+        help='the folder to validate')
     parser.add_argument(
         '--algo', default='a2c', help='algorithm to use: a2c | ppo | acktr')
     parser.add_argument(
         '--gail',
         action='store_true',
-        default=False,
         help='do imitation learning with gail')
-    parser.add_argument(
-        '--gail-experts-dir',
-        default='./gail_experts',
-        help='directory that contains expert demonstrations for gail')
-    parser.add_argument(
-        '--gail-batch-size',
-        type=int,
-        default=128,
-        help='gail batch size (default: 128)')
-    parser.add_argument(
-        '--gail-epoch', type=int, default=5, help='gail epochs (default: 5)')
+    # parser.add_argument(
+    #     '--gail-experts-dir',
+    #     default='./gail_experts',
+    #     help='directory that contains expert demonstrations for gail')
+    # parser.add_argument(
+    #     '--gail-batch-size',
+    #     type=int,
+    #     default=128,
+    #     help='gail batch size (default: 128)')
+    # parser.add_argument(
+    #     '--gail-epoch', type=int, default=5, help='gail epochs (default: 5)')
     parser.add_argument(
         '--lr', type=float, default=7e-4, help='learning rate (default: 7e-4)')
     parser.add_argument(
@@ -129,14 +139,14 @@ def get_args():
         '--env-name',
         default='PongNoFrameskip-v4',
         help='environment to train on (default: PongNoFrameskip-v4)')
-    parser.add_argument(
-        '--log-dir',
-        default='/tmp/gym/',
-        help='directory to save agent logs (default: /tmp/gym)')
-    parser.add_argument(
-        '--save-dir',
-        default='./trained_models/',
-        help='directory to save agent logs (default: ./trained_models/)')
+    # parser.add_argument(
+    #     '--log-dir',
+    #     default='/tmp/gym/',
+    #     help='directory to save agent logs (default: /tmp/gym)')
+    # parser.add_argument(
+    #     '--save-dir',
+    #     default='./trained_models/',
+    #     help='directory to save agent logs (default: ./trained_models/)')
     parser.add_argument(
         '--no-cuda',
         action='store_true',

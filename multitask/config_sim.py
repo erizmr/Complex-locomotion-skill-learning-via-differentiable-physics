@@ -1,4 +1,5 @@
 import os
+import json
 from datetime import datetime
 from pathlib import Path
 from multitask.robot_config import robots
@@ -29,6 +30,7 @@ class ConfigSim:
         self._log_dir = save_dir / 'log' / exper_name / run_id
         self._monitor_dir = save_dir / 'monitor' / exper_name / run_id
         self._video_dir = save_dir / 'video' / exper_name / run_id
+        self._validation_dir = save_dir / 'validation' / exper_name / run_id
 
         # make directory for saving checkpoints and log.
         exist_ok = run_id == ''
@@ -36,6 +38,7 @@ class ConfigSim:
         self.log_dir.mkdir(parents=True, exist_ok=exist_ok)
         self.monitor_dir.mkdir(parents=True, exist_ok=exist_ok)
         self.video_dir.mkdir(parents=True, exist_ok=exist_ok)
+        self.validation_dir.mkdir(parents=True, exist_ok=exist_ok)
 
         # save updated config file to the checkpoint dir
         write_json(self.config, self.save_dir / 'config.json')
@@ -129,7 +132,14 @@ class ConfigSim:
 
         # add ch to logger
         logger.addHandler(ch)
+        logger.propagate = False
         return logger
+
+    def print_config(self):
+        return json.dumps(self._config, indent=4, sort_keys=True)
+
+    def __str__(self):
+        return self.print_config()
 
     # setting read-only attributes
     @property
@@ -151,3 +161,7 @@ class ConfigSim:
     @property
     def video_dir(self):
         return self._video_dir
+
+    @property
+    def validation_dir(self):
+        return self._validation_dir

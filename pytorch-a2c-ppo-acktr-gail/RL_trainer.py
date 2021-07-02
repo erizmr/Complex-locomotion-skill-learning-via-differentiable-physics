@@ -21,13 +21,13 @@ class CheckpointerRL(Checkpointer):
     def after_step(self):
         if (self.trainer.iter % self.trainer.args.save_interval == 0 or
             self.trainer.iter == self.trainer.num_updates - 1) and \
-                self.trainer.args.save_dir != "":
+                self.save_path != "":
 
             torch.save([
                 self.trainer.actor_critic,
                 getattr(utils.get_vec_normalize(self.trainer.envs), 'obs_rms', None)
             ], os.path.join(self.save_path, self.trainer.args.env_name + str(self.trainer.iter) + ".pt"))
-            print("save {}......".format(self.trainer.iter))
+            self.trainer.logger.info("save {}......".format(self.trainer.iter))
 
 
 class InfoPrinterRL(InfoPrinter):
@@ -35,11 +35,10 @@ class InfoPrinterRL(InfoPrinter):
         super(InfoPrinterRL, self).__init__()
 
     def after_step(self):
-        print('iteration: ', self.trainer.iter)
         if self.trainer.iter % self.trainer.args.log_interval == 0 and len(self.trainer.episode_rewards) > 1:
             total_num_steps = (self.trainer.iter + 1) * self.trainer.args.num_processes * self.trainer.args.num_steps
-            print(
-                "Updates {}, num timesteps {}, FPS {} \n Last {} training episodes: mean/median reward {:.1f}/{:.1f}, min/max reward {:.1f}/{:.1f}\n"
+            self.trainer.logger.info(
+                "Iterations: {}, num timesteps {}, FPS {} \n Last {} training episodes: mean/median reward {:.1f}/{:.1f}, min/max reward {:.1f}/{:.1f}\n"
                     .format(self.trainer.iter, total_num_steps,
                             int(total_num_steps / (self.trainer.timer.step_end - self.trainer.timer.step_start)),
                             len(self.trainer.episode_rewards), np.mean(self.trainer.episode_rewards),
@@ -79,19 +78,14 @@ class RLTrainer(BaseTrainer):
                                   self.actor_critic.recurrent_hidden_state_size)
 
         obs = self.envs.reset()
-        self.rollouts.obs[0].copy_(obs)
         self.rollouts.to(self.device)
 
         self.episode_rewards_len = 10
         self.episode_rewards = deque(maxlen=self.episode_rewards_len)
 
+        # RL Training epochs
         self.num_updates = int(
             args.num_env_steps) // args.num_steps // args.num_processes
-
-        log_dir = os.path.expanduser(args.log_dir)
-        eval_log_dir = log_dir + "_eval"
-        utils.cleanup_log_dir(log_dir)
-        utils.cleanup_log_dir(eval_log_dir)
 
         save_path = self.config.save_dir
         self.checkpointer = CheckpointerRL(save_path)
@@ -101,7 +95,7 @@ class RLTrainer(BaseTrainer):
 
         # Metrics to tracking during training
         self.metrics_train = ["mean_reward", "max_reward", "min_reward"]
-        self.metrics_validation = ["task_loss"]
+        self.metrics_validation = ["task_loss", "velocity_loss", "height_loss"]
 
         self.register_hooks([self.timer, self.checkpointer, self.info_printer, self.metric_writer])
 
@@ -220,14 +214,23 @@ class RLTrainer(BaseTrainer):
         self.metric_writer.train_metrics.update("min_reward", np.amin(self.episode_rewards))
 
     def validate(self):
+        self._evaluate()
+
+    def evaluate(self, model_folder):
+        self.metric_writer.reset()
+        self._evaluate(model_folder=model_folder)
+
+    def _evaluate(self, model_folder=None):
         task_iter = []
         task_loss = []
         gui = ti.GUI(background_color=0xFFFFFF)
-        for iter_num in range(0, self.args.validate, self.args.save_interval):
-            load_path = self.config.save_dir
-            [actor_critic, self.envs.venv.obs_rms] = torch.load(
-                os.path.join(load_path, self.args.env_name + str(iter_num) + ".pt"))
-            print("load ", os.path.join(load_path, self.args.env_name + str(iter_num) + ".pt"))
+        for iter_num in range(0, self.max_iter, self.args.save_interval):
+            model_name = self.args.env_name + str(iter_num) + ".pt"
+            if model_folder is None:
+                model_folder = str(self.config.save_dir)
+            load_path = os.path.join(model_folder, model_name)
+            [actor_critic, self.envs.venv.obs_rms] = torch.load(load_path)
+            self.logger.info(f"load {load_path}")
 
             self.loss[None] = 0.
             for l in self.losses:
@@ -246,11 +249,8 @@ class RLTrainer(BaseTrainer):
                     if 'episode' in info.keys():
                         self.episode_rewards.append(info['episode']['r'])
                 # If done then clean the history of observations.
-                masks = torch.FloatTensor(
-                    [[0.0] if done_ else [1.0] for done_ in done])
-                bad_masks = torch.FloatTensor(
-                    [[0.0] if 'bad_transition' in info.keys() else [1.0]
-                     for info in infos])
+                masks = torch.FloatTensor([[0.0] if done_ else [1.0] for done_ in done])
+                bad_masks = torch.FloatTensor([[0.0] if 'bad_transition' in info.keys() else [1.0] for info in infos])
                 self.rollouts.insert(obs, recurrent_hidden_states, action,
                                 action_log_prob, value, reward, masks, bad_masks)
 
@@ -262,13 +262,15 @@ class RLTrainer(BaseTrainer):
                 self.solver.draw_robot(gui, t, self.target_v)
                 gui.show('{}/{:04d}.png'.format(folder, t))
 
-            folder = os.path.join(self.config.save_dir, "validation_output_video/{}".format(iter_num))
-            os.makedirs(folder, exist_ok=True)
             for i in range(self.max_steps):
                 if i % 10 == 0:
-                    visualizer(i, folder)
+                    visualizer(i, self.config.video_dir)
 
-            self.get_loss(self.max_steps + 1, loss_enable={"velocity"})
+            self.get_loss(self.max_steps + 1, loss_enable={"velocity", "height"})
+
+            self.metric_writer.valid_metrics.update("task_loss", self.loss[None])
+            self.metric_writer.valid_metrics.update("velocity_loss", self.loss_dict["loss_v"].to_numpy())
+            self.metric_writer.valid_metrics.update("height_loss", self.loss_dict["loss_h"].to_numpy())
 
             task_iter.append(iter_num)
             task_loss.append(self.loss[None])

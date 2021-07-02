@@ -130,12 +130,12 @@ class MassSpringEnv(gym.Env):
         return np_state
 
     def reset(self):
-        print("reset called")
+        self.trainer.logger.info("reset called")
         self.trainer.initialize_train(0, self.rollout_length, self.max_speed, self.max_height)
         self.t = 0
         self.rollout_times += 1
         self.last_height = 0.1
-        print('Starting rollout times: ', self.rollout_times)
+        self.trainer.logger.info(f'Starting rollout times: {self.rollout_times}')
         self.trainer.solver.clear_states(self.rollout_length)
         # multitask.nn_input(self.t, 0, max_speed, 0.2)
         self.trainer.solver.compute_center(self.t)

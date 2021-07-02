@@ -20,9 +20,9 @@ class SolverMassSpring:
         self.dim = config.get_config()["robot"]["dim"]
 
 
-        self.x = vec()
-        self.v = vec()
-        self.center = vec()
+        self.x = vec(self.dim)
+        self.v = vec(self.dim)
+        self.center = vec(self.dim)
         self.actuation = scalar()
         self.act_list = []
         ti.root.dense(ti.ijk, (self.max_steps, self.batch_size, self.n_objects)).place(self.x, self.v)
@@ -31,9 +31,9 @@ class SolverMassSpring:
 
         self.height = scalar()
         self.rotation = scalar()
-        self.head_center = vec()
+        self.head_center = vec(self.dim)
         self.head_counter = scalar()
-        self.tail_center = vec()
+        self.tail_center = vec(self.dim)
         self.tail_counter = scalar()
         ti.root.dense(ti.ij, (self.max_steps, self.batch_size)).place(self.height, self.rotation, self.head_center,
                                                             self.head_counter, self.tail_center, self.tail_counter)
@@ -43,7 +43,7 @@ class SolverMassSpring:
         self.spring_length = scalar()
         self.spring_stiffness = scalar()
         self.spring_actuation = scalar()
-        self.v_inc = vec()
+        self.v_inc = vec(self.dim)
         ti.root.dense(ti.i, self.n_springs).place(self.spring_anchor_a, self.spring_anchor_b,
                                              self.spring_length, self.spring_stiffness,
                                              self.spring_actuation)

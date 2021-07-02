@@ -32,9 +32,9 @@ class SolverMPM:
         self.la = config.get_config()["simulator"]["la"]
         self.bound = config.get_config()["simulator"]["bound"]
 
-        self.x = vec()
-        self.v = vec()
-        self.center = vec()
+        self.x = vec(self.dim)
+        self.v = vec(self.dim)
+        self.center = vec(self.dim)
         self.actuation = scalar()
         ti.root.dense(ti.ijk, (self.max_steps, self.batch_size, self.n_objects)).place(self.x, self.v)
         ti.root.dense(ti.ij, (self.max_steps, self.batch_size)).place(self.center)
@@ -44,9 +44,9 @@ class SolverMPM:
         self.rotation = None
         self.actuator_id = ti.field(ti.i32)
         self.particle_type = ti.field(ti.i32)
-        self.C, self.F = mat(), mat()
-        self.grid_v_in, self.grid_m_in = vec(), scalar()
-        self.grid_v_out = vec()
+        self.C, self.F = mat(self.dim), mat(self.dim)
+        self.grid_v_in, self.grid_m_in = vec(self.dim), scalar()
+        self.grid_v_out = vec(self.dim)
         ti.root.dense(ti.ij, (self.batch_size, self.n_particles)).place(self.actuator_id, self.particle_type)
         ti.root.dense(ti.ijk, (self.max_steps, self.batch_size, self.n_particles)).place(self.C, self.F)
         ti.root.dense(ti.ijk, (self.batch_size, self.n_grid, self.n_grid)).place(self.grid_v_in, self.grid_m_in, self.grid_v_out)

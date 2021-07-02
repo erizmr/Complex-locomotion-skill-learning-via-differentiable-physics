@@ -68,12 +68,15 @@ class MetricWriter(HookBase):
         self.train_metrics = None
         self.valid_metrics = None
 
-    def before_train(self):
+    def reset(self):
         if self.writer is None:
             self.writer = self.trainer.writer
             self.train_metrics = MetricTracker(*[m for m in self.trainer.metrics_train], writer=self.writer)
             self.valid_metrics = MetricTracker(*[m for m in self.trainer.metrics_validation], writer=self.writer)
         self.train_metrics.reset()
+
+    def before_train(self):
+        self.reset()
 
 
 
