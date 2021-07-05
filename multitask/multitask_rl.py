@@ -28,6 +28,7 @@ class MassSpringEnv(gym.Env):
 
         max_act = np.ones(len(self.act_spring), dtype=np.float64)
         max_obs = np.ones(self.trainer.n_input_states, dtype=np.float64)
+        self.training = True  # control which initialize function to use
         self.action_space = spaces.Box(-max_act, max_act)
         self.observation_space = spaces.Box(-max_obs, max_obs)
         self.rollout_length = trainer.max_steps
@@ -123,15 +124,20 @@ class MassSpringEnv(gym.Env):
     def get_state(self, t):
         np_state = self.trainer.input_state.to_numpy()[t, 0]
         if np.amax(np_state) > 1. or np.amin(np_state) < -1.:
-            print('action range error, try to clip')
+            # print('action range error, try to clip')
             np_state = np.clip(np_state, a_min=-1., a_max=1.)
-            print(np_state)
+            # print(np_state)
             # assert False
         return np_state
 
     def reset(self):
         self.trainer.logger.info("reset called")
-        self.trainer.initialize_train(0, self.rollout_length, self.max_speed, self.max_height)
+        if self.trainer.training:
+            self.trainer.initialize_train(0, self.rollout_length, self.max_speed, self.max_height)
+        else:
+
+            self.trainer.logger.info(f"current max speed: {self.trainer.validate_v}, max height {self.trainer.validate_h}")
+            self.trainer.initialize_validate(self.rollout_length, self.trainer.validate_v, self.trainer.validate_h)
         self.t = 0
         self.rollout_times += 1
         self.last_height = 0.1

@@ -4,6 +4,10 @@
     "save_dir": "/home/mingrui/difftaichi/difftaichi2/saved_results",
     "output_video": true
   },
+  "validation": {
+    "target_v": [0.04, 0.08],
+    "target_h": [0.15, 0.20]
+  },
   "robot": {
     "dim": 2,
     "robot_id": 5,

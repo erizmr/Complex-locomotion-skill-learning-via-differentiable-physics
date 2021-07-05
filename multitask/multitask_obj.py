@@ -42,7 +42,13 @@ class BaseTrainer:
         self.output_vis_interval = self.config["process"]["output_vis_interval"]
         self.ground_height = self.config["simulator"]["ground_height"]
 
+        self.validate_v_list = self.config["validation"]["target_v"]
+        self.validate_h_list = self.config["validation"]["target_h"]
+        self.validate_v = 0.0
+        self.validate_h = 0.0
+
         self.random_seed = int(time.time() * 1e6) % 10000
+        self.training = True
         self.iter = 0
         self.max_iter = 10000  # Default training iterations, can be overwrote by args
         self.loss = scalar()

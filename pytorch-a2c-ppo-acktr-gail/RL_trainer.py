@@ -12,6 +12,8 @@ from a2c_ppo_acktr.model import Policy
 from a2c_ppo_acktr.storage import RolloutStorage
 from evaluation import evaluate
 from multitask.hooks import Checkpointer, InfoPrinter, Timer, MetricWriter
+from logger import TensorboardWriter
+from util import MetricTracker
 
 
 class CheckpointerRL(Checkpointer):
@@ -87,8 +89,8 @@ class RLTrainer(BaseTrainer):
         self.num_updates = int(
             args.num_env_steps) // args.num_steps // args.num_processes
 
-        save_path = self.config.save_dir
-        self.checkpointer = CheckpointerRL(save_path)
+        model_save_path = self.config.model_dir
+        self.checkpointer = CheckpointerRL(model_save_path)
         self.info_printer = InfoPrinterRL()
         self.timer = Timer()
         self.metric_writer = MetricWriter()
@@ -216,18 +218,54 @@ class RLTrainer(BaseTrainer):
     def validate(self):
         self._evaluate()
 
-    def evaluate(self, model_folder):
-        self.metric_writer.reset()
-        self._evaluate(model_folder=model_folder)
+    def evaluate(self, exp_folder):
+        output_folder = os.path.join(exp_folder, 'validation')
+        os.makedirs(output_folder, exist_ok=True)
+        evaluator_writer = MetricTracker(*[],
+                                              writer=TensorboardWriter(output_folder,
+                                                                       self.logger,
+                                                                       enabled=True))
+        for v in self.validate_v_list:
+            for h in self.validate_h_list:
+                self._evaluate(validate_v=v,
+                               validate_h=h,
+                               exp_folder=exp_folder,
+                               evaluator_writer=evaluator_writer)
 
-    def _evaluate(self, model_folder=None):
-        task_iter = []
-        task_loss = []
+    def _evaluate(self, validate_v, validate_h, exp_folder=None, output_video=True, evaluator_writer=None):
+        self.validate_v = validate_v
+        self.validate_h = validate_h
+        metric_writer = None
+        if evaluator_writer is None:
+            metric_writer = self.metric_writer.valid_metrics
+        else:
+            metric_writer = evaluator_writer
+
+        video_path = None
+        if exp_folder is None:
+            model_folder = str(self.config.model_dir)
+            video_path = self.config.video_path
+        else:
+            video_path = os.path.join(exp_folder, 'video')
+            os.makedirs(video_path, exist_ok=True)
+
+            model_folder = os.path.join(exp_folder, 'models')
+
+        def visualizer(t, folder, output_video):
+            gui.clear()
+            gui.line((0, self.ground_height), (1, self.ground_height),
+                     color=0x000022,
+                     radius=3)
+            self.solver.draw_robot(gui, t, self.target_v)
+            if output_video:
+                gui.show('{}/{:04d}.png'.format(folder, t))
+            else:
+                gui.show()
+        self.training = False
+
         gui = ti.GUI(background_color=0xFFFFFF)
         for iter_num in range(0, self.max_iter, self.args.save_interval):
             model_name = self.args.env_name + str(iter_num) + ".pt"
-            if model_folder is None:
-                model_folder = str(self.config.save_dir)
             load_path = os.path.join(model_folder, model_name)
             [actor_critic, self.envs.venv.obs_rms] = torch.load(load_path)
             self.logger.info(f"load {load_path}")
@@ -254,29 +292,17 @@ class RLTrainer(BaseTrainer):
                 self.rollouts.insert(obs, recurrent_hidden_states, action,
                                 action_log_prob, value, reward, masks, bad_masks)
 
-            def visualizer(t, folder):
-                gui.clear()
-                gui.line((0, self.ground_height), (1, self.ground_height),
-                         color=0x000022,
-                         radius=3)
-                self.solver.draw_robot(gui, t, self.target_v)
-                gui.show('{}/{:04d}.png'.format(folder, t))
-
             for i in range(self.max_steps):
                 if i % 10 == 0:
-                    visualizer(i, self.config.video_dir)
+                    visualizer(i, video_path, output_video=output_video)
 
             self.get_loss(self.max_steps + 1, loss_enable={"velocity", "height"})
 
-            self.metric_writer.valid_metrics.update("task_loss", self.loss[None])
-            self.metric_writer.valid_metrics.update("velocity_loss", self.loss_dict["loss_v"].to_numpy())
-            self.metric_writer.valid_metrics.update("height_loss", self.loss_dict["loss_h"].to_numpy())
-
-            task_iter.append(iter_num)
-            task_loss.append(self.loss[None])
-
-            print("Task iteration: ", task_iter)
-            print("Task loss: ", task_loss)
+            # Write to tensorboard
+            metric_writer.writer.set_step(step=iter_num)
+            metric_writer.update(f"task_loss_v_{validate_v}_h_{validate_h}", self.loss[None])
+            metric_writer.update(f"velocity_loss_v_{validate_v}_h_{validate_h}", self.loss_dict["loss_v"].to_numpy())
+            metric_writer.update(f"height_loss_v_{validate_v}_h_{validate_h}", self.loss_dict["loss_h"].to_numpy())
 
     # def evaluate(self):
     #     if (self.args.eval_interval is not None and len(self.episode_rewards) > 1

@@ -26,11 +26,12 @@ class ConfigSim:
         exper_name = self._config["train"]["name"]
         save_dir = Path(save_dir)
         run_id = datetime.now().strftime(r'%m%d_%H%M%S')
-        self._save_dir = save_dir / 'models' / exper_name / run_id
-        self._log_dir = save_dir / 'log' / exper_name / run_id
-        self._monitor_dir = save_dir / 'monitor' / exper_name / run_id
-        self._video_dir = save_dir / 'video' / exper_name / run_id
-        self._validation_dir = save_dir / 'validation' / exper_name / run_id
+        self._save_dir = save_dir / exper_name / run_id
+        self._model_dir = save_dir / 'models'
+        self._video_dir = self._save_dir / 'video'
+        self._validation_dir = self._save_dir / 'validation'
+        self._monitor_dir = self._save_dir / 'monitor'
+        self._log_dir = self._save_dir / 'log'
 
         # make directory for saving checkpoints and log.
         exist_ok = run_id == ''
@@ -149,6 +150,10 @@ class ConfigSim:
     @property
     def save_dir(self):
         return self._save_dir
+
+    @property
+    def model_dir(self):
+        return self._model_dir
 
     @property
     def log_dir(self):
