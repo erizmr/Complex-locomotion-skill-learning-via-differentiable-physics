@@ -4,13 +4,8 @@ import gym
 from gym import spaces
 import torch
 
-# from multitask.nn import *
-# from multitask.solver_mass_spring import SolverMassSpring
-
 import numpy as np
 import os
-# import shutil
-# from taichi.lang.ops import mul, sin
 
 np.seterr(all='raise')
 torch.autograd.set_detect_anomaly(True)
@@ -154,100 +149,3 @@ class MassSpringEnv(gym.Env):
     def render(self, mode):
         # TODO: seems like lacking the second argument
         self.trainer.visualizer(self.t)
-
-# class SaveBestTrainingRewardCallback(BaseCallback):
-#     def __init__(self, check_freq: int, log_dir: str, verbose=1):
-#         super(SaveBestTrainingRewardCallback, self).__init__(verbose=verbose)
-#         self.check_freq = check_freq
-#         self.log_dir = log_dir
-#         self.best_mean_reward = -np.inf
-#         self.models_dir = os.path.join(log_dir, "rl_robot_{}".format(config.robot_id))
-#         self.save_path = os.path.join(self.models_dir, "best_model")
-#         if os.path.exists(self.models_dir):
-#             shutil.rmtree(self.models_dir)
-#         os.makedirs(self.models_dir, exist_ok = True)
-#
-#     def _init_callback(self) -> None:
-#         if self.save_path is not None:
-#             os.makedirs(self.save_path, exist_ok=True)
-#
-#     def _on_step(self) -> bool:
-#         if self.n_calls % self.check_freq == 0:
-#             x, y = ts2xy(load_results(self.log_dir), 'timesteps')
-#             if len(x) > 0:
-#                 mean_reward = np.mean(y[-100:])
-#                 if self.verbose > 0:
-#                     print("Num timesteps: {}".format(self.num_timesteps))
-#                     print("Best mean reward: {:.2f} - Last mean reward per episode: {:.2f}".format(self.best_mean_reward, mean_reward))
-#
-#                 save_path = os.path.join(self.models_dir, "model_{}".format(self.num_timesteps // 1000))
-#                 #print("Saving model to {}".format(save_path))
-#                 self.model.save(save_path)
-#
-#                 if mean_reward > self.best_mean_reward:
-#                     self.best_mean_reward = mean_reward
-#                     if self.verbose > 0:
-#                         print("Saving new best model to {}".format(self.save_path))
-#                     self.model.save(self.save_path)
-#         return True
-'''
-def visualizer(t):
-    gui.clear()
-    gui.line((0, multitask.ground_height), (1, multitask.ground_height),
-             color=0x000022,
-             radius=3)
-    multitask.solver.draw_robot(gui, t, multitask.target_v)
-    gui.show('video/interactive3/{:04d}.png'.format(visualizer.frame))
-    visualizer.frame += 1
-'''
-# if __name__ == '__main__':
-#     import sys
-#     robot_id = sys.argv[1]
-#     gui = ti.GUI(background_color=0xFFFFFF, show_gui = False)
-#     #visualizer.frame = 0
-#     log_dir = "./log"
-#     video_dir = "video/robot_{}".format(config.robot_id)
-#     if os.path.exists(video_dir):
-#         shutil.rmtree(video_dir)
-#     os.makedirs(video_dir, exist_ok = True)
-#     os.makedirs(log_dir, exist_ok = True)
-#
-#     multitask.setup_robot()
-#     env = MassSpringEnv(multitask.solver.act_list, video_dir = video_dir)
-#     # check_env(env)
-#     env = Monitor(env, log_dir)
-#
-#     policy_kwargs = dict(activation_fn=torch.nn.Tanh, net_arch=[64])
-#     model = None
-#     load_path = "log/rl_robot_{}".format(robot_id)
-#     if os.path.exists(load_path):
-#         name_list = os.listdir(load_path)
-#         t = 0
-#         for name in name_list:
-#             if name[:6] == 'model_' and name[-4:] == ".zip":
-#                 t = max(t, int(name[6:-4]))
-#         model = PPO.load(os.path.join(load_path, "model_{}.zip".format(t)), env)
-#         env.env.rollout_times = t
-#     else:
-#         model = PPO('MlpPolicy', env, gamma=1, learning_rate=3e-3, verbose=1, tensorboard_log=log_dir, policy_kwargs = policy_kwargs, batch_size = 64, device = "cuda")
-#
-#     callback = SaveBestTrainingRewardCallback(check_freq=50000, log_dir=log_dir)
-#
-#     total_step = 200000000
-#     model.learn(total_timesteps=total_step, callback=callback)
-#
-#     # multitask.setup_robot()
-#     #multitask.initialize_validate(1000, 0.08, 0.1)
-#     '''
-#     obs = env.reset()
-#     os.makedirs("interactive3", exist_ok=True)
-#     for i in range(1000):
-#         action, _states = model.predict(obs, deterministic=True)
-#         obs, reward, done, info = env.step(action)
-#         if i % 5 == 0:
-#             env.render(mode="human")
-#         if done:
-#             obs = env.reset()
-#
-#     env.close()
-#     '''
