@@ -27,7 +27,6 @@ from evaluation import evaluate
 # from parse_config import ConfigParser
 # from util import inf_loop, MetricTracker
 
-
 # def get_logger(name, verbosity=2):
 #     log_levels = {
 #         0: logging.WARNING,
@@ -69,35 +68,34 @@ def main():
     envs = make_vec_envs(args.env_name, args.seed, args.num_processes,
                          args.gamma, args.log_dir, device, False)
 
-    actor_critic = Policy(
-        envs.observation_space.shape,
-        envs.action_space,
-        base_kwargs={'recurrent': args.recurrent_policy})
+    actor_critic = Policy(envs.observation_space.shape,
+                          envs.action_space,
+                          base_kwargs={'recurrent': args.recurrent_policy})
     actor_critic.to(device)
 
     if args.algo == 'a2c':
-        agent = algo.A2C_ACKTR(
-            actor_critic,
-            args.value_loss_coef,
-            args.entropy_coef,
-            lr=args.lr,
-            eps=args.eps,
-            alpha=args.alpha,
-            max_grad_norm=args.max_grad_norm)
+        agent = algo.A2C_ACKTR(actor_critic,
+                               args.value_loss_coef,
+                               args.entropy_coef,
+                               lr=args.lr,
+                               eps=args.eps,
+                               alpha=args.alpha,
+                               max_grad_norm=args.max_grad_norm)
     elif args.algo == 'ppo':
-        agent = algo.PPO(
-            actor_critic,
-            args.clip_param,
-            args.ppo_epoch,
-            args.num_mini_batch,
-            args.value_loss_coef,
-            args.entropy_coef,
-            lr=args.lr,
-            eps=args.eps,
-            max_grad_norm=args.max_grad_norm)
+        agent = algo.PPO(actor_critic,
+                         args.clip_param,
+                         args.ppo_epoch,
+                         args.num_mini_batch,
+                         args.value_loss_coef,
+                         args.entropy_coef,
+                         lr=args.lr,
+                         eps=args.eps,
+                         max_grad_norm=args.max_grad_norm)
     elif args.algo == 'acktr':
-        agent = algo.A2C_ACKTR(
-            actor_critic, args.value_loss_coef, args.entropy_coef, acktr=True)
+        agent = algo.A2C_ACKTR(actor_critic,
+                               args.value_loss_coef,
+                               args.entropy_coef,
+                               acktr=True)
 
     if args.gail:
         assert len(envs.observation_space.shape) == 1
@@ -105,11 +103,12 @@ def main():
             envs.observation_space.shape[0] + envs.action_space.shape[0], 100,
             device)
         file_name = os.path.join(
-            args.gail_experts_dir, "trajs_{}.pt".format(
-                args.env_name.split('-')[0].lower()))
-        
-        expert_dataset = gail.ExpertDataset(
-            file_name, num_trajectories=4, subsample_frequency=20)
+            args.gail_experts_dir,
+            "trajs_{}.pt".format(args.env_name.split('-')[0].lower()))
+
+        expert_dataset = gail.ExpertDataset(file_name,
+                                            num_trajectories=4,
+                                            subsample_frequency=20)
         drop_last = len(expert_dataset) > args.gail_batch_size
         gail_train_loader = torch.utils.data.DataLoader(
             dataset=expert_dataset,
@@ -137,8 +136,11 @@ def main():
         gui = ti.GUI(background_color=0xFFFFFF)
         for iter_num in range(9950, 10000, args.save_interval):
             load_path = os.path.join(args.save_dir, args.algo)
-            [actor_critic, envs.venv.obs_rms] = torch.load(os.path.join(load_path, args.env_name + str(iter_num) + ".pt"))
-            print("load ", os.path.join(load_path, args.env_name + str(iter_num) + ".pt"))
+            [actor_critic, envs.venv.obs_rms] = torch.load(
+                os.path.join(load_path, args.env_name + str(iter_num) + ".pt"))
+            print(
+                "load ",
+                os.path.join(load_path, args.env_name + str(iter_num) + ".pt"))
 
             multitask.loss[None] = 0.
             for l in multitask.losses:
@@ -149,7 +151,8 @@ def main():
                 # Sample actions
                 with torch.no_grad():
                     value, action, action_log_prob, recurrent_hidden_states = actor_critic.act(
-                        rollouts.obs[step], rollouts.recurrent_hidden_states[step],
+                        rollouts.obs[step],
+                        rollouts.recurrent_hidden_states[step],
                         rollouts.masks[step])
                 # Obser reward and next obs
                 obs, reward, done, infos = envs.step(action)
@@ -157,30 +160,32 @@ def main():
                     if 'episode' in info.keys():
                         episode_rewards.append(info['episode']['r'])
                 # If done then clean the history of observations.
-                masks = torch.FloatTensor(
-                    [[0.0] if done_ else [1.0] for done_ in done])
+                masks = torch.FloatTensor([[0.0] if done_ else [1.0]
+                                           for done_ in done])
                 bad_masks = torch.FloatTensor(
                     [[0.0] if 'bad_transition' in info.keys() else [1.0]
                      for info in infos])
                 rollouts.insert(obs, recurrent_hidden_states, action,
-                                action_log_prob, value, reward, masks, bad_masks)
+                                action_log_prob, value, reward, masks,
+                                bad_masks)
 
             def visualizer(t, folder):
                 gui.clear()
-                gui.line((0, multitask.ground_height), (1, multitask.ground_height),
+                gui.line((0, multitask.ground_height),
+                         (1, multitask.ground_height),
                          color=0x000022,
                          radius=3)
                 multitask.solver.draw_robot(gui, t, multitask.target_v)
                 gui.show('{}/{:04d}.png'.format(folder, t))
 
-            folder = os.path.join(args.log_dir, "video_{}/{}".format(args.env_name,
-                                                                     iter_num))
+            folder = os.path.join(
+                args.log_dir, "video_{}/{}".format(args.env_name, iter_num))
             os.makedirs(folder, exist_ok=True)
             for i in range(config.max_steps):
                 if i % 10 == 0:
                     visualizer(i, folder)
 
-            multitask.get_loss(config.max_steps + 1, loss_enable = {"velocity"})
+            multitask.get_loss(config.max_steps + 1, loss_enable={"velocity"})
 
             task_iter.append(iter_num)
             task_loss.append(multitask.loss[None])
@@ -216,8 +221,8 @@ def main():
                     episode_rewards.append(info['episode']['r'])
 
             # If done then clean the history of observations.
-            masks = torch.FloatTensor(
-                [[0.0] if done_ else [1.0] for done_ in done])
+            masks = torch.FloatTensor([[0.0] if done_ else [1.0]
+                                       for done_ in done])
             bad_masks = torch.FloatTensor(
                 [[0.0] if 'bad_transition' in info.keys() else [1.0]
                  for info in infos])

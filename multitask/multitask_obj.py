@@ -100,6 +100,7 @@ class BaseTrainer:
                                         enabled=True)
 
         self._hooks = []
+        self.task_list = ["Move B&F", "Move B&F + jump", "Move B&F + crawl", "Keep still"]
 
     @ti.kernel
     def nn_input(self, t: ti.i32, offset: ti.i32, max_speed: ti.f64, max_height: ti.f64):
@@ -273,6 +274,7 @@ class BaseTrainer:
             q = (t // self.turn_period * self.batch_size + k) * 3
             if ti.static(self.dim == 2):
                 target_id = int(self.pool[q] * 4)
+                # print('Iter:', int(self.iter), 'Step:', int(t), 'Current task:', int(target_id))
                 if target_id == 1:
                     # Move backward or forward
                     self.target_v[t, k][0] = (self.pool[q + 1] * 2 - 1) * max_velocity

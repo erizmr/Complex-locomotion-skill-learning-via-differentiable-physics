@@ -27,7 +27,7 @@ class ConfigSim:
         save_dir = Path(save_dir)
         run_id = datetime.now().strftime(r'%m%d_%H%M%S')
         self._save_dir = save_dir / exper_name / run_id
-        self._model_dir = save_dir / 'models'
+        self._model_dir = self.save_dir / 'models'
         self._video_dir = self._save_dir / 'video'
         self._validation_dir = self._save_dir / 'validation'
         self._monitor_dir = self._save_dir / 'monitor'
@@ -36,6 +36,7 @@ class ConfigSim:
         # make directory for saving checkpoints and log.
         exist_ok = run_id == ''
         self.save_dir.mkdir(parents=True, exist_ok=exist_ok)
+        self._model_dir.mkdir(parents=True, exist_ok=exist_ok)
         self.log_dir.mkdir(parents=True, exist_ok=exist_ok)
         self.monitor_dir.mkdir(parents=True, exist_ok=exist_ok)
         self.video_dir.mkdir(parents=True, exist_ok=exist_ok)
@@ -79,17 +80,24 @@ class ConfigSim:
         self._config["robot"]["n_springs"] = n_springs
 
         # Process
-        self._config["process"]["dt"] = 0.004 if self._config["robot"]["simulator"] == "mass_spring" else 0.001
-        self._config["process"]["spring_omega"] = 2 * math.pi / self._config["process"]["dt"] / self._config["process"]["run_period"]
+        self._config["process"]["dt"] = 0.004 if self._config["robot"][
+            "simulator"] == "mass_spring" else 0.001
+        self._config["process"]["spring_omega"] = 2 * math.pi / self._config[
+            "process"]["dt"] / self._config["process"]["run_period"]
 
         # Simulator
-        self._config["simulator"]["gravity"] = -1.8 if self._config["robot"]["simulator"] == "mass_spring" else -10.
-        self._config["simulator"]["dashpot_damping"] = 0.2 if self._config["robot"]["dim"] == 2 else 0.1
+        self._config["simulator"]["gravity"] = -1.8 if self._config["robot"][
+            "simulator"] == "mass_spring" else -10.
+        self._config["simulator"]["dashpot_damping"] = 0.2 if self._config[
+            "robot"]["dim"] == 2 else 0.1
 
-        self._config["simulator"]["n_particles"] = self._config["robot"]["n_objects"]
+        self._config["simulator"]["n_particles"] = self._config["robot"][
+            "n_objects"]
 
-        self._config["simulator"]["mpm"]["dx"] = 1 / self._config["simulator"]["mpm"]["n_grid"]
-        self._config["simulator"]["mpm"]["inv_dx"] = 1 / self._config["simulator"]["mpm"]["dx"]
+        self._config["simulator"]["mpm"][
+            "dx"] = 1 / self._config["simulator"]["mpm"]["n_grid"]
+        self._config["simulator"]["mpm"][
+            "inv_dx"] = 1 / self._config["simulator"]["mpm"]["dx"]
 
         # NN
         if self._config["robot"]["dim"] == 3:
@@ -102,7 +110,9 @@ class ConfigSim:
         duplicate_h = self._config["nn"]["duplicate_h"]
         duplicate_v = self._config["nn"]["duplicate_v"]
 
-        self._config["nn"]["n_input_states"] = n_sin_waves + dim * 2 * n_objects + duplicate_v * (dim - 1) + duplicate_h
+        self._config["nn"][
+            "n_input_states"] = n_sin_waves + dim * 2 * n_objects + duplicate_v * (
+                dim - 1) + duplicate_h
 
         self._config["nn"]["adam_a"] = self._config["nn"]["learning_rate"]
 
@@ -115,7 +125,8 @@ class ConfigSim:
         return self._config
 
     def get_logger(self, name, verbosity=2):
-        msg_verbosity = 'verbosity option {} is invalid. Valid options are {}.'.format(verbosity, self.log_levels.keys())
+        msg_verbosity = 'verbosity option {} is invalid. Valid options are {}.'.format(
+            verbosity, self.log_levels.keys())
         assert verbosity in self.log_levels, msg_verbosity
 
         logger = logging.getLogger(name)
@@ -126,7 +137,9 @@ class ConfigSim:
         ch.setLevel(logging.DEBUG)
 
         # create formatter
-        formatter = logging.Formatter('%(asctime)s - %(name)s - %(module)s - %(levelname)s - %(message)s')
+        formatter = logging.Formatter(
+            '%(asctime)s - %(name)s - %(module)s - %(levelname)s - %(message)s'
+        )
 
         # add formatter to ch
         ch.setFormatter(formatter)

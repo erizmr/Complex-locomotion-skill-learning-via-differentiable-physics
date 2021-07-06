@@ -27,8 +27,12 @@ class CheckpointerRL(Checkpointer):
 
             torch.save([
                 self.trainer.actor_critic,
-                getattr(utils.get_vec_normalize(self.trainer.envs), 'obs_rms', None)
-            ], os.path.join(self.save_path, self.trainer.args.env_name + str(self.trainer.iter) + ".pt"))
+                getattr(utils.get_vec_normalize(self.trainer.envs), 'obs_rms',
+                        None)
+            ],
+                       os.path.join(
+                           self.save_path, self.trainer.args.env_name +
+                           str(self.trainer.iter) + ".pt"))
             self.trainer.logger.info("save {}......".format(self.trainer.iter))
 
 
@@ -37,15 +41,23 @@ class InfoPrinterRL(InfoPrinter):
         super(InfoPrinterRL, self).__init__()
 
     def after_step(self):
-        if self.trainer.iter % self.trainer.args.log_interval == 0 and len(self.trainer.episode_rewards) > 1:
-            total_num_steps = (self.trainer.iter + 1) * self.trainer.args.num_processes * self.trainer.args.num_steps
+        if self.trainer.iter % self.trainer.args.log_interval == 0 and len(
+                self.trainer.episode_rewards) > 1:
+            total_num_steps = (
+                self.trainer.iter + 1
+            ) * self.trainer.args.num_processes * self.trainer.args.num_steps
             self.trainer.logger.info(
                 "Iterations: {}, num timesteps {}, FPS {} \n Last {} training episodes: mean/median reward {:.1f}/{:.1f}, min/max reward {:.1f}/{:.1f}\n"
-                    .format(self.trainer.iter, total_num_steps,
-                            int(total_num_steps / (self.trainer.timer.step_end - self.trainer.timer.step_start)),
-                            len(self.trainer.episode_rewards), np.mean(self.trainer.episode_rewards),
-                            np.median(self.trainer.episode_rewards), np.min(self.trainer.episode_rewards),
-                            np.max(self.trainer.episode_rewards))) #, dist_entropy, value_loss, action_loss))
+                .format(
+                    self.trainer.iter, total_num_steps,
+                    int(total_num_steps / (self.trainer.timer.step_end -
+                                           self.trainer.timer.step_start)),
+                    len(self.trainer.episode_rewards),
+                    np.mean(self.trainer.episode_rewards),
+                    np.median(self.trainer.episode_rewards),
+                    np.min(self.trainer.episode_rewards),
+                    np.max(self.trainer.episode_rewards)
+                ))  #, dist_entropy, value_loss, action_loss))
 
 
 class RLTrainer(BaseTrainer):
@@ -54,12 +66,9 @@ class RLTrainer(BaseTrainer):
         self.args = args
         self.config = config
         self.device = torch.device("cuda:0" if args.cuda else "cpu")
-        self.envs = make_vec_envs(self,
-                                  args.env_name,
-                                  args.seed,
-                                  args.num_processes,
-                                  args.gamma,
-                                  self.device, False)
+        self.envs = make_vec_envs(self, args.env_name, args.seed,
+                                  args.num_processes, args.gamma, self.device,
+                                  False)
         self.actor_critic = Policy(
             self.envs.observation_space.shape,
             self.envs.action_space,
@@ -75,9 +84,10 @@ class RLTrainer(BaseTrainer):
         self.gail_train_loader = None
         self._gail()
 
-        self.rollouts = RolloutStorage(args.num_steps, args.num_processes,
-                                  self.envs.observation_space.shape, self.envs.action_space,
-                                  self.actor_critic.recurrent_hidden_state_size)
+        self.rollouts = RolloutStorage(
+            args.num_steps, args.num_processes,
+            self.envs.observation_space.shape, self.envs.action_space,
+            self.actor_critic.recurrent_hidden_state_size)
 
         obs = self.envs.reset()
         self.rollouts.to(self.device)
@@ -99,36 +109,36 @@ class RLTrainer(BaseTrainer):
         self.metrics_train = ["mean_reward", "max_reward", "min_reward"]
         self.metrics_validation = ["task_loss", "velocity_loss", "height_loss"]
 
-        self.register_hooks([self.timer, self.checkpointer, self.info_printer, self.metric_writer])
+        self.register_hooks([
+            self.timer, self.checkpointer, self.info_printer,
+            self.metric_writer
+        ])
 
     def _select_algorithm(self):
         args = self.args
         if args.algo == 'a2c':
-            self.agent = algo.A2C_ACKTR(
-                self.actor_critic,
-                args.value_loss_coef,
-                args.entropy_coef,
-                lr=args.lr,
-                eps=args.eps,
-                alpha=args.alpha,
-                max_grad_norm=args.max_grad_norm)
+            self.agent = algo.A2C_ACKTR(self.actor_critic,
+                                        args.value_loss_coef,
+                                        args.entropy_coef,
+                                        lr=args.lr,
+                                        eps=args.eps,
+                                        alpha=args.alpha,
+                                        max_grad_norm=args.max_grad_norm)
         elif args.algo == 'ppo':
-            self.agent = algo.PPO(
-                self.actor_critic,
-                args.clip_param,
-                args.ppo_epoch,
-                args.num_mini_batch,
-                args.value_loss_coef,
-                args.entropy_coef,
-                lr=args.lr,
-                eps=args.eps,
-                max_grad_norm=args.max_grad_norm)
+            self.agent = algo.PPO(self.actor_critic,
+                                  args.clip_param,
+                                  args.ppo_epoch,
+                                  args.num_mini_batch,
+                                  args.value_loss_coef,
+                                  args.entropy_coef,
+                                  lr=args.lr,
+                                  eps=args.eps,
+                                  max_grad_norm=args.max_grad_norm)
         elif args.algo == 'acktr':
-            self.agent = algo.A2C_ACKTR(
-                self.actor_critic,
-                args.value_loss_coef,
-                args.entropy_coef,
-                acktr=True)
+            self.agent = algo.A2C_ACKTR(self.actor_critic,
+                                        args.value_loss_coef,
+                                        args.entropy_coef,
+                                        acktr=True)
         else:
             raise NotImplementedError
 
@@ -136,15 +146,15 @@ class RLTrainer(BaseTrainer):
         if self.args.gail:
             assert len(self.envs.observation_space.shape) == 1
             self.discr = gail.Discriminator(
-                self.envs.observation_space.shape[0] + self.envs.action_space.shape[0], 100,
-                self.device)
+                self.envs.observation_space.shape[0] +
+                self.envs.action_space.shape[0], 100, self.device)
             file_name = os.path.join(
                 self.args.gail_experts_dir,
-                "trajs_{}.pt".format(
-                    self.args.env_name.split('-')[0].lower()))
+                "trajs_{}.pt".format(self.args.env_name.split('-')[0].lower()))
 
-            expert_dataset = gail.ExpertDataset(
-                file_name, num_trajectories=4, subsample_frequency=20)
+            expert_dataset = gail.ExpertDataset(file_name,
+                                                num_trajectories=4,
+                                                subsample_frequency=20)
             drop_last = len(expert_dataset) > self.args.gail_batch_size
             self.gail_train_loader = torch.utils.data.DataLoader(
                 dataset=expert_dataset,
@@ -157,13 +167,15 @@ class RLTrainer(BaseTrainer):
             # decrease learning rate linearly
             utils.update_linear_schedule(
                 self.agent.optimizer, self.iter, self.num_updates,
-                self.agent.optimizer.lr if self.args.algo == "acktr" else self.args.lr)
+                self.agent.optimizer.lr
+                if self.args.algo == "acktr" else self.args.lr)
 
         for step in range(self.args.num_steps):
             # Sample actions
             with torch.no_grad():
                 value, action, action_log_prob, recurrent_hidden_states = self.actor_critic.act(
-                    self.rollouts.obs[step], self.rollouts.recurrent_hidden_states[step],
+                    self.rollouts.obs[step],
+                    self.rollouts.recurrent_hidden_states[step],
                     self.rollouts.masks[step])
 
             # Obser reward and next obs
@@ -174,17 +186,19 @@ class RLTrainer(BaseTrainer):
                     self.episode_rewards.append(info['episode']['r'])
 
             # If done then clean the history of observations.
-            masks = torch.FloatTensor(
-                [[0.0] if done_ else [1.0] for done_ in done])
+            masks = torch.FloatTensor([[0.0] if done_ else [1.0]
+                                       for done_ in done])
             bad_masks = torch.FloatTensor(
                 [[0.0] if 'bad_transition' in info.keys() else [1.0]
                  for info in infos])
             self.rollouts.insert(obs, recurrent_hidden_states, action,
-                            action_log_prob, value, reward, masks, bad_masks)
+                                 action_log_prob, value, reward, masks,
+                                 bad_masks)
 
         with torch.no_grad():
             next_value = self.actor_critic.get_value(
-                self.rollouts.obs[-1], self.rollouts.recurrent_hidden_states[-1],
+                self.rollouts.obs[-1],
+                self.rollouts.recurrent_hidden_states[-1],
                 self.rollouts.masks[-1]).detach()
 
         if self.args.gail:
@@ -196,24 +210,29 @@ class RLTrainer(BaseTrainer):
                 gail_epoch = 100  # Warm up
             for _ in range(gail_epoch):
                 self.discr.update(self.gail_train_loader, self.rollouts,
-                             utils.get_vec_normalize(self.envs)._obfilt)
+                                  utils.get_vec_normalize(self.envs)._obfilt)
 
             for step in range(self.args.num_steps):
                 self.rollouts.rewards[step] = self.discr.predict_reward(
-                    self.rollouts.obs[step], self.rollouts.actions[step], self.args.gamma,
-                    self.rollouts.masks[step])
+                    self.rollouts.obs[step], self.rollouts.actions[step],
+                    self.args.gamma, self.rollouts.masks[step])
 
-        self.rollouts.compute_returns(next_value, self.args.use_gae, self.args.gamma,
-                                 self.args.gae_lambda, self.args.use_proper_time_limits)
+        self.rollouts.compute_returns(next_value, self.args.use_gae,
+                                      self.args.gamma, self.args.gae_lambda,
+                                      self.args.use_proper_time_limits)
 
-        value_loss, action_loss, dist_entropy = self.agent.update(self.rollouts)
+        value_loss, action_loss, dist_entropy = self.agent.update(
+            self.rollouts)
         self.rollouts.after_update()
 
         # Write to tensorboard
         self.metric_writer.writer.set_step(step=self.iter - 1)
-        self.metric_writer.train_metrics.update("mean_reward", np.mean(self.episode_rewards))
-        self.metric_writer.train_metrics.update("max_reward", np.amax(self.episode_rewards))
-        self.metric_writer.train_metrics.update("min_reward", np.amin(self.episode_rewards))
+        self.metric_writer.train_metrics.update("mean_reward",
+                                                np.mean(self.episode_rewards))
+        self.metric_writer.train_metrics.update("max_reward",
+                                                np.amax(self.episode_rewards))
+        self.metric_writer.train_metrics.update("min_reward",
+                                                np.amin(self.episode_rewards))
 
     def validate(self):
         self._evaluate()
@@ -222,9 +241,10 @@ class RLTrainer(BaseTrainer):
         output_folder = os.path.join(exp_folder, 'validation')
         os.makedirs(output_folder, exist_ok=True)
         evaluator_writer = MetricTracker(*[],
-                                              writer=TensorboardWriter(output_folder,
-                                                                       self.logger,
-                                                                       enabled=True))
+                                         writer=TensorboardWriter(
+                                             output_folder,
+                                             self.logger,
+                                             enabled=True))
         for v in self.validate_v_list:
             for h in self.validate_h_list:
                 self._evaluate(validate_v=v,
@@ -232,7 +252,12 @@ class RLTrainer(BaseTrainer):
                                exp_folder=exp_folder,
                                evaluator_writer=evaluator_writer)
 
-    def _evaluate(self, validate_v, validate_h, exp_folder=None, output_video=True, evaluator_writer=None):
+    def _evaluate(self,
+                  validate_v,
+                  validate_h,
+                  exp_folder=None,
+                  output_video=True,
+                  evaluator_writer=None):
         self.validate_v = validate_v
         self.validate_h = validate_h
         metric_writer = None
@@ -247,6 +272,7 @@ class RLTrainer(BaseTrainer):
             video_path = self.config.video_path
         else:
             video_path = os.path.join(exp_folder, 'video')
+            video_path = os.path.join(video_path, f"v_{validate_v}_h{validate_h}")
             os.makedirs(video_path, exist_ok=True)
 
             model_folder = os.path.join(exp_folder, 'models')
@@ -261,6 +287,7 @@ class RLTrainer(BaseTrainer):
                 gui.show('{}/{:04d}.png'.format(folder, t))
             else:
                 gui.show()
+
         self.training = False
 
         gui = ti.GUI(background_color=0xFFFFFF)
@@ -279,7 +306,8 @@ class RLTrainer(BaseTrainer):
                 # Sample actions
                 with torch.no_grad():
                     value, action, action_log_prob, recurrent_hidden_states = actor_critic.act(
-                        self.rollouts.obs[step], self.rollouts.recurrent_hidden_states[step],
+                        self.rollouts.obs[step],
+                        self.rollouts.recurrent_hidden_states[step],
                         self.rollouts.masks[step])
                 # Obser reward and next obs
                 obs, reward, done, infos = self.envs.step(action)
@@ -287,22 +315,31 @@ class RLTrainer(BaseTrainer):
                     if 'episode' in info.keys():
                         self.episode_rewards.append(info['episode']['r'])
                 # If done then clean the history of observations.
-                masks = torch.FloatTensor([[0.0] if done_ else [1.0] for done_ in done])
-                bad_masks = torch.FloatTensor([[0.0] if 'bad_transition' in info.keys() else [1.0] for info in infos])
+                masks = torch.FloatTensor([[0.0] if done_ else [1.0]
+                                           for done_ in done])
+                bad_masks = torch.FloatTensor(
+                    [[0.0] if 'bad_transition' in info.keys() else [1.0]
+                     for info in infos])
                 self.rollouts.insert(obs, recurrent_hidden_states, action,
-                                action_log_prob, value, reward, masks, bad_masks)
+                                     action_log_prob, value, reward, masks,
+                                     bad_masks)
 
             for i in range(self.max_steps):
                 if i % 10 == 0:
                     visualizer(i, video_path, output_video=output_video)
 
-            self.get_loss(self.max_steps + 1, loss_enable={"velocity", "height"})
+            self.get_loss(self.max_steps + 1,
+                          loss_enable={"velocity", "height"})
 
             # Write to tensorboard
             metric_writer.writer.set_step(step=iter_num)
-            metric_writer.update(f"task_loss_v_{validate_v}_h_{validate_h}", self.loss[None])
-            metric_writer.update(f"velocity_loss_v_{validate_v}_h_{validate_h}", self.loss_dict["loss_v"].to_numpy())
-            metric_writer.update(f"height_loss_v_{validate_v}_h_{validate_h}", self.loss_dict["loss_h"].to_numpy())
+            metric_writer.update(f"task_loss_v_{validate_v}_h_{validate_h}",
+                                 self.loss[None])
+            metric_writer.update(
+                f"velocity_loss_v_{validate_v}_h_{validate_h}",
+                self.loss_dict["loss_v"].to_numpy())
+            metric_writer.update(f"height_loss_v_{validate_v}_h_{validate_h}",
+                                 self.loss_dict["loss_h"].to_numpy())
 
     # def evaluate(self):
     #     if (self.args.eval_interval is not None and len(self.episode_rewards) > 1
@@ -310,4 +347,3 @@ class RLTrainer(BaseTrainer):
     #         obs_rms = utils.get_vec_normalize(self.envs).obs_rms
     #         evaluate(self.actor_critic, obs_rms, self.args.env_name, self.args.seed,
     #                  self.args.num_processes, eval_log_dir, self.device)
-
