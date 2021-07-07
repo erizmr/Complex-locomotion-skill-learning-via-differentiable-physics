@@ -235,7 +235,10 @@ class RLTrainer(BaseTrainer):
                                                 np.amin(self.episode_rewards))
 
     def validate(self):
-        self._evaluate()
+        for v in self.validate_v_list:
+            for h in self.validate_h_list:
+                self._evaluate(validate_v=v,
+                               validate_h=h)
 
     def evaluate(self, exp_folder):
         output_folder = os.path.join(exp_folder, 'validation')
