@@ -6,7 +6,7 @@ import torch
 def get_args():
     parser = argparse.ArgumentParser(description='RL')
     parser.add_argument('--config_file',
-                        default='./cfg/sim_config_RL.json',
+                        default='',
                         help='experiment config file')
     parser.add_argument(
         '--train',
@@ -118,12 +118,12 @@ def get_args():
     parser.add_argument(
         '--log-interval',
         type=int,
-        default=10,
+        default=1,
         help='log interval, one log per n updates (default: 10)')
     parser.add_argument(
         '--save-interval',
         type=int,
-        default=100,
+        default=50,
         help='save interval, one save per n updates (default: 100)')
     parser.add_argument(
         '--eval-interval',

@@ -2,11 +2,12 @@
   "train": {
     "name": "DiffTaichi_RL",
     "save_dir": "/home/mingrui/difftaichi/difftaichi2/saved_results",
-    "output_video": true
+    "output_video": true,
+    "task": ["velocity", "height"]
   },
   "validation": {
-    "target_v": [-0.06, -0.04, -0.02, 0.02, 0.04, 0.06, 0.08],
-    "target_h": [0.10, 0.15, 0.20, 0.25]
+    "velocity": [-0.06, -0.04, -0.02, 0.02, 0.04, 0.06, 0.08],
+    "height": [0.10, 0.15, 0.20, 0.25]
   },
   "robot": {
     "dim": 2,

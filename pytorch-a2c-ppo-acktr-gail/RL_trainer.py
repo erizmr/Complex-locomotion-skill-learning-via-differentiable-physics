@@ -1,5 +1,6 @@
 import os
 import torch
+import itertools
 from collections import deque
 import numpy as np
 import taichi as ti
@@ -235,10 +236,7 @@ class RLTrainer(BaseTrainer):
                                                 np.amin(self.episode_rewards))
 
     def validate(self):
-        for v in self.validate_v_list:
-            for h in self.validate_h_list:
-                self._evaluate(validate_v=v,
-                               validate_h=h)
+        self._evaluate()
 
     def evaluate(self, exp_folder):
         output_folder = os.path.join(exp_folder, 'validation')
@@ -248,21 +246,13 @@ class RLTrainer(BaseTrainer):
                                              output_folder,
                                              self.logger,
                                              enabled=True))
-        for v in self.validate_v_list:
-            for h in self.validate_h_list:
-                self._evaluate(validate_v=v,
-                               validate_h=h,
-                               exp_folder=exp_folder,
-                               evaluator_writer=evaluator_writer)
+        self._evaluate(exp_folder=exp_folder, evaluator_writer=evaluator_writer)
 
     def _evaluate(self,
-                  validate_v,
-                  validate_h,
                   exp_folder=None,
                   output_video=True,
+                  show_gui=False,
                   evaluator_writer=None):
-        self.validate_v = validate_v
-        self.validate_h = validate_h
         metric_writer = None
         if evaluator_writer is None:
             metric_writer = self.metric_writer.valid_metrics
@@ -274,11 +264,8 @@ class RLTrainer(BaseTrainer):
             model_folder = str(self.config.model_dir)
             video_path = self.config.video_path
         else:
-            video_path = os.path.join(exp_folder, 'video')
-            video_path = os.path.join(video_path, f"v_{validate_v}_h{validate_h}")
-            os.makedirs(video_path, exist_ok=True)
-
             model_folder = os.path.join(exp_folder, 'models')
+            video_path = os.path.join(exp_folder, 'video')
 
         def visualizer(t, folder, output_video):
             gui.clear()
@@ -291,58 +278,92 @@ class RLTrainer(BaseTrainer):
             else:
                 gui.show()
 
+        # Set the trainer training mode to False to invoke the `initialize_validate`
         self.training = False
+        gui = ti.GUI(background_color=0xFFFFFF, show_gui=show_gui)
 
-        gui = ti.GUI(background_color=0xFFFFFF)
+        # Construct the validation matrix i.e., combinations of all validation targets
+        validation_matrix = list(itertools.product(*list(self.validate_targets.values())))
+        self.validate_targets_values = dict.fromkeys(self.task)
+        self.logger.info(f"Validation Matrix: {validation_matrix}")
+
         for iter_num in range(0, self.max_iter, self.args.save_interval):
             model_name = self.args.env_name + str(iter_num) + ".pt"
             load_path = os.path.join(model_folder, model_name)
             [actor_critic, self.envs.venv.obs_rms] = torch.load(load_path)
             self.logger.info(f"load {load_path}")
 
-            self.loss[None] = 0.
-            for l in self.losses:
-                l[None] = 0.
-            self.solver.clear_states(self.max_steps)
+            for element in validation_matrix:
+                for i, name in enumerate(list(self.validate_targets.keys())):
+                    self.validate_targets_values[name] = element[i]
 
-            for step in range(self.args.num_steps):
-                # Sample actions
-                with torch.no_grad():
-                    value, action, action_log_prob, recurrent_hidden_states = actor_critic.act(
-                        self.rollouts.obs[step],
-                        self.rollouts.recurrent_hidden_states[step],
-                        self.rollouts.masks[step])
-                # Obser reward and next obs
-                obs, reward, done, infos = self.envs.step(action)
-                for info in infos:
-                    if 'episode' in info.keys():
-                        self.episode_rewards.append(info['episode']['r'])
-                # If done then clean the history of observations.
-                masks = torch.FloatTensor([[0.0] if done_ else [1.0]
-                                           for done_ in done])
-                bad_masks = torch.FloatTensor(
-                    [[0.0] if 'bad_transition' in info.keys() else [1.0]
-                     for info in infos])
-                self.rollouts.insert(obs, recurrent_hidden_states, action,
-                                     action_log_prob, value, reward, masks,
-                                     bad_masks)
+                # Make sub folder for each validation case
+                suffix = ""
+                for k, v in self.validate_targets_values.items():
+                    suffix += f"_{k}_{v}"
+                sub_video_path = os.path.join(video_path, suffix[1:], str(iter_num))
+                os.makedirs(sub_video_path, exist_ok=True)
 
-            for i in range(self.max_steps):
-                if i % 10 == 0:
-                    visualizer(i, video_path, output_video=output_video)
+                self.loss[None] = 0.
+                for l in self.losses:
+                    l[None] = 0.
+                self.solver.clear_states(self.max_steps)
 
-            self.get_loss(self.max_steps + 1,
-                          loss_enable={"velocity", "height"})
+                # for step in range(self.args.num_steps):
+                #     # Sample actions
+                #     with torch.no_grad():
+                #         value, action, action_log_prob, recurrent_hidden_states = actor_critic.act(
+                #             self.rollouts.obs[step],
+                #             self.rollouts.recurrent_hidden_states[step],
+                #             self.rollouts.masks[step])
+                #     # Obser reward and next obs
+                #     obs, reward, done, infos = self.envs.step(action)
+                #     for info in infos:
+                #         if 'episode' in info.keys():
+                #             self.episode_rewards.append(info['episode']['r'])
+                #     # If done then clean the history of observations.
+                #     masks = torch.FloatTensor([[0.0] if done_ else [1.0]
+                #                                for done_ in done])
+                #     bad_masks = torch.FloatTensor(
+                #         [[0.0] if 'bad_transition' in info.keys() else [1.0]
+                #          for info in infos])
+                #     self.rollouts.insert(obs, recurrent_hidden_states, action,
+                #                          action_log_prob, value, reward, masks,
+                #                          bad_masks)
 
-            # Write to tensorboard
-            metric_writer.writer.set_step(step=iter_num)
-            metric_writer.update(f"task_loss_v_{validate_v}_h_{validate_h}",
-                                 self.loss[None])
-            metric_writer.update(
-                f"velocity_loss_v_{validate_v}_h_{validate_h}",
-                self.loss_dict["loss_v"].to_numpy())
-            metric_writer.update(f"height_loss_v_{validate_v}_h_{validate_h}",
-                                 self.loss_dict["loss_h"].to_numpy())
+                eval_recurrent_hidden_states = self.rollouts.recurrent_hidden_states
+                eval_masks = self.rollouts.masks
+                obs = self.envs.reset()
+                for step in range(self.args.num_steps):
+                    # Sample actions
+                    with torch.no_grad():
+                        _, action, _, eval_recurrent_hidden_states = actor_critic.act(
+                            obs,
+                            eval_recurrent_hidden_states,
+                            eval_masks)
+                    # Obser reward and next obs
+                    obs, _, done, infos = self.envs.step(action)
+                    for info in infos:
+                        if 'episode' in info.keys():
+                            self.episode_rewards.append(info['episode']['r'])
+                    # If done then clean the history of observations.
+                    eval_masks = torch.FloatTensor([[0.0] if done_ else [1.0]
+                                               for done_ in done])
+
+                for i in range(self.max_steps):
+                    if i % 20 == 0:
+                        visualizer(i, sub_video_path, output_video=output_video)
+
+                self.get_loss(self.max_steps + 1, loss_enable=self.task)
+
+                # Write to tensorboard
+                metric_writer.writer.set_step(step=iter_num)
+                metric_writer.update(f"task_loss{suffix}",
+                                     self.loss[None])
+                for k in self.validate_targets_values.keys():
+                    metric_writer.update(
+                        f"{k}_loss{suffix}",
+                        self.loss_dict[f"loss_{k}"].to_numpy())
 
     # def evaluate(self):
     #     if (self.args.eval_interval is not None and len(self.episode_rewards) > 1

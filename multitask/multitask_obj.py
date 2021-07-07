@@ -42,10 +42,23 @@ class BaseTrainer:
         self.output_vis_interval = self.config["process"]["output_vis_interval"]
         self.ground_height = self.config["simulator"]["ground_height"]
 
-        self.validate_v_list = self.config["validation"]["target_v"]
-        self.validate_h_list = self.config["validation"]["target_h"]
-        self.validate_v = 0.0
-        self.validate_h = 0.0
+        self.loss_types_collections = {"velocity", "height", "pose", "actuation", "rotation"}
+        # Get the task, and ensure that the task loss is actually defined
+        self.task = set(self.config["train"]["task"])
+        for tsk in self.task:
+            assert tsk in self.loss_types_collections
+
+        # Remove the loss types that are not used in the task during training
+        self.validate_targets = self.config["validation"]
+        _to_remove = []
+        for k in self.validate_targets.keys():
+            if k not in self.task:
+                _to_remove.append(k)
+        for k in _to_remove:
+            self.validate_targets.pop(k, None)
+
+        self.validate_targets_values = dict.fromkeys(self.task)
+
 
         self.random_seed = int(time.time() * 1e6) % 10000
         self.training = True
@@ -58,12 +71,12 @@ class BaseTrainer:
         self.loss_rotation = scalar()
         self.loss_weight = scalar()
         self.loss_act = scalar()
-        self.loss_dict = {'loss_v': self.loss_velocity,
-                          'loss_h': self.loss_height,
-                          'loss_p': self.loss_pose,
-                          'loss_r': self.loss_rotation,
-                          'loss_w': self.loss_weight,
-                          'loss_a': self.loss_act}
+        self.loss_dict = {'loss_velocity': self.loss_velocity,
+                          'loss_height': self.loss_height,
+                          'loss_pose': self.loss_pose,
+                          'loss_rotation': self.loss_rotation,
+                          'loss_weight': self.loss_weight,
+                          'loss_act': self.loss_act}
         self.losses = self.loss_dict.values()
 
         ti.root.place(self.loss)

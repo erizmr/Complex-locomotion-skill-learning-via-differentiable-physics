@@ -31,7 +31,7 @@ class MassSpringEnv(gym.Env):
         self.rewards = 0.
         self.last_height = 0.
         self.t = 0
-        self.is_output_video = self.trainer.config.get_config()["train"]["output_video"]
+        self.is_output_video = self.trainer.config.get_config()["train"]["output_video_in_train"]
         self.video_dir = os.path.join(trainer.config.video_dir, "_{}_seed{}".format(trainer.robot_id, trainer.random_seed))
 
     def step(self, action):
@@ -111,7 +111,7 @@ class MassSpringEnv(gym.Env):
         # Reward for jumping
         height = self.trainer.solver.height[self.t]
         if height > self.last_height:
-            d_reward = ((height - target_h) ** 2 - (self.last_height - target_h) ** 2) / (target_h ** 2)
+            d_reward = ((height - target_h) ** 2 - (self.last_height - target_h) ** 2) / (target_h ** 2) * 5.0
             reward -= d_reward
             self.last_height = height
         return reward
@@ -130,9 +130,10 @@ class MassSpringEnv(gym.Env):
         if self.trainer.training:
             self.trainer.initialize_train(0, self.rollout_length, self.max_speed, self.max_height)
         else:
-
-            self.trainer.logger.info(f"current max speed: {self.trainer.validate_v}, max height {self.trainer.validate_h}")
-            self.trainer.initialize_validate(self.rollout_length, self.trainer.validate_v, self.trainer.validate_h)
+            validate_v = self.trainer.validate_targets_values['velocity']
+            validate_h = self.trainer.validate_targets_values['height']
+            self.trainer.logger.info(f"current max speed: {validate_v}, max height {validate_h}")
+            self.trainer.initialize_validate(self.rollout_length, validate_v, validate_h)
         self.t = 0
         self.rollout_times += 1
         self.last_height = 0.1
