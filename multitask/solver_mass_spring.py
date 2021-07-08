@@ -162,14 +162,14 @@ class SolverMassSpring:
         self.apply_spring_force(t)
         self.advance_toi(t + 1)
 
-    def draw_robot(self, gui, t, target_v):
+    def draw_robot(self, gui, batch_rank, t, target_v):
         def circle(x, y, color):
             gui.circle((x, y), ti.rgb_to_hex(color), 7)
         # draw segments
         for i in range(self.n_springs):
             def get_pt(x):
                 return (x[0], x[1])
-            a = self.actuation[t - 1, 0, i] * 0.5
+            a = self.actuation[t - 1, batch_rank, i] * 0.5
             r = 2
             if self.spring_actuation[i] == 0:
                 a = 0
@@ -177,15 +177,15 @@ class SolverMassSpring:
             else:
                 r = 4
                 c = ti.rgb_to_hex((0.5 + a, 0.5 - abs(a), 0.5 - a))
-            gui.line(get_pt(self.x[t, 0, self.spring_anchor_a[i]]),
-                     get_pt(self.x[t, 0, self.spring_anchor_b[i]]),
+            gui.line(get_pt(self.x[t, batch_rank, self.spring_anchor_a[i]]),
+                     get_pt(self.x[t, batch_rank, self.spring_anchor_b[i]]),
                      color=c,
                      radius=r)
         # draw points
         for i in range(self.n_objects):
             color = (0.06640625, 0.06640625, 0.06640625)
-            circle(self.x[t, 0, i][0], self.x[t, 0, i][1], color)
-        if target_v[t, 0][0] > 0:
+            circle(self.x[t, batch_rank, i][0], self.x[t, batch_rank, i][1], color)
+        if target_v[t, batch_rank][0] > 0:
             circle(0.5, 0.5, (1, 0, 0))
             circle(0.6, 0.5, (1, 0, 0))
         else:
