@@ -5,6 +5,7 @@ from collections import deque
 import numpy as np
 import taichi as ti
 
+from gym import spaces
 from multitask.multitask_obj import BaseTrainer
 from a2c_ppo_acktr import algo, utils
 from a2c_ppo_acktr.algo import gail
@@ -70,10 +71,21 @@ class RLTrainer(BaseTrainer):
         self.envs = make_vec_envs(self, args.env_name, args.seed,
                                   args.num_processes, args.gamma, self.device,
                                   False)
+        # self.envs = make_env(self, args.env_name, args.seed, rank=0, allow_early_resets=False)()
+
+        obs_shape = list(self.envs.observation_space.shape)
+        obs_shape[0] = obs_shape[0] // self.batch_size
+        self.obs_shape = tuple(obs_shape)
+        print('env obs ', obs_shape, ' env act', self.envs.action_space)
+
+        # We only need one shared parameters NN for all batches
+        act_assign = np.ones(len(self.solver.act_list), dtype=np.float64)
+        action_space_assigner = spaces.Box(-act_assign, act_assign)
         self.actor_critic = Policy(
-            self.envs.observation_space.shape,
-            self.envs.action_space,
+            obs_shape,
+            action_space_assigner,
             base_kwargs={'recurrent': args.recurrent_policy})
+
         self.actor_critic.to(self.device)
 
         # Define the RL algorithm
@@ -85,12 +97,17 @@ class RLTrainer(BaseTrainer):
         self.gail_train_loader = None
         self._gail()
 
+        # self.rollouts = RolloutStorage(
+        #     args.num_steps, args.num_processes,
+        #     self.envs.observation_space.shape, self.envs.action_space,
+        #     self.actor_critic.recurrent_hidden_state_size)
+
         self.rollouts = RolloutStorage(
-            args.num_steps, args.num_processes,
-            self.envs.observation_space.shape, self.envs.action_space,
+            args.num_steps, self.batch_size,
+            obs_shape, action_space_assigner,
             self.actor_critic.recurrent_hidden_state_size)
 
-        obs = self.envs.reset()
+        self.obs = self.envs.reset()
         self.rollouts.to(self.device)
 
         self.episode_rewards_len = 10
@@ -180,11 +197,12 @@ class RLTrainer(BaseTrainer):
                     self.rollouts.masks[step])
 
             # Obser reward and next obs
-            obs, reward, done, infos = self.envs.step(action)
+            obs, reward, done, infos = self.envs.step(torch.unsqueeze(action, dim=0))
 
             for info in infos:
                 if 'episode' in info.keys():
                     self.episode_rewards.append(info['episode']['r'])
+                    # print('obs ', obs.shape, 'reward ', reward, 'done ', done, 'infos', infos)
 
             # If done then clean the history of observations.
             masks = torch.FloatTensor([[0.0] if done_ else [1.0]
@@ -192,7 +210,9 @@ class RLTrainer(BaseTrainer):
             bad_masks = torch.FloatTensor(
                 [[0.0] if 'bad_transition' in info.keys() else [1.0]
                  for info in infos])
-            self.rollouts.insert(obs, recurrent_hidden_states, action,
+
+            # Recover the obs shape back to [batch_size, obs_shape]
+            self.rollouts.insert(obs.view(self.batch_size, self.obs_shape[0]), recurrent_hidden_states, action,
                                  action_log_prob, value, reward, masks,
                                  bad_masks)
 
@@ -283,9 +303,15 @@ class RLTrainer(BaseTrainer):
         gui = ti.GUI(background_color=0xFFFFFF, show_gui=show_gui)
 
         # Construct the validation matrix i.e., combinations of all validation targets
-        validation_matrix = list(itertools.product(*list(self.validate_targets.values())))
+        targets_keys = []
+        targets_values = []
+        for k, v in self.validate_targets.items():
+            targets_keys.append(k)
+            targets_values.append(v)
+        validation_matrix = list(itertools.product(*targets_values))
         self.validate_targets_values = dict.fromkeys(self.task)
-        self.logger.info(f"Validation Matrix: {validation_matrix}")
+        self.logger.info(f"Validation targets: {targets_keys} "
+                         f"Validation Matrix: {validation_matrix}")
 
         for iter_num in range(0, self.max_iter, self.args.save_interval):
             model_name = self.args.env_name + str(iter_num) + ".pt"
@@ -294,13 +320,14 @@ class RLTrainer(BaseTrainer):
             self.logger.info(f"load {load_path}")
 
             for element in validation_matrix:
-                for i, name in enumerate(list(self.validate_targets.keys())):
+                for i, name in enumerate(targets_keys):
                     self.validate_targets_values[name] = element[i]
 
                 # Make sub folder for each validation case
                 suffix = ""
-                for k, v in self.validate_targets_values.items():
-                    suffix += f"_{k}_{v}"
+                for k in targets_keys:
+                    suffix += f"_{k}_{self.validate_targets_values[k]}"
+
                 sub_video_path = os.path.join(video_path, suffix[1:], str(iter_num))
                 os.makedirs(sub_video_path, exist_ok=True)
 
@@ -309,31 +336,9 @@ class RLTrainer(BaseTrainer):
                     l[None] = 0.
                 self.solver.clear_states(self.max_steps)
 
-                # for step in range(self.args.num_steps):
-                #     # Sample actions
-                #     with torch.no_grad():
-                #         value, action, action_log_prob, recurrent_hidden_states = actor_critic.act(
-                #             self.rollouts.obs[step],
-                #             self.rollouts.recurrent_hidden_states[step],
-                #             self.rollouts.masks[step])
-                #     # Obser reward and next obs
-                #     obs, reward, done, infos = self.envs.step(action)
-                #     for info in infos:
-                #         if 'episode' in info.keys():
-                #             self.episode_rewards.append(info['episode']['r'])
-                #     # If done then clean the history of observations.
-                #     masks = torch.FloatTensor([[0.0] if done_ else [1.0]
-                #                                for done_ in done])
-                #     bad_masks = torch.FloatTensor(
-                #         [[0.0] if 'bad_transition' in info.keys() else [1.0]
-                #          for info in infos])
-                #     self.rollouts.insert(obs, recurrent_hidden_states, action,
-                #                          action_log_prob, value, reward, masks,
-                #                          bad_masks)
-
                 eval_recurrent_hidden_states = self.rollouts.recurrent_hidden_states
                 eval_masks = self.rollouts.masks
-                obs = self.envs.reset()
+                obs = self.obs
                 for step in range(self.args.num_steps):
                     # Sample actions
                     with torch.no_grad():

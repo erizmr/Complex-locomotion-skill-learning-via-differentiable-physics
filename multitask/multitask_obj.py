@@ -5,11 +5,8 @@ import numpy as np
 import os
 import time
 import weakref
-import threading
-import logging
 
 from multitask.hooks import HookBase
-
 from multitask.utils import Debug, real, plot_curve, load_string, scalar, vec, mat
 from multitask.solver_mass_spring import SolverMassSpring
 from multitask.solver_mpm import SolverMPM
@@ -58,7 +55,6 @@ class BaseTrainer:
             self.validate_targets.pop(k, None)
 
         self.validate_targets_values = dict.fromkeys(self.task)
-
 
         self.random_seed = int(time.time() * 1e6) % 10000
         self.training = True
@@ -238,44 +234,10 @@ class BaseTrainer:
 
     @ti.kernel
     def initialize_validate(self, steps: ti.template(), output_v: ti.f64, output_h: ti.f64):
-        '''
-        for t, k in ti.ndrange(steps, batch_size):
-            q = t // turn_period
-            if q % 3 == 0:
-                target_v[t, k][0] = (q // 3 % 2 * 2 - 1) * output_v
-                target_h[t, k] = 0.1
-            elif q % 3 == 1:
-                target_v[t, k][0] = 0
-                target_h[t, k] = output_h
-            else:
-                target_v[t, k][0] = 0
-                target_h[t, k] = 0.1
-            if ti.static(dim == 3):
-                target_v[t, k][0] = ((t // turn_period) % 2 * 2 - 1) * output_v
-                target_v[t, k][2] = 0
-                target_h[t, k] = 0
-        '''
         for t, k in ti.ndrange(steps, self.batch_size):  # jump
             # if steps < 500:
             self.target_v[t, k][0] = output_v
             self.target_h[t, k] = output_h
-        # else:
-        #    target_v[t, k][0] = output_v
-        #    target_h[t, k] = 0
-        '''
-        if output_h < 1.0 + 1e-8:
-            for t, k in ti.ndrange(steps, batch_size):
-                target_v[t, k][0] = ((t // turn_period) % 2 * 2 - 1) * output_v
-                target_h[t, k] = 0
-        for t, k in ti.ndrange(steps, batch_size):
-            q = t // turn_period
-            if q % 2 == 0:
-                target_v[t, k][0] = (q // 2 % 2 * 2 - 1) * output_v
-                target_h[t, k] = 0.1
-            else:
-                target_v[t, k][0] = 0
-                target_h[t, k] = output_h
-        '''
 
     @ti.kernel
     def initialize_train(self, iter: ti.i32, steps: ti.template(), max_velocity: ti.f64, max_height: ti.f64):
@@ -378,11 +340,11 @@ class BaseTrainer:
         raise NotImplementedError
 
     def train(self, start_iter, max_iter):
-        # logger = logging.getLogger(__name__)
-        self.logger.info("Starting training from iteration {}".format(start_iter))
 
         self.iter = self.start_iter = start_iter
-        self.max_iter = max_iter
+        self.max_iter = max_iter // self.batch_size
+        self.logger.info(f"Starting training from iteration {start_iter}, Batch Size: {self.batch_size}, "
+                         f"Max iterations: {self.max_iter}")
 
         try:
             self.before_train()

@@ -18,12 +18,7 @@ from stable_baselines3.common.vec_env import (DummyVecEnv, SubprocVecEnv,
 from stable_baselines3.common.vec_env.vec_normalize import \
     VecNormalize as VecNormalize_
 
-import sys
-sys.path.append('../multitask/')
-# from multitask.multitask_rl import ti, config, multitask, MassSpringEnv, shutil
-import taichi as ti
 from multitask.multitask_rl import MassSpringEnv
-import shutil
 
 try:
     import dmc2gym
@@ -57,7 +52,6 @@ def make_env(trainer,
             env = ClipAction(env)
         else:
             # env = gym.make(env_id)
-            gui = ti.GUI(background_color=0xFFFFFF, show_gui=False)
             trainer.setup_robot()
             if simulator == "mass_spring":
                 env = MassSpringEnv(trainer=trainer)
