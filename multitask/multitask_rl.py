@@ -1,8 +1,9 @@
 import os
 import torch
 import gym
+import time
 import numpy as np
-
+import taichi as ti
 from gym import spaces
 
 np.seterr(all='raise')
@@ -13,6 +14,8 @@ class MassSpringEnv(gym.Env):
 
     def __init__(self, trainer):
         super(MassSpringEnv, self).__init__()
+        self.t_start = time.time()
+        self.needs_reset = True
         self.trainer = trainer
         self.act_spring = trainer.solver.act_list
         self.max_speed = trainer.config.get_config()["process"]["max_speed"]
@@ -31,7 +34,7 @@ class MassSpringEnv(gym.Env):
 
         self.rollout_length = trainer.max_steps
         self.rollout_times = 0
-        self.rewards = 0.
+        self.rewards = None
         self.last_height = [0.] * self.trainer.batch_size
         # self.last_height = 0.
         self.t = 0
@@ -58,9 +61,8 @@ class MassSpringEnv(gym.Env):
         if self.t % 500 == 0:
             self.last_height = [0.1] * self.trainer.batch_size
             # self.last_height = 0.1
-
         reward = self.get_reward()
-
+        self.rewards.append(reward)
         if self.is_output_video:
             self.output_video()
 
@@ -69,6 +71,12 @@ class MassSpringEnv(gym.Env):
             done = True
 
         info = {}
+        if done:
+            self.needs_reset = True
+            ep_rew = np.sum(np.array(self.rewards), axis=0)
+            ep_len = len(self.rewards)
+            ep_info = {"r": ep_rew, "l": ep_len, "t": round(time.time() - self.t_start, 6)}
+            info["episode"] = ep_info
         return observation, reward, done, info
 
     def output_video(self):
@@ -141,10 +149,10 @@ class MassSpringEnv(gym.Env):
             # Reward for jumping
             height = self.trainer.solver.height[self.t, k]
             if height > self.last_height[k]:
-                d_reward = ((height - target_h) ** 2 - (self.last_height[k] - target_h) ** 2) / (target_h ** 2) * 10.0
+                d_reward = ((height - target_h) ** 2 - (self.last_height[k] - target_h) ** 2) / (target_h ** 2) * 5.0
                 reward[k] -= d_reward
                 self.last_height[k] = height
-        return sum(reward) / self.trainer.batch_size
+        return reward
 
     # def get_state(self, t):
     #     np_state = self.trainer.input_state.to_numpy()[t, 0]
@@ -158,7 +166,7 @@ class MassSpringEnv(gym.Env):
     def get_state(self, t):
         np_state = self.trainer.input_state.to_numpy()[t]
         if np.amax(np_state) > 1. or np.amin(np_state) < -1.:
-            # print('action range error, try to clip')
+            print('state range error, try to clip')
             np_state = np.clip(np_state, a_min=-1., a_max=1.)
             # print(np_state)
             # assert False
@@ -166,6 +174,8 @@ class MassSpringEnv(gym.Env):
         return np_state
 
     def reset(self):
+        self.needs_reset = False
+        self.rewards = []
         self.trainer.logger.info("reset called")
         if self.trainer.training:
             self.trainer.initialize_train(0, self.rollout_length, self.max_speed, self.max_height)

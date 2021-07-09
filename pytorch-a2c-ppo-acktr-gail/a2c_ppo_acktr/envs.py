@@ -44,7 +44,8 @@ def make_env(trainer,
 
     def _thunk(trainer=trainer):
         monitor_dir = trainer.config.monitor_dir
-        log_dir = trainer.config.log_dir
+        # log_dir = trainer.config.log_dir
+        log_dir = None
         simulator = trainer.simulator
         if env_id.startswith("dm"):
             _, domain, task = env_id.split('.')
@@ -60,7 +61,7 @@ def make_env(trainer,
             else:
                 raise NotImplementedError
             # check_env(env)
-            env = Monitor(env, str(monitor_dir))
+            # env = Monitor(env, str(monitor_dir))
 
         is_atari = hasattr(gym.envs, 'atari') and isinstance(
             env.unwrapped, gym.envs.atari.atari_env.AtariEnv)
@@ -118,7 +119,7 @@ def make_vec_envs(trainer,
         envs = SubprocVecEnv(envs)
     else:
         envs = DummyVecEnv(envs)
-
+    print('env obs space', envs.observation_space.shape)
     if len(envs.observation_space.shape) == 1:
         if gamma is None:
             envs = VecNormalize(envs, norm_reward=False)

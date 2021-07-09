@@ -108,7 +108,7 @@ class BaseTrainer:
 
         ti.root.dense(ti.ijk, (self.max_steps, self.batch_size, self.n_input_states)).place(self.input_state)
 
-        self.target_v, self.target_h, self.target_c = vec(self.dim), scalar(), scalar()
+        self.target_v, self.target_h, self.target_c = vec(self.dim), scalar(), scalar(),
         ti.root.dense(ti.ij, (self.max_steps, self.batch_size)).place(self.target_v, self.target_h, self.target_c)
 
         # Initialize simulation
@@ -119,6 +119,7 @@ class BaseTrainer:
         self.height = self.solver.height
         self.rotation = self.solver.rotation
         self.actuation = self.solver.actuation
+
         self.pool = ti.field(ti.f64, shape=(5 * self.batch_size * (1000 // self.turn_period + 1)))
 
         self.gui = ti.GUI(show_gui=False, background_color=0xFFFFFF)

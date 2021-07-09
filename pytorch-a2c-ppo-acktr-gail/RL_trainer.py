@@ -69,15 +69,14 @@ class RLTrainer(BaseTrainer):
         self.args = args
         self.config = config
         self.device = torch.device("cuda:0" if args.cuda else "cpu")
-        self.envs = make_vec_envs(self, args.env_name, args.seed,
-                                  args.num_processes, args.gamma, self.device,
-                                  False)
-        # self.envs = make_env(self, args.env_name, args.seed, rank=0, allow_early_resets=False)()
+        # self.envs = make_vec_envs(self, args.env_name, args.seed,
+        #                           args.num_processes, args.gamma, self.device,
+        #                           False)
+        self.envs = make_env(self, args.env_name, args.seed, rank=0, allow_early_resets=False)()
 
         obs_shape = list(self.envs.observation_space.shape)
         obs_shape[0] = obs_shape[0] // self.batch_size
         self.obs_shape = tuple(obs_shape)
-        # print('env obs ', obs_shape, ' env act', self.envs.action_space)
 
         # We only need one shared parameters NN for all batches
         act_assign = np.ones(len(self.solver.act_list), dtype=np.float64)
@@ -108,8 +107,6 @@ class RLTrainer(BaseTrainer):
             obs_shape, action_space_assigner,
             self.actor_critic.recurrent_hidden_state_size)
 
-        self.obs = self.envs.reset()
-        print('obs', self.obs_shape, obs_shape)
         self.rollouts.to(self.device)
 
         self.episode_rewards_len = 10
@@ -190,29 +187,34 @@ class RLTrainer(BaseTrainer):
                 self.agent.optimizer.lr
                 if self.args.algo == "acktr" else self.args.lr)
 
-        for step in range(self.args.num_steps):
+        obs = self.envs.reset()
+        obs = torch.from_numpy(obs)
+        self.rollouts.obs[0].copy_(obs.view(self.batch_size, self.obs_shape[0]))
+        for step in range(self.args.num_steps - 1):
             # Sample actions
             with torch.no_grad():
                 value, action, action_log_prob, recurrent_hidden_states = self.actor_critic.act(
                     self.rollouts.obs[step],
                     self.rollouts.recurrent_hidden_states[step],
                     self.rollouts.masks[step])
-
+            action = action.cpu()
             # Obser reward and next obs
-            obs, reward, done, infos = self.envs.step(torch.unsqueeze(action, dim=0))
+            obs, reward, done, infos = self.envs.step(action)
 
-            for info in infos:
+            for info in [infos]:
                 if 'episode' in info.keys():
                     self.episode_rewards.append(info['episode']['r'])
-                    # print('obs ', obs.shape, 'reward ', reward, 'done ', done, 'infos', infos)
+                    print(f'obs {obs.shape}, reward {reward.shape} done {done} infos {infos}')
 
             # If done then clean the history of observations.
             masks = torch.FloatTensor([[0.0] if done_ else [1.0]
-                                       for done_ in done])
+                                       for done_ in [done]])
             bad_masks = torch.FloatTensor(
                 [[0.0] if 'bad_transition' in info.keys() else [1.0]
-                 for info in infos])
+                 for info in [infos]])
             # Recover the obs shape back to [batch_size, obs_shape]
+            obs = torch.from_numpy(obs)
+            reward = torch.unsqueeze(torch.from_numpy(reward), dim=1)
             self.rollouts.insert(obs.view(self.batch_size, self.obs_shape[0]), recurrent_hidden_states, action,
                                  action_log_prob, value, reward, masks,
                                  bad_masks)
@@ -273,7 +275,8 @@ class RLTrainer(BaseTrainer):
                   exp_folder=None,
                   output_video=True,
                   show_gui=False,
-                  evaluator_writer=None):
+                  evaluator_writer=None,
+                  device='cuda'):
         metric_writer = None
         if evaluator_writer is None:
             metric_writer = self.metric_writer.valid_metrics
@@ -322,11 +325,17 @@ class RLTrainer(BaseTrainer):
                 self.validate_targets_values[name].append(element[i])
                 s_base += f"_{name}_{element[i]}"
             suffix.append(s_base)
+
+        obs = self.envs.reset()
         for iter_num in range(0, self.max_iter, self.args.save_interval):
             model_name = self.args.env_name + str(iter_num) + ".pt"
             load_path = os.path.join(model_folder, model_name)
-            [actor_critic, self.envs.venv.obs_rms] = torch.load(load_path)
+            [actor_critic, obs_rms] = torch.load(load_path)
             self.logger.info(f"load {load_path}")
+            vec_norm = utils.get_vec_normalize(self.envs)
+            if vec_norm is not None:
+                vec_norm.eval()
+                vec_norm.obs_rms = obs_rms
 
             sub_video_paths = []
             for k in range(self.batch_size):
@@ -345,19 +354,19 @@ class RLTrainer(BaseTrainer):
             for l in self.losses_batch:
                 for k in range(self.batch_size):
                     l[k] = 0.
-
             self.solver.clear_states(self.max_steps)
 
-            eval_recurrent_hidden_states = self.rollouts.recurrent_hidden_states[0]
-            eval_masks = self.rollouts.masks[0]
-            obs = self.obs.view(self.batch_size, self.obs_shape[0])
+            obs = obs.view(self.batch_size, self.obs_shape[0])
+            eval_recurrent_hidden_states = torch.zeros(self.batch_size, actor_critic.recurrent_hidden_state_size, device=device)
+            eval_masks = torch.zeros(self.batch_size, 1, device=device)
             for step in range(self.args.num_steps):
                 # Sample actions
                 with torch.no_grad():
                     _, action, _, eval_recurrent_hidden_states = actor_critic.act(
                         obs,
                         eval_recurrent_hidden_states,
-                        eval_masks)
+                        eval_masks,
+                        deterministic=True)
                 # Obser reward and next obs
                 obs, _, done, infos = self.envs.step(torch.unsqueeze(action, dim=0))
                 obs = obs.view(self.batch_size, self.obs_shape[0])
