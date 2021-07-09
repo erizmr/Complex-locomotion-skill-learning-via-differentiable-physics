@@ -174,7 +174,7 @@ class BaseTrainer:
                     loss_x = (self.center[t, k](0) - self.center[t - self.run_period, k](0) - self.target_v[
                         t - self.run_period, k](0)) ** 2 / self.batch_size
                     self.loss_velocity[None] += loss_x
-                    self.loss_velocity_batch[k][None] += loss_x
+                    self.loss_velocity_batch[k] += loss_x
                 else:
                     loss_x = (self.center[t, k](0) - self.center[t - self.run_period, k](0) - self.target_v[
                         t - self.run_period, k](0)) ** 2 / self.batch_size
@@ -182,7 +182,7 @@ class BaseTrainer:
                         t - self.run_period, k](2)) ** 2 / self.batch_size
 
                     self.loss_velocity[None] += loss_x + loss_y
-                    self.loss_velocity_batch[k][None] += loss_x + loss_y
+                    self.loss_velocity_batch[k] += loss_x + loss_y
         # if k == 0:
         #     print("Mark run: ", center[t, 0](0) - center[t - run_period, 0](0), target_v[t - run_period, 0](0))
 
@@ -192,7 +192,7 @@ class BaseTrainer:
             if t % self.jump_period == self.jump_period - 1 and self.target_h[t, k] > 0.1:
                 loss_h = (self.height[t, k] - self.target_h[t, k]) ** 2 / self.batch_size / (steps // self.jump_period) * 100
                 self.loss_height[None] += loss_h
-                self.loss_height_batch[k][None] += loss_h
+                self.loss_height_batch[k] += loss_h
 
     @ti.kernel
     def compute_loss_pose(self, steps: ti.template()):
@@ -203,14 +203,14 @@ class BaseTrainer:
                 dist2 = sum((self.x[t, k, i] - self.initial_objects[i]) ** 2)
                 loss_p = dist2 / self.batch_size / (steps // self.jump_period)
                 self.loss_pose[None] += loss_p
-                self.loss_pose_batch[k][None] += loss_p
+                self.loss_pose_batch[k] += loss_p
 
     @ti.kernel
     def compute_loss_rotation(self, steps: ti.template()):
         for t, k in ti.ndrange((1, steps + 1), self.batch_size):
             loss_r = self.rotation[t, k] ** 2 / self.batch_size / 5
             self.loss_rotation[None] += loss_r
-            self.loss_rotation_batch[k][None] += loss_r
+            self.loss_rotation_batch[k] += loss_r
 
     @ti.kernel
     def compute_loss_actuation(self, steps: ti.template()):
@@ -219,7 +219,7 @@ class BaseTrainer:
                 loss_a = ti.max(ti.abs(self.actuation[t, k, i]) - (ti.abs(self.target_v[t, k][0]) / 0.08) ** 0.5,
                                          0.) / self.n_springs / self.batch_size / steps * 10
                 self.loss_act[None] += loss_a
-                self.loss_act_batch[k][None] += loss_a
+                self.loss_act_batch[k] += loss_a
 
     @ti.kernel
     def compute_loss_final(self, l: ti.template()):
@@ -228,7 +228,7 @@ class BaseTrainer:
     @ti.kernel
     def compute_loss_final_batch(self, l: ti.template()):
         for k in range(self.batch_size):
-            self.loss_batch[k][None] += l[k][None]
+            self.loss_batch[k] += l[k]
 
     def get_loss(self, steps, loss_enable, *args, **kwargs):
         if "velocity" in loss_enable:
@@ -274,7 +274,7 @@ class BaseTrainer:
             self.target_h[t, k] = 0.
 
     @ti.kernel
-    def initialize_validate(self, steps: ti.template(), output_v: ti.f64, output_h: ti.f64):
+    def initialize_validate(self, steps: ti.template(), output_v: ti.ext_arr(), output_h: ti.ext_arr()):
         for t, k in ti.ndrange(steps, self.batch_size):
             self.target_v[t, k][0] = output_v[k]
             self.target_h[t, k] = output_h[k]

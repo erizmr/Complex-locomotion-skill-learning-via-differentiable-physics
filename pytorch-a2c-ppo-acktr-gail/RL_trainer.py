@@ -212,7 +212,6 @@ class RLTrainer(BaseTrainer):
             bad_masks = torch.FloatTensor(
                 [[0.0] if 'bad_transition' in info.keys() else [1.0]
                  for info in infos])
-
             # Recover the obs shape back to [batch_size, obs_shape]
             self.rollouts.insert(obs.view(self.batch_size, self.obs_shape[0]), recurrent_hidden_states, action,
                                  action_log_prob, value, reward, masks,
@@ -353,7 +352,6 @@ class RLTrainer(BaseTrainer):
             eval_recurrent_hidden_states = self.rollouts.recurrent_hidden_states[0]
             eval_masks = self.rollouts.masks[0]
             obs = self.obs.view(self.batch_size, self.obs_shape[0])
-            print('obs ', obs.shape)
             for step in range(self.args.num_steps):
                 # Sample actions
                 with torch.no_grad():
@@ -363,13 +361,15 @@ class RLTrainer(BaseTrainer):
                         eval_masks)
                 # Obser reward and next obs
                 obs, _, done, infos = self.envs.step(torch.unsqueeze(action, dim=0))
+                obs = obs.view(self.batch_size, self.obs_shape[0])
+
                 for info in infos:
                     if 'episode' in info.keys():
                         self.episode_rewards.append(info['episode']['r'])
                 # If done then clean the history of observations.
                 eval_masks = torch.FloatTensor([[0.0] if done_ else [1.0]
                                            for done_ in done])
-
+                eval_masks = torch.cat([eval_masks for _ in range(self.batch_size)], dim=0)
             for i in range(self.max_steps):
                 if i % 20 == 0:
                     for k in range(self.batch_size):
@@ -382,11 +382,11 @@ class RLTrainer(BaseTrainer):
 
             for k in range(self.batch_size):
                 metric_writer.update(f"task_loss{suffix[k]}",
-                                     self.loss_batch[k][None])
+                                     self.loss_batch[k])
                 for name in self.validate_targets_values.keys():
                     metric_writer.update(
                         f"{name}_loss{suffix[k]}",
-                        self.loss_dict_batch[f"loss_{name}"][k].to_numpy())
+                        self.loss_dict_batch[f"loss_{name}"][k])
 
     # def evaluate(self):
     #     if (self.args.eval_interval is not None and len(self.episode_rewards) > 1
