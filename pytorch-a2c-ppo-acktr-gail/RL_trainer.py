@@ -322,7 +322,6 @@ class RLTrainer(BaseTrainer):
                 self.validate_targets_values[name].append(element[i])
                 s_base += f"_{name}_{element[i]}"
             suffix.append(s_base)
-
         for iter_num in range(0, self.max_iter, self.args.save_interval):
             model_name = self.args.env_name + str(iter_num) + ".pt"
             load_path = os.path.join(model_folder, model_name)
@@ -332,7 +331,7 @@ class RLTrainer(BaseTrainer):
             sub_video_paths = []
             for k in range(self.batch_size):
                 # Make sub folder for each validation case
-                sub_video_path = os.path.join(video_path, suffix[k], str(iter_num))
+                sub_video_path = os.path.join(video_path, suffix[k][1:], str(iter_num))
                 os.makedirs(sub_video_path, exist_ok=True)
                 sub_video_paths.append(sub_video_path)
 
