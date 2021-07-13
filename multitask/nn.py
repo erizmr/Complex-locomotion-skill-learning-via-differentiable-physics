@@ -152,6 +152,7 @@ class Model:
     def load_weights(self, name = "save.pkl"):
         w_val = pkl.load(open(name, 'rb'))
         for w, val in zip(self.weights, w_val):
+            print(w.shape, val.shape)
             w.from_numpy(val)
 
     def gradient_update(self, iter = 0):

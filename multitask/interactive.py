@@ -1,8 +1,11 @@
-import config
-config.batch_size = 1
-import multitask
-import taichi as ti
 import os
+import sys
+import taichi as ti
+from arguments import get_args
+from config_sim import ConfigSim
+from multitask_obj import DiffPhyTrainer
+from solver_mass_spring import SolverMassSpring
+from solver_mpm import SolverMPM
 
 offset = 0
 def set_target():
@@ -15,50 +18,76 @@ def set_target():
             set_target.target_h = 0.1
         elif e.key == gui.SPACE:
             set_target.target_v = 0.
-            set_target.target_h = 0.2
+            set_target.target_h = 0.30
         elif e.key == gui.BACKSPACE:
             set_target.target_v = 0.
             set_target.target_h = 0.1
     print("Status: ", set_target.target_v, set_target.target_h)
-    multitask.initialize_interactive(1, set_target.target_v, set_target.target_h)
+    trainer.initialize_interactive(1, set_target.target_v, set_target.target_h)
 set_target.target_v = 0
 set_target.target_h = 0.1
 
 def make_decision():
-    multitask.nn.clear_single(0)
-    multitask.solver.compute_center(0)
-    multitask.nn_input(0, offset, 0.08, 0.1)
-    multitask.nn.forward(0)
+    trainer.nn.clear_single(0)
+    trainer.solver.compute_center(0)
+    trainer.nn_input(0, offset, 0.08, 0.1)
+    trainer.nn.forward(0)
 
 def forward_mass_spring():
-    multitask.solver.apply_spring_force(0)
-    multitask.solver.advance_toi(1)
-    multitask.solver.clear_states(1)
+    trainer.solver.apply_spring_force(0)
+    trainer.solver.advance_toi(1)
+    trainer.solver.clear_states(1)
 
 @ti.kernel
 def refresh_xv():
-    for i in range(multitask.n_objects):
-        multitask.x[0, 0, i] = multitask.x[1, 0, i]
-        multitask.v[0, 0, i] = multitask.v[1, 0, i]
+    for i in range(trainer.n_objects):
+        trainer.x[0, 0, i] = trainer.x[1, 0, i]
+        trainer.v[0, 0, i] = trainer.v[1, 0, i]
 
 # TODO: clean up
 gui = ti.GUI(background_color=0xFFFFFF)
 def visualizer():
     gui.clear()
-    gui.line((0, multitask.ground_height), (1, multitask.ground_height),
+    gui.line((0, trainer.ground_height), (1, trainer.ground_height),
              color=0x000022,
              radius=3)
-    multitask.solver.draw_robot(gui, 1, multitask.target_v)
+    trainer.solver.draw_robot(gui=gui, batch_rank=1, t=1, target_v=trainer.target_v)
     gui.show('video/interactive/{:04d}.png'.format(visualizer.frame))
     visualizer.frame += 1
 visualizer.frame = 0
 
 if __name__ == "__main__":
-    robot_id = 5
-    os.makedirs("video/interactive", exist_ok = True)
-    multitask.setup_robot()
-    multitask.nn.load_weights("saved_results/weight.pkl")
-    print(multitask.x.to_numpy()[0, :, :])
+    ti.init(arch=ti.gpu, default_fp=ti.f64, random_seed=555)
+    args = get_args()
+    print('args', args)
+    config_file = args.config_file
+    config = ConfigSim.from_file(config_file, if_mkdir=False)
+
+    # Enforce the batch size to 1
+    config._config["nn"]["batch"] = 1
+    trainer = DiffPhyTrainer(args, config=config)
+
+    # Enforce the batch size to 1
+    # trainer.batch_size = 1
+
+    trainer.setup_robot()
+    # With actuation, can be still when v = 0 but can not jump
+    # trainer.nn.load_weights("saved_results/weight.pkl")
+
+    # No actuation, can jump but the monster is very active...
+    # trainer.nn.load_weights("saved_results/reference/weights/last.pkl")
+
+    #
+    trainer.nn.load_weights(
+        "saved_results/sim_config_DiffPhy_with_actuation/DiffTaichi_DiffPhy/0713_155908/models/weight.pkl")
+
+    # trainer.nn.load_weights("saved_results/sim_config_DiffPhy_batch_test/DiffTaichi_DiffPhy/0712_174022/models/weight.pkl")
+    # trainer.nn.load_weights("remote_results/robot_5/weight.pkl")
+    # trainer.nn.load_weights("saved_results/sim_config_DiffPhy_with_actuation_large_h_loss_act_h_v/DiffTaichi_DiffPhy/0713_173036/models/iter5000.pkl")
+    # trainer.nn.load_weights(
+    #     "saved_results/sim_config_DiffPhy_with_actuation_large_h_loss/DiffTaichi_DiffPhy/0713_180151/models/iter7800.pkl")
+    # trainer.nn.load_weights("saved_results/sim_config_DiffPhy_with_actuation_loss_act_h_v/DiffTaichi_DiffPhy/0713_190631/models/iter4500.pkl")
+    print(trainer.x.to_numpy()[0, :, :])
     visualizer()
     while gui.running:
         for i in range(10):

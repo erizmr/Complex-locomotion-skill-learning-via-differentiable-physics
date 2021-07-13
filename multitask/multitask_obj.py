@@ -25,9 +25,17 @@ from hooks import Checkpointer, InfoPrinter, Timer, MetricWriter
 debug = Debug(False)
 
 
+# Manage taichi fields
+# @ti.data_oriented
+# class RobotBase:
+#     def __init__(self, config):
+#
+#
+
+
 @ti.data_oriented
 class BaseTrainer:
-    def __init__(self, config):
+    def __init__(self, args, config):
 
         self.logger = config.get_logger(name="DiffTaichi")
         self._config = config
@@ -85,7 +93,7 @@ class BaseTrainer:
                           'loss_pose': self.loss_pose,
                           'loss_rotation': self.loss_rotation,
                           'loss_weight': self.loss_weight,
-                          'loss_act': self.loss_act}
+                          'loss_actuation': self.loss_act}
         self.losses = self.loss_dict.values()
 
         ti.root.place(self.loss)
@@ -126,6 +134,7 @@ class BaseTrainer:
 
         # Initialize simulation
         self.solver = SolverMPM() if self.simulator == "mpm" else SolverMassSpring(config)
+        # self.sovler = solver
         self.x = self.solver.x
         self.v = self.solver.v
         self.center = self.solver.center
@@ -139,7 +148,7 @@ class BaseTrainer:
 
         self.writer = TensorboardWriter(config.log_dir,
                                         self.logger,
-                                        enabled=True)
+                                        enabled=(not args.no_tensorboard))
 
         self._hooks = []
         self.task_list = ["Move B&F", "Move B&F + jump", "Move B&F + crawl", "Keep still"]
@@ -200,6 +209,8 @@ class BaseTrainer:
         for t, k in ti.ndrange((1, steps + 1), self.batch_size):
             if t % self.jump_period == self.jump_period - 1 and self.target_h[t, k] > 0.1:
                 loss_h = (self.height[t, k] - self.target_h[t, k]) ** 2 / self.batch_size / (steps // self.jump_period) * 100
+                # loss_h = (self.height[t, k] - self.target_h[t, k]) ** 2 / self.batch_size / (
+                #             steps // self.jump_period) * self.jump_period
                 self.loss_height[None] += loss_h
                 self.loss_height_batch[k] += loss_h
 
@@ -225,7 +236,9 @@ class BaseTrainer:
     def compute_loss_actuation(self, steps: ti.template()):
         for t, k, i in ti.ndrange(steps, self.batch_size, self.n_springs):
             if self.target_h[t, k] < 0.1 + 1e-4:
-                loss_a = ti.max(ti.abs(self.actuation[t, k, i]) - (ti.abs(self.target_v[t, k][0]) / 0.08) ** 0.5,
+                # loss_a = ti.max(ti.abs(self.actuation[t, k, i]) - (ti.abs(self.target_v[t, k][0]) / 0.08) ** 0.5,
+                #                          0.) / self.n_springs / self.batch_size / steps * 10
+                loss_a = ti.max(ti.abs(self.actuation[t, k, i]) - (ti.abs(self.target_v[t, k][0]) / 0.16 + ti.abs(self.target_h[t, k]) /0.16 ) ** 0.5,
                                          0.) / self.n_springs / self.batch_size / steps * 10
                 self.loss_act[None] += loss_a
                 self.loss_act_batch[k] += loss_a
@@ -397,7 +410,7 @@ class BaseTrainer:
 
         try:
             self.before_train()
-            for self.iter in range(start_iter, max_iter):
+            for self.iter in range(start_iter, self.max_iter):
                 self.before_step()
                 self.run_step()
                 self.after_step()
@@ -495,7 +508,7 @@ class LegacyIO(HookBase):
 
 class DiffPhyTrainer(BaseTrainer):
     def __init__(self, args, config):
-        super(DiffPhyTrainer, self).__init__(config)
+        super(DiffPhyTrainer, self).__init__(args, config)
         # Initialize neural network model
         self.nn = Model(self.max_steps, self.batch_size, self.n_input_states, self.n_springs,
                         self.input_state, self.actuation, self.n_hidden)
@@ -620,6 +633,7 @@ class DiffPhyTrainer(BaseTrainer):
         self.metric_writer.writer.set_step(step=self.iter - 1)
         for name, l in self.loss_dict.items():
             self.metric_writer.train_metrics.update(name, l.to_numpy())
+        self.metric_writer.train_metrics.update('training_loss', self.loss[None])
         self.metric_writer.train_metrics.update('best', self.best)
         self.metric_writer.train_metrics.update('TNS', self.total_norm_sqr)
 

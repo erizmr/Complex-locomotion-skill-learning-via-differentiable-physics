@@ -18,7 +18,7 @@ from logger import setup_logging
 
 
 class ConfigSim:
-    def __init__(self, config, file_name=None):
+    def __init__(self, config, file_name=None, if_mkdir=True):
         self._config = config
         self.file_name = file_name.split("/")[-1].split(".")[0]
         self._add_adaptive_configs()
@@ -37,17 +37,18 @@ class ConfigSim:
         self._monitor_dir = self._save_dir / 'monitor'
         self._log_dir = self._save_dir / 'log'
 
-        # make directory for saving checkpoints and log.
-        exist_ok = run_id == ''
-        self.save_dir.mkdir(parents=True, exist_ok=exist_ok)
-        self._model_dir.mkdir(parents=True, exist_ok=exist_ok)
-        self.log_dir.mkdir(parents=True, exist_ok=exist_ok)
-        self.monitor_dir.mkdir(parents=True, exist_ok=exist_ok)
-        self.video_dir.mkdir(parents=True, exist_ok=exist_ok)
-        self.validation_dir.mkdir(parents=True, exist_ok=exist_ok)
+        if if_mkdir:
+            # make directory for saving checkpoints and log.
+            exist_ok = run_id == ''
+            self.save_dir.mkdir(parents=True, exist_ok=exist_ok)
+            self._model_dir.mkdir(parents=True, exist_ok=exist_ok)
+            self.log_dir.mkdir(parents=True, exist_ok=exist_ok)
+            self.monitor_dir.mkdir(parents=True, exist_ok=exist_ok)
+            self.video_dir.mkdir(parents=True, exist_ok=exist_ok)
+            self.validation_dir.mkdir(parents=True, exist_ok=exist_ok)
 
-        # save updated config file to the checkpoint dir
-        write_json(self.config, self.save_dir / 'config.json')
+            # save updated config file to the checkpoint dir
+            write_json(self.config, self.save_dir / 'config.json')
 
         # configure logging module
         setup_logging(save_dir)
@@ -121,9 +122,9 @@ class ConfigSim:
         self._config["nn"]["adam_a"] = self._config["nn"]["learning_rate"]
 
     @classmethod
-    def from_file(cls, file_name):
+    def from_file(cls, file_name, if_mkdir=True):
         config = read_json(file_name)
-        return cls(config, file_name)
+        return cls(config, file_name, if_mkdir)
 
     def get_config(self):
         return self._config

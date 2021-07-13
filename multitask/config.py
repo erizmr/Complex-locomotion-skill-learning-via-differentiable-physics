@@ -75,7 +75,7 @@ if dim == 3:
 n_input_states = n_sin_waves + dim * 2 * n_objects + duplicate_v * (dim - 1) + duplicate_h
 
 batch_size = 1
-if sys.argv[0] in ["interactive.py", "multitask_rl.py"]:
+if sys.argv[0] in ["interactive_ljcc.py", "multitask_rl.py"]:
     batch_size = 1
 
 max_reset_step = 4

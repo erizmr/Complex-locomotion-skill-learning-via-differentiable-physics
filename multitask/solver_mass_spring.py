@@ -92,7 +92,6 @@ class SolverMassSpring:
             d = x_ij.normalized()
             v_rel = (self.v[t, k, a] - self.v[t, k, b]).dot(d)
             impulse += self.dashpot_damping * v_rel * d
-
             ti.atomic_add(self.v_inc[t, k, a], -impulse)
             ti.atomic_add(self.v_inc[t, k, b], impulse)
 

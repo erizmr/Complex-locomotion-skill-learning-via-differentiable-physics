@@ -4,7 +4,7 @@
     "save_dir": "/home/mingrui/difftaichi/difftaichi2/saved_results",
     "output_video_in_train": false,
     "output_video_in_validation": true,
-    "task": ["velocity", "height"]
+    "task": ["velocity", "height", "actuation"]
   },
   "validation": {
     "velocity": [-0.08, -0.06, -0.04, -0.02, 0.02, 0.04, 0.06, 0.08],
@@ -47,7 +47,7 @@
     "n_hidden": 64,
     "duplicate_v": 30,
     "duplicate_h": 30,
-    "batch_size": 1,
+    "batch_size": 32,
     "max_reset_step": 4,
     "learning_rate": 3e-4,
     "adam_b1": 0.90,
