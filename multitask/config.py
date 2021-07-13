@@ -1,6 +1,6 @@
-from multitask.robot_config import robots
-from multitask.robot3d_config import robots3d
-from multitask.robot_mpm import robots_mpm, n_grid, dx
+from robot_config import robots
+from robot3d_config import robots3d
+from robot_mpm import robots_mpm, n_grid, dx
 
 import sys
 import math
@@ -81,7 +81,7 @@ if sys.argv[0] in ["interactive.py", "multitask_rl.py"]:
 max_reset_step = 4
 
 #weight_decay = 0.001
-learning_rate = 3e-4
+learning_rate = 0.5 * 3e-4
 
 adam_a = learning_rate
 adam_b1=0.90

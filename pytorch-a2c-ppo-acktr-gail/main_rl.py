@@ -1,9 +1,12 @@
 import os
+from multitask.utils import real
+import taichi as ti
 from a2c_ppo_acktr.arguments import get_args
 from multitask.config_sim import ConfigSim
 from RL_trainer import RLTrainer
 
 if __name__ == "__main__":
+    ti.init(arch=ti.gpu, default_fp=real, random_seed=555)
     args = get_args()
     print('args', args)
     config_file = args.config_file

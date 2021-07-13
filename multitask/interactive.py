@@ -54,9 +54,10 @@ def visualizer():
 visualizer.frame = 0
 
 if __name__ == "__main__":
+    robot_id = 5
     os.makedirs("video/interactive", exist_ok = True)
     multitask.setup_robot()
-    multitask.nn.load_weights("robot_{}/weight.pkl".format(config.robot_id))
+    multitask.nn.load_weights("saved_results/weight.pkl")
     print(multitask.x.to_numpy()[0, :, :])
     visualizer()
     while gui.running:

@@ -22,7 +22,7 @@ debug = Debug(False)
 
 random_seed = int(time.time()*1e6)%10000
 
-ti.init(arch=ti.gpu, default_fp=real, random_seed=random_seed)
+# ti.init(arch=ti.gpu, default_fp=real, random_seed=random_seed)
 
 output_target = []
 output_sim = []
@@ -44,18 +44,26 @@ losses = loss_dict.values()
 ti.root.place(loss)
 ti.root.place(*losses)
 
-initial_objects = vec()
-initial_center = vec()
+initial_objects = vec(dim)
+initial_center = vec(dim)
 ti.root.dense(ti.i, n_objects).place(initial_objects)
 ti.root.place(initial_center)
 
 input_state = scalar()
 ti.root.dense(ti.ijk, (max_steps, batch_size, n_input_states)).place(input_state)
 
-target_v, target_h = vec(), scalar()
+target_v, target_h = vec(dim), scalar()
 ti.root.dense(ti.ij, (max_steps, batch_size)).place(target_v, target_h)
 
-solver = SolverMPM() if simulator == "mpm" else SolverMassSpring()
+sys.path.append("/home/mingrui/difftaichi/difftaichi2/pytorch-a2c-ppo-acktr-gail/")
+print(sys.path)
+from a2c_ppo_acktr import get_args
+from config_sim import ConfigSim
+args = get_args()
+print('args', args)
+config_file = args.config_file
+config = ConfigSim.from_file(config_file)
+solver = SolverMPM() if simulator == "mpm" else SolverMassSpring(config)
 x = solver.x
 v = solver.v
 center = solver.center

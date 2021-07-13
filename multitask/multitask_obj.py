@@ -5,12 +5,22 @@ import numpy as np
 import os
 import time
 import weakref
+import threading
 
-from multitask.hooks import HookBase
-from multitask.utils import Debug, real, plot_curve, load_string, scalar, vec, mat
-from multitask.solver_mass_spring import SolverMassSpring
-from multitask.solver_mpm import SolverMPM
+# from multitask.nn import Model
+# from multitask.hooks import HookBase
+# from multitask.utils import Debug, real, plot_curve, load_string, scalar, vec, mat
+# from multitask.solver_mass_spring import SolverMassSpring
+# from multitask.solver_mpm import SolverMPM
+
+from nn import Model
+from hooks import HookBase
+from utils import Debug, real, plot_curve, load_string, scalar, vec, mat
+from solver_mass_spring import SolverMassSpring
+from solver_mpm import SolverMPM
 from logger import TensorboardWriter
+from hooks import Checkpointer, InfoPrinter, Timer, MetricWriter
+
 
 debug = Debug(False)
 
@@ -18,11 +28,14 @@ debug = Debug(False)
 @ti.data_oriented
 class BaseTrainer:
     def __init__(self, config):
+
         self.logger = config.get_logger(name="DiffTaichi")
+        self._config = config
         self.config = config.get_config()
         self.dim = self.config["robot"]["dim"]
         self.max_steps = self.config["process"]["max_steps"]
         self.batch_size = self.config["nn"]["batch_size"]
+        self.n_hidden = self.config["nn"]["n_hidden"]
         self.robot_id = self.config["robot"]["robot_id"]
         self.n_input_states = self.config["nn"]["n_input_states"]
         self.n_springs = self.config["robot"]["n_springs"]
@@ -91,7 +104,7 @@ class BaseTrainer:
                                 'loss_pose': self.loss_pose_batch,
                                 'loss_rotation': self.loss_rotation_batch,
                                 'loss_weight': self.loss_weight_batch,
-                                'loss_act': self.loss_act_batch}
+                                'loss_actuation': self.loss_act_batch}
 
         self.losses_batch = self.loss_dict_batch.values()
         ti.root.dense(ti.i, self.batch_size).place(self.loss_batch)
@@ -135,37 +148,32 @@ class BaseTrainer:
     def nn_input(self, t: ti.i32, offset: ti.i32, max_speed: ti.f64, max_height: ti.f64):
         for k, j in ti.ndrange(self.batch_size, self.n_sin_waves):
             self.input_state[t, k, j] = ti.sin(self.spring_omega * (t + offset) * self.dt + 2 * math.pi / self.n_sin_waves * j)
-        dim = int(self.dim)
-        n_sin_waves = self.n_sin_waves
-        duplicate_v = self.duplicate_v
-        duplicate_h = self.duplicate_h
-        n_objects = self.n_objects
-        batch_size = self.batch_size
         for k, j in ti.ndrange(self.batch_size, self.n_objects):
             vec_x = self.x[t, k, j] - self.center[t, k]
             for d in ti.static(range(self.dim)):
                 if ti.static(self.dim == 2):
-                    self.input_state[t, k, j * dim * 2 + n_sin_waves + d] = vec_x[d] / 0.2
-                    self.input_state[t, k, j * dim * 2 + n_sin_waves + dim + d] = 0
+                    self.input_state[t, k, j * self.dim * 2 + self.n_sin_waves + d] = vec_x[d] / 0.2
+                    self.input_state[t, k, j * self.dim * 2 + self.n_sin_waves + self.dim + d] = 0
                 else:
-                    self.input_state[t, k, j * dim * 2 + n_sin_waves + d] = vec_x[d] * float(sys.argv[2])
-                    self.input_state[t, k, j * dim * 2 + n_sin_waves + dim + d] = 0
+                    self.input_state[t, k, j * self.dim * 2 + self.n_sin_waves + d] = vec_x[d] * float(sys.argv[2])
+                    self.input_state[t, k, j * self.dim * 2 + self.n_sin_waves + self.dim + d] = 0
 
         if ti.static(self.duplicate_v > 0):
             if ti.static(self.dim == 2):
                 for k, j in ti.ndrange(self.batch_size, self.duplicate_v):
-                    self.input_state[t, k, n_objects * dim * 2 + n_sin_waves + j * (dim - 1)] = self.target_v[t, k][0] / max_speed
+                    self.input_state[t, k, self.n_objects * self.dim * 2 + self.n_sin_waves + j * (self.dim - 1)] = self.target_v[t, k][0] / max_speed
             else:
-                for k, j in ti.ndrange(batch_size, duplicate_v):
-                    self.input_state[t, k, n_objects * dim * 2 + n_sin_waves + j * (dim - 1)] = self.target_v[t, k][0] * float(
+                for k, j in ti.ndrange(self.batch_size, self.duplicate_v):
+                    self.input_state[t, k, self.n_objects * self.dim * 2 + self.n_sin_waves + j * (self.dim - 1)] = self.target_v[t, k][0] * float(
                         sys.argv[3])
-                    self.input_state[t, k, n_objects * dim * 2 + n_sin_waves + j * (dim - 1) + 1] = self.target_v[t, k][
+                    self.input_state[t, k, self.n_objects * self.dim * 2 + self.n_sin_waves + j * (self.dim - 1) + 1] = self.target_v[t, k][
                                                                                                    2] * float(
                         sys.argv[3])
         if ti.static(self.duplicate_h > 0):
             for k, j in ti.ndrange(self.batch_size, self.duplicate_h):
-                self.input_state[t, k, n_objects * dim * 2 + n_sin_waves + duplicate_v * (dim - 1) + j] = (self.target_h[
+                self.input_state[t, k, self.n_objects * self.dim * 2 + self.n_sin_waves + self.duplicate_v * (self.dim - 1) + j] = (self.target_h[
                                                                                                           t, k] - 0.1) / max_height * 2 - 1
+
 
     @ti.kernel
     def compute_loss_velocity(self, steps: ti.template()):
@@ -414,165 +422,330 @@ class BaseTrainer:
             h.trainer = weakref.proxy(self)
         self._hooks.extend(hooks)
 
-#
-# class DiffPhyTrainer(BaseTrainer):
-#     def __init__(self):
-#         super(DiffPhyTrainer, self).__init__()
-#         # Initialize neural network model
-#         self.nn = Model(max_steps, batch_size, n_input_states, n_springs,
-#                         self.input_state, self.actuation, n_hidden)
-#
-#     @debug
-#     def simulate(self, steps,
-#                  output_v=None,
-#                  output_h=None,
-#                  train=True,
-#                  iter=0,
-#                  max_speed=0.08,
-#                  max_height=0.1,
-#                  *args,
-#                  **kwargs):
-#         # clean up cache and set up control sequence
-#         self.solver.clear_states(steps)
-#         self.nn.clear()
-#         if train:
-#             self.initialize_train(iter, steps, max_speed, max_height)
-#         elif not train and dim == 2:
-#             self.initialize_validate(steps, output_v, output_h)
-#         elif not train and dim == 3:
-#             self.initialize_script(steps, 0.04, 0, 0, 0.04, -0.04, 0, 0, -0.04)
-#         self.loss[None] = 0.
-#         for l in self.losses:
-#             l[None] = 0.
-#         # start simulation
-#         if train:
-#             with ti.Tape(self.loss):
-#                 for t in range(steps + 1):
-#                     self.nn_input(t, 0, max_speed, max_height)
-#                     self.nn.forward(t)
-#                     self.solver.advance(t)
-#                 self.get_loss(steps, *args, **kwargs)
-#         else:
-#             for t in range(steps + 1):
-#                 self.nn_input(t, 0, max_speed, max_height)
-#                 self.nn.forward(t)
-#                 self.solver.advance(t)
-#             self.visualizer(steps, prefix=str(output_v) + "_" + str(output_h))
-#             if dim == 3:
-#                 x_ = self.x.to_numpy()
-#                 t = threading.Thread(target=output_mesh, args=(steps, x_, str(output_v) + '_' + str(output_h)))
-#                 t.start()
-#
-#     def train(self, iters=100000, change_iter=5000, prefix=None, root_dir="./", \
-#                  load_path=None, *args, **kwargs):
-#         log_dir = os.path.join(root_dir, "logs")
-#         plot_dir = os.path.join(root_dir, "plots")
-#         weights_dir = os.path.join(root_dir, "weights")
-#
-#         if prefix is not None:
-#             weights_dir = os.path.join(weights_dir, prefix)
-#
-#         os.makedirs(plot_dir, exist_ok=True)
-#         os.makedirs(weights_dir, exist_ok=True)
-#         os.makedirs(log_dir, exist_ok=True)
-#
-#         log_name = "training.log"
-#         if prefix is not None:
-#             log_name = "{}_training.log".format(prefix)
-#         log_path = os.path.join(log_dir, log_name)
-#
-#         log_file = open(log_path, 'w')
-#         log_file.close()
-#
-#         plot_name = "training_curve.png"
-#         plot200_name = "training_curve_last_200.png"
-#         if prefix is not None:
-#             plot_name = "{}_training_curve.png".format(prefix)
-#             plot200_name = "{}_training_curve_last_200.png".format(prefix)
-#         plot_path = os.path.join(plot_dir, plot_name)
-#         plot200_path = os.path.join(plot_dir, plot200_name)
-#
-#         weight_out = lambda x: os.path.join(weights_dir, x)
-#
-#         self.setup_robot()
-#
-#         if load_path is not None and os.path.exists(load_path):
-#             print("load from {}".format(load_path))
-#             self.nn.load_weights(load_path)
-#         else:
-#             self.nn.weights_init()
-#
-#         self.nn.clear_adam()
-#
-#         losses = []
-#         best = 1e+15
-#         best_finetune = 1e+15
-#         train_steps = 1000
-#         if dim == 3 and sys.argv[0] == "validate.py":
-#             train_steps = 4000
-#
-#         reset_step = 2
-#
-#         for iter in range(iters):
-#             if iter > change_iter:
-#                 if iter % 500 == 0 and reset_step < max_reset_step:
-#                     reset_step += 1
-#                 self.rounded_train(train_steps, iter, reset_step=reset_step)
-#
-#             print("-------------------- {}iter #{} --------------------" \
-#                   .format("" if prefix is None else "{}, ".format(prefix), iter))
-#
-#             self.simulate(train_steps, iter=iter, *args, **kwargs)
-#
-#             if iter <= change_iter and self.loss[None] < best:
-#                 best = self.loss[None]
-#                 self.nn.dump_weights(weight_out("best.pkl"))
-#
-#             if iter > change_iter + max_reset_step and self.loss[None] < best_finetune:
-#                 best_finetune = self.loss[None]
-#                 self.nn.dump_weights(weight_out("best_finetune.pkl"))
-#
-#             self.nn.dump_weights(weight_out("last.pkl"))
-#             self.nn.dump_weights(os.path.join(root_dir, "weight.pkl"))
-#
-#             if iter % 50 == 0:
-#                 self.nn.dump_weights(weight_out("iter{}.pkl".format(iter)))
-#
-#             total_norm_sqr = self.nn.get_TNS()
-#
-#             def print_logs(file=None):
-#                 if iter > change_iter:
-#                     print('Iter=', iter, 'Loss=', self.loss[None], 'Best_FT=', best_finetune, file=file)
-#                 else:
-#                     print('Iter=', iter, 'Loss=', self.loss[None], 'Best=', best, file=file)
-#                 print("TNS= ", total_norm_sqr, file=file)
-#                 for name, l in self.loss_dict.items():
-#                     print("{}={}".format(name, l[None]), file=file)
-#
-#             print_logs()
-#             log_file = open(log_path, "a")
-#             print_logs(log_file)
-#             log_file.close()
-#
-#             self.nn.gradient_update(iter)
-#             losses.append(self.loss[None])
-#
-#             if iter % 100 == 0 or iter % 10 == 0 and iter < 500:
-#                 plot_curve(losses, plot_path)
-#                 plot_curve(losses[-200:], plot200_path)
-#
-#         return losses
-#
-#
-# def output_mesh(steps, x_, fn):
-#     os.makedirs('video/' + fn + '_objs', exist_ok=True)
-#     for t in range(1, steps):
-#         f = open('video/' + fn + f'_objs/{t:06d}.obj', 'w')
-#         for i in range(n_objects):
-#             f.write('v %.6f %.6f %.6f\n' % (x_[t, 0, i, 0], x_[t, 0, i, 1], x_[t, 0, i, 2]))
-#         for [p0, p1, p2] in faces:
-#             f.write('f %d %d %d\n' % (p0 + 1, p1 + 1, p2 + 1))
-#         f.close()
+
+class LegacyIO(HookBase):
+    def __init__(self):
+        super(LegacyIO, self).__init__()
+        self.plot_path = ""
+        self.plot200_path = ""
+
+    def before_train(self):
+        prefix = self.trainer.prefix
+        plot_dir = self.trainer.plot_dir
+        log_name = "training.log"
+        if prefix is not None:
+            log_name = "{}_training.log".format(prefix)
+        log_path = os.path.join(self.trainer.log_dir, log_name)
+
+        log_file = open(log_path, 'w')
+        log_file.close()
+
+        plot_name = "training_curve.png"
+        plot200_name = "training_curve_last_200.png"
+        if prefix is not None:
+            plot_name = "{}_training_curve.png".format(self.trainer.prefix)
+            plot200_name = "{}_training_curve_last_200.png".format(prefix)
+        self.plot_path = os.path.join(plot_dir, plot_name)
+        self.plot200_path = os.path.join(plot_dir, plot200_name)
+
+        self.trainer.setup_robot()
+
+        if self.trainer.load_path is not None and os.path.exists(self.trainer.load_path):
+            self.trainer.logger.info("load from {}".format(self.trainer.load_path))
+            self.trainer.nn.load_weights(self.trainer.load_path)
+        else:
+            self.trainer.nn.weights_init()
+        self.trainer.nn.clear_adam()
+
+    def after_step(self):
+
+        weight_out = lambda x: os.path.join(self.trainer.weights_dir, x)
+        if self.trainer.iter <= self.trainer.change_iter and self.trainer.loss[None] < self.trainer.best:
+            self.trainer.best = self.trainer.loss[None]
+            self.trainer.nn.dump_weights(weight_out("best.pkl"))
+
+        if self.trainer.iter > self.trainer.change_iter + self.trainer.max_reset_step and self.trainer.loss[None] < self.trainer.best_finetune:
+            self.trainer.best_finetune = self.trainer.loss[None]
+            self.trainer.nn.dump_weights(weight_out("best_finetune.pkl"))
+
+        self.trainer.nn.dump_weights(weight_out("last.pkl"))
+        self.trainer.nn.dump_weights(os.path.join(self.trainer.weights_dir, "weight.pkl"))
+
+        if self.trainer.iter % 50 == 0:
+            self.trainer.nn.dump_weights(weight_out("iter{}.pkl".format(self.trainer.iter)))
+
+        if self.trainer.iter % 100 == 0 or self.trainer.iter % 10 == 0 and self.trainer.iter < 500:
+            plot_curve(self.trainer.losses_list, self.plot_path)
+            plot_curve(self.trainer.losses_list[-200:], self.plot200_path)
+
+        def print_logs(file=None):
+            if self.trainer.iter > self.trainer.change_iter:
+                print('Iter=', self.trainer.iter, 'Loss=', self.trainer.loss[None], 'Best_FT=', self.trainer.best_finetune, file=file)
+            else:
+                print('Iter=', self.trainer.iter, 'Loss=', self.trainer.loss[None], 'Best=', self.trainer.best, file=file)
+            print("TNS= ", self.trainer.total_norm_sqr, file=file)
+            for name, l in self.trainer.loss_dict.items():
+                print("{}={}".format(name, l[None]), file=file)
+
+        print_logs()
+        log_file = open(os.path.join(self.trainer.log_dir, "training.log"), "a")
+        print_logs(log_file)
+        log_file.close()
+
+
+class DiffPhyTrainer(BaseTrainer):
+    def __init__(self, args, config):
+        super(DiffPhyTrainer, self).__init__(config)
+        # Initialize neural network model
+        self.nn = Model(self.max_steps, self.batch_size, self.n_input_states, self.n_springs,
+                        self.input_state, self.actuation, self.n_hidden)
+        self.max_reset_step = self.config["nn"]["max_reset_step"]
+        self.loss_enable = self.task
+        self.change_iter = 5000
+        self.reset_step = 2
+        self.total_norm_sqr = 0.
+        self.losses_list = []
+
+        self.best = 1e+15
+        self.best_finetune = 1e+15
+        self.train_steps = self.max_steps
+
+        self.prefix = None
+        self.log_dir = self._config.log_dir
+        self.plot_dir = self._config.monitor_dir
+        self.weights_dir = self._config.model_dir
+        self.load_path = None
+
+        # Metrics to tracking during training
+        self.metrics_train = []
+        self.metrics_validation = []
+
+        self.legacy_io = LegacyIO()
+        self.metric_writer = MetricWriter()
+        self.register_hooks([self.legacy_io, self.metric_writer])
+
+    @debug
+    def simulate(self, steps,
+                 output_v=None,
+                 output_h=None,
+                 train=True,
+                 iter=0,
+                 max_speed=0.08,
+                 max_height=0.1,
+                 *args,
+                 **kwargs):
+        # clean up cache and set up control sequence
+        self.solver.clear_states(steps)
+        self.nn.clear()
+        if train:
+            self.initialize_train(iter, steps, max_speed, max_height)
+        elif not train and self.dim == 2:
+            self.initialize_validate(steps, output_v, output_h)
+        elif not train and self.dim == 3:
+            self.initialize_script(steps, 0.04, 0, 0, 0.04, -0.04, 0, 0, -0.04)
+        self.loss[None] = 0.
+        for l in self.losses:
+            l[None] = 0.
+        # start simulation
+        if train:
+            with ti.Tape(self.loss):
+                for t in range(steps + 1):
+                    self.nn_input(t, 0, max_speed, max_height)
+                    self.nn.forward(t)
+                    self.solver.advance(t)
+                self.get_loss(steps, *args, **kwargs)
+        else:
+            for t in range(steps + 1):
+                self.nn_input(t, 0, max_speed, max_height)
+                self.nn.forward(t)
+                self.solver.advance(t)
+            self.visualizer(steps, prefix=str(output_v) + "_" + str(output_h))
+            if self.dim == 3:
+                x_ = self.x.to_numpy()
+                t = threading.Thread(target=output_mesh, args=(steps, x_, str(output_v) + '_' + str(output_h)))
+                t.start()
+
+    def rounded_train(self, steps, iter, reset_step):
+        self.copy_robot(steps)
+        start = iter % reset_step
+        step = reset_step
+        times = (self.batch_size + step - start - 1) // step
+        self.reset_robot(start, step, times)
+
+    def run_step(self, *args, **kwargs):
+        if self.iter > self.change_iter:
+            if self.iter % 500 == 0 and self.reset_step < self.max_reset_step:
+                self.reset_step += 1
+            self.rounded_train(self.max_steps, self.iter, reset_step=self.reset_step)
+        print("-------------------- {}iter #{} --------------------" \
+              .format("" if self.prefix is None else "{}, ".format(self.prefix), self.iter))
+
+        self.simulate(self.max_steps, iter=self.iter, loss_enable=self.loss_enable)
+
+        # weight_out = lambda x: os.path.join(self.weights_dir, x)
+        # if self.iter <= self.change_iter and self.loss[None] < self.best:
+        #     best = self.loss[None]
+        #     self.nn.dump_weights(weight_out("best.pkl"))
+        #
+        # if self.iter > self.change_iter + self.max_reset_step and self.loss[None] < self.best_finetune:
+        #     self.best_finetune = self.loss[None]
+        #     self.nn.dump_weights(weight_out("best_finetune.pkl"))
+        #
+        # self.nn.dump_weights(weight_out("last.pkl"))
+        # self.nn.dump_weights(os.path.join(self.weights_dir, "weight.pkl"))
+        #
+        # if self.iter % 50 == 0:
+        #     self.nn.dump_weights(weight_out("iter{}.pkl".format(self.iter)))
+
+        self.total_norm_sqr = self.nn.get_TNS()
+
+        # def print_logs(file=None):
+        #     if self.iter > self.change_iter:
+        #         print('Iter=', self.iter, 'Loss=', self.loss[None], 'Best_FT=', self.best_finetune, file=file)
+        #     else:
+        #         print('Iter=', self.iter, 'Loss=', self.loss[None], 'Best=', best, file=file)
+        #     print("TNS= ", total_norm_sqr, file=file)
+        #     for name, l in self.loss_dict.items():
+        #         print("{}={}".format(name, l[None]), file=file)
+        #
+        # print_logs()
+        # log_file = open(self.log_dir, "a")
+        # print_logs(log_file)
+        # log_file.close()
+
+        self.nn.gradient_update(self.iter)
+        self.losses_list.append(self.loss[None])
+
+        # Write to tensorboard
+        self.metric_writer.writer.set_step(step=self.iter - 1)
+        for name, l in self.loss_dict.items():
+            self.metric_writer.train_metrics.update(name, l.to_numpy())
+        self.metric_writer.train_metrics.update('best', self.best)
+        self.metric_writer.train_metrics.update('TNS', self.total_norm_sqr)
+
+        # if self.iter % 100 == 0 or self.iter % 10 == 0 and self.iter < 500:
+        #     plot_curve(self.losses, self.plot_path)
+        #     plot_curve(self.losses[-200:], plot200_path)
+
+    def optimize(self, iters=100000, change_iter=5000, prefix=None, root_dir="./", \
+                 load_path=None, *args, **kwargs):
+        log_dir = os.path.join(root_dir, "logs")
+        plot_dir = os.path.join(root_dir, "plots")
+        weights_dir = os.path.join(root_dir, "weights")
+
+        # log_dir = self._config.log_dir
+        # plot_dir = self._config.monitor_dir
+        # weights_dir = self._config.model_dir
+
+        if prefix is not None:
+            weights_dir = os.path.join(weights_dir, prefix)
+
+        os.makedirs(plot_dir, exist_ok=True)
+        os.makedirs(weights_dir, exist_ok=True)
+        os.makedirs(log_dir, exist_ok=True)
+
+        log_name = "training.log"
+        if prefix is not None:
+            log_name = "{}_training.log".format(prefix)
+        log_path = os.path.join(log_dir, log_name)
+
+        log_file = open(log_path, 'w')
+        log_file.close()
+
+        plot_name = "training_curve.png"
+        plot200_name = "training_curve_last_200.png"
+        if prefix is not None:
+            plot_name = "{}_training_curve.png".format(prefix)
+            plot200_name = "{}_training_curve_last_200.png".format(prefix)
+        plot_path = os.path.join(plot_dir, plot_name)
+        plot200_path = os.path.join(plot_dir, plot200_name)
+
+        weight_out = lambda x: os.path.join(weights_dir, x)
+
+        self.setup_robot()
+
+        if load_path is not None and os.path.exists(load_path):
+            print("load from {}".format(load_path))
+            self.nn.load_weights(load_path)
+        else:
+            self.nn.weights_init()
+
+        self.nn.clear_adam()
+
+        losses = []
+        best = 1e+15
+        best_finetune = 1e+15
+        train_steps = 1000
+        if self.dim == 3 and sys.argv[0] == "validate.py":
+            train_steps = 4000
+
+        reset_step = 2
+
+        for iter in range(iters):
+            if iter > change_iter:
+                if iter % 500 == 0 and reset_step < self.max_reset_step:
+                    reset_step += 1
+                self.rounded_train(train_steps, iter, reset_step=reset_step)
+
+            print("-------------------- {}iter #{} --------------------" \
+                  .format("" if prefix is None else "{}, ".format(prefix), iter))
+
+            self.simulate(train_steps, iter=iter, *args, **kwargs)
+
+            if iter <= change_iter and self.loss[None] < best:
+                best = self.loss[None]
+                self.nn.dump_weights(weight_out("best.pkl"))
+
+            if iter > change_iter + self.max_reset_step and self.loss[None] < best_finetune:
+                best_finetune = self.loss[None]
+                self.nn.dump_weights(weight_out("best_finetune.pkl"))
+
+            self.nn.dump_weights(weight_out("last.pkl"))
+            self.nn.dump_weights(os.path.join(root_dir, "weight.pkl"))
+
+            if iter % 50 == 0:
+                self.nn.dump_weights(weight_out("iter{}.pkl".format(iter)))
+
+            total_norm_sqr = self.nn.get_TNS()
+
+            def print_logs(file=None):
+                if iter > change_iter:
+                    print('Iter=', iter, 'Loss=', self.loss[None], 'Best_FT=', best_finetune, file=file)
+                else:
+                    print('Iter=', iter, 'Loss=', self.loss[None], 'Best=', best, file=file)
+                print("TNS= ", total_norm_sqr, file=file)
+                for name, l in self.loss_dict.items():
+                    print("{}={}".format(name, l[None]), file=file)
+
+            print_logs()
+            log_file = open(log_path, "a")
+            print_logs(log_file)
+            log_file.close()
+
+            self.nn.gradient_update(iter)
+            losses.append(self.loss[None])
+
+            # Write to tensorboard
+            # self.metric_writer.writer.set_step(step=self.iter - 1)
+            # for name, l in self.loss_dict.items():
+            #     self.metric_writer.train_metrics.update(name, l)
+
+            if iter % 100 == 0 or iter % 10 == 0 and iter < 500:
+                plot_curve(losses, plot_path)
+                plot_curve(losses[-200:], plot200_path)
+
+        return losses
+
+
+def output_mesh(steps, x_, fn):
+    os.makedirs('video/' + fn + '_objs', exist_ok=True)
+    for t in range(1, steps):
+        f = open('video/' + fn + f'_objs/{t:06d}.obj', 'w')
+        for i in range(n_objects):
+            f.write('v %.6f %.6f %.6f\n' % (x_[t, 0, i, 0], x_[t, 0, i, 1], x_[t, 0, i, 2]))
+        for [p0, p1, p2] in faces:
+            f.write('f %d %d %d\n' % (p0 + 1, p1 + 1, p2 + 1))
+        f.close()
 
 
 # if __name__ == '__main__':

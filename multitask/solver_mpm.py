@@ -1,5 +1,5 @@
 import taichi as ti
-from multitask.utils import vec, scalar, mat, real
+from utils import vec, scalar, mat, real
 
 
 @ti.data_oriented
