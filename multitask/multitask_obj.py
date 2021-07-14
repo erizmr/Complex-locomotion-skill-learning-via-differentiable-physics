@@ -6,6 +6,7 @@ import os
 import time
 import weakref
 import threading
+import itertools
 
 # from multitask.nn import Model
 # from multitask.hooks import HookBase
@@ -13,6 +14,7 @@ import threading
 # from multitask.solver_mass_spring import SolverMassSpring
 # from multitask.solver_mpm import SolverMPM
 
+from collections import defaultdict
 from nn import Model
 from hooks import HookBase
 from utils import Debug, real, plot_curve, load_string, scalar, vec, mat
@@ -20,7 +22,7 @@ from solver_mass_spring import SolverMassSpring
 from solver_mpm import SolverMPM
 from logger import TensorboardWriter
 from hooks import Checkpointer, InfoPrinter, Timer, MetricWriter
-
+from util import MetricTracker
 
 debug = Debug(False)
 
@@ -200,7 +202,7 @@ class BaseTrainer:
                         t - self.run_period, k](2)) ** 2 / self.batch_size
 
                     self.loss_velocity[None] += loss_x + loss_y
-                    self.loss_velocity_batch[k] += loss_x + loss_y
+                    self.loss_velocity_batch[k] += (loss_x + loss_y) * self.batch_size
         # if k == 0:
         #     print("Mark run: ", center[t, 0](0) - center[t - run_period, 0](0), target_v[t - run_period, 0](0))
 
@@ -212,7 +214,7 @@ class BaseTrainer:
                 # loss_h = (self.height[t, k] - self.target_h[t, k]) ** 2 / self.batch_size / (
                 #             steps // self.jump_period) * self.jump_period
                 self.loss_height[None] += loss_h
-                self.loss_height_batch[k] += loss_h
+                self.loss_height_batch[k] += loss_h * self.batch_size
 
     @ti.kernel
     def compute_loss_pose(self, steps: ti.template()):
@@ -223,25 +225,25 @@ class BaseTrainer:
                 dist2 = sum((self.x[t, k, i] - self.initial_objects[i]) ** 2)
                 loss_p = dist2 / self.batch_size / (steps // self.jump_period)
                 self.loss_pose[None] += loss_p
-                self.loss_pose_batch[k] += loss_p
+                self.loss_pose_batch[k] += loss_p * self.batch_size
 
     @ti.kernel
     def compute_loss_rotation(self, steps: ti.template()):
         for t, k in ti.ndrange((1, steps + 1), self.batch_size):
             loss_r = self.rotation[t, k] ** 2 / self.batch_size / 5
             self.loss_rotation[None] += loss_r
-            self.loss_rotation_batch[k] += loss_r
+            self.loss_rotation_batch[k] += loss_r * self.batch_size
 
     @ti.kernel
     def compute_loss_actuation(self, steps: ti.template()):
         for t, k, i in ti.ndrange(steps, self.batch_size, self.n_springs):
             if self.target_h[t, k] < 0.1 + 1e-4:
-                # loss_a = ti.max(ti.abs(self.actuation[t, k, i]) - (ti.abs(self.target_v[t, k][0]) / 0.08) ** 0.5,
-                #                          0.) / self.n_springs / self.batch_size / steps * 10
-                loss_a = ti.max(ti.abs(self.actuation[t, k, i]) - (ti.abs(self.target_v[t, k][0]) / 0.16 + ti.abs(self.target_h[t, k]) /0.16 ) ** 0.5,
+                loss_a = ti.max(ti.abs(self.actuation[t, k, i]) - (ti.abs(self.target_v[t, k][0]) / 0.08) ** 0.5,
                                          0.) / self.n_springs / self.batch_size / steps * 10
+                # loss_a = ti.max(ti.abs(self.actuation[t, k, i]) - (ti.abs(self.target_v[t, k][0]) / 0.16 + ti.abs(self.target_h[t, k]) /0.16 ) ** 0.5,
+                #                          0.) / self.n_springs / self.batch_size / steps * 10
                 self.loss_act[None] += loss_a
-                self.loss_act_batch[k] += loss_a
+                self.loss_act_batch[k] += loss_a * self.batch_size
 
     @ti.kernel
     def compute_loss_final(self, l: ti.template()):
@@ -510,7 +512,7 @@ class DiffPhyTrainer(BaseTrainer):
     def __init__(self, args, config):
         super(DiffPhyTrainer, self).__init__(args, config)
         # Initialize neural network model
-        self.nn = Model(self.max_steps, self.batch_size, self.n_input_states, self.n_springs,
+        self.nn = Model(config, self.max_steps, self.batch_size, self.n_input_states, self.n_springs,
                         self.input_state, self.actuation, self.n_hidden)
         self.max_reset_step = self.config["nn"]["max_reset_step"]
         self.loss_enable = self.task
@@ -572,7 +574,8 @@ class DiffPhyTrainer(BaseTrainer):
                 self.nn_input(t, 0, max_speed, max_height)
                 self.nn.forward(t)
                 self.solver.advance(t)
-            self.visualizer(steps, prefix=str(output_v) + "_" + str(output_h))
+            # self.visualizer(steps, prefix=str(output_v) + "_" + str(output_h))
+            self.get_loss(steps, *args, **kwargs)
             if self.dim == 3:
                 x_ = self.x.to_numpy()
                 t = threading.Thread(target=output_mesh, args=(steps, x_, str(output_v) + '_' + str(output_h)))
@@ -640,6 +643,105 @@ class DiffPhyTrainer(BaseTrainer):
         # if self.iter % 100 == 0 or self.iter % 10 == 0 and self.iter < 500:
         #     plot_curve(self.losses, self.plot_path)
         #     plot_curve(self.losses[-200:], plot200_path)
+
+    def evaluate(self, load_path, custom_loss_enable=None, output_video=False):
+        gui = ti.GUI(background_color=0xFFFFFF, show_gui=False)
+
+        def visualizer(t, batch_rank, folder, output_video):
+            gui.clear()
+            gui.line((0, self.ground_height), (1, self.ground_height),
+                     color=0x000022,
+                     radius=3)
+            self.solver.draw_robot(gui, batch_rank, t, self.target_v)
+            if output_video:
+                gui.show('{}/{:04d}.png'.format(folder, t))
+            else:
+                gui.show()
+        evaluator_writer = MetricTracker(*[],
+                                         writer=TensorboardWriter(
+                                             os.path.join(load_path, "validation"),
+                                             self.logger,
+                                             enabled=True))
+        import glob
+        if custom_loss_enable is None:
+            loss_enable = self.task
+        else:
+            loss_enable = custom_loss_enable
+        model_paths = glob.glob(os.path.join(load_path, "models/iter*.pkl"))
+        model_paths = sorted(model_paths,  key=os.path.getmtime)
+        self.logger.info("{} models {}".format(len(model_paths), [m.split('/')[-1] for m in model_paths]))
+        video_path = os.path.join(load_path, "video")
+
+        targets_values = []
+        targets_keys = []
+        for k, v in self.validate_targets.items():
+            targets_keys.append(k)
+            targets_values.append(v)
+        validation_matrix = list(itertools.product(*targets_values))
+        self.validate_targets_values = dict.fromkeys(loss_enable)
+        self.validate_targets_values = defaultdict(list)
+        self.logger.info(f"Validation targets: {targets_keys} "
+                         f"Validation Matrix: {validation_matrix}")
+        print(len(validation_matrix), self.batch_size)
+        assert len(validation_matrix) == self.batch_size
+        suffix = []
+        for element in validation_matrix:
+            s_base = ""
+            for i, name in enumerate(targets_keys):
+                self.validate_targets_values[name].append(element[i])
+                s_base += f"_{name}_{element[i]}"
+            suffix.append(s_base)
+
+        for model_path in model_paths:
+            current_iter = int(model_path.split('.pkl')[0].split('iter')[1])
+            sub_video_paths = []
+            for k in range(self.batch_size):
+                # Make sub folder for each validation case
+                sub_video_path = os.path.join(video_path, suffix[k][1:], str(current_iter))
+                os.makedirs(sub_video_path, exist_ok=True)
+                sub_video_paths.append(sub_video_path)
+
+            self.setup_robot()
+            self.logger.info("Current iter {}, load from {}".format(current_iter, model_path))
+            self.nn.load_weights(model_path)
+
+            # Clear all batch losses
+            for k in range(self.batch_size):
+                self.loss_batch[k] = 0.
+            for l in self.losses_batch:
+                for k in range(self.batch_size):
+                    l[k] = 0.
+
+            validate_v = self.validate_targets_values['velocity']
+            validate_h = self.validate_targets_values['height']
+            self.logger.info(f"current max speed: {validate_v}, max height {validate_h}")
+            self.simulate(self.max_steps,
+                          output_v=np.array(validate_v),
+                          output_h=np.array(validate_h),
+                          iter=0,
+                          train=False,
+                          loss_enable=loss_enable)
+
+            for i in range(self.max_steps):
+                if i % 20 == 0:
+                    for k in range(self.batch_size):
+                        visualizer(i, k, sub_video_paths[k], output_video=output_video)
+
+            # Write to tensorboard
+            evaluator_writer.writer.set_step(step=current_iter)
+            for k in range(self.batch_size):
+                evaluator_writer.update(f"task_loss{suffix[k]}", self.loss_batch[k])
+                for name in self.validate_targets_values.keys():
+                    print(f"{name}_loss{suffix[k]}", self.loss_dict_batch[f"loss_{name}"][k])
+                    evaluator_writer.update(f"{name}_loss{suffix[k]}", self.loss_dict_batch[f"loss_{name}"][k])
+
+            # for name, l in self.loss_dict.items():
+            #     self.metric_writer.train_metrics.update(name, l.to_numpy())
+            # self.metric_writer.train_metrics.update('training_loss', self.loss[None])
+            # self.metric_writer.train_metrics.update('best', self.best)
+            # self.metric_writer.train_metrics.update('TNS', self.total_norm_sqr)
+
+
 
     def optimize(self, iters=100000, change_iter=5000, prefix=None, root_dir="./", \
                  load_path=None, *args, **kwargs):

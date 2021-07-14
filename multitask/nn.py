@@ -3,26 +3,27 @@ import pickle as pkl
 import math
 
 from utils import scalar, vec, mat
-from config import learning_rate, adam_a, adam_b1, adam_b2, dim
+# from config import learning_rate, adam_a, adam_b1, adam_b2, dim
 
 @ti.kernel
 def compute_TNS(w: ti.template(), s: ti.template()):
     for I in ti.grouped(w):
         s[None] += w.grad[I] ** 2
 
-@ti.kernel
-def adam_update(w: ti.template(), m: ti.template(), v: ti.template(), iter: ti.i32):
-    for I in ti.grouped(w):
-        m[I] = adam_b1 * m[I] + (1 - adam_b1) * w.grad[I]
-        v[I] = adam_b2 * v[I] + (1 - adam_b2) * w.grad[I] * w.grad[I]
-        m_cap = m[I] / (1 - adam_b1 ** (iter + 1))
-        v_cap = v[I] / (1 - adam_b2 ** (iter + 1))
-        w[I] -= (adam_a * m_cap) / (ti.sqrt(v_cap) + 1e-8)
+# @ti.kernel
+# def adam_update(w: ti.template(), m: ti.template(), v: ti.template(), iter: ti.i32):
+#     for I in ti.grouped(w):
+#         m[I] = adam_b1 * m[I] + (1 - adam_b1) * w.grad[I]
+#         v[I] = adam_b2 * v[I] + (1 - adam_b2) * w.grad[I] * w.grad[I]
+#         m_cap = m[I] / (1 - adam_b1 ** (iter + 1))
+#         v_cap = v[I] / (1 - adam_b2 ** (iter + 1))
+#         w[I] -= (adam_a * m_cap) / (ti.sqrt(v_cap) + 1e-8)
+#
+# @ti.kernel
+# def sgd_update(w: ti.template()):
+#     for I in ti.grouped(w):
+#         w[I] -= w.grad[I] * learning_rate
 
-@ti.kernel
-def sgd_update(w: ti.template()):
-    for I in ti.grouped(w):
-        w[I] -= w.grad[I] * learning_rate
 
 @ti.data_oriented
 class Model:
@@ -75,8 +76,13 @@ class Model:
                 2 / (n_hidden + n_springs)) * 2
         '''
 
-    def __init__(self, steps, batch_size, n_input, n_output, \
+    def __init__(self, config, steps, batch_size, n_input, n_output, \
                  input, output, n_hidden = 64, method = "adam"):
+
+        self.adam_b1 = config.get_config()["nn"]["adam_b1"]
+        self.adam_b2 = config.get_config()["nn"]["adam_b2"]
+        self.learning_rate = config.get_config()["nn"]["learning_rate"]
+        self.dim = config.get_config()["robot"]["dim"]
         self.steps = steps
         self.batch_size = batch_size
         self.n_input = n_input
@@ -123,7 +129,7 @@ class Model:
 
     @ti.kernel
     def nn1(self, t: ti.i32):
-        if ti.static(dim == 2):
+        if ti.static(self.dim == 2):
             for k, i, j in ti.ndrange(self.batch_size, self.n_hidden, self.n_input):
                 self.hidden[t, k, i] += self.weights1[i, j] * self.input[t, k, j]
         else:
@@ -152,18 +158,17 @@ class Model:
     def load_weights(self, name = "save.pkl"):
         w_val = pkl.load(open(name, 'rb'))
         for w, val in zip(self.weights, w_val):
-            print(w.shape, val.shape)
             w.from_numpy(val)
 
     def gradient_update(self, iter = 0):
         if self.method == "adam":
-            adam_update(self.weights1, self.m_weights1, self.v_weights1, iter)
-            adam_update(self.bias1, self.m_bias1, self.v_bias1, iter)
-            adam_update(self.weights2, self.m_weights2, self.v_weights2, iter)
-            adam_update(self.bias2, self.m_bias2, self.v_bias2, iter)
+            self.adam_update(self.weights1, self.m_weights1, self.v_weights1, iter)
+            self.adam_update(self.bias1, self.m_bias1, self.v_bias1, iter)
+            self.adam_update(self.weights2, self.m_weights2, self.v_weights2, iter)
+            self.adam_update(self.bias2, self.m_bias2, self.v_bias2, iter)
         else:
             for w in self.weights:
-                sgd_update(w)
+                self.sgd_update(w)
 
     def get_TNS(self):
         self.TNS[None] = 0.
@@ -179,13 +184,13 @@ class Model:
     @ti.kernel
     def adam_update(self, w: ti.template(), m: ti.template(), v: ti.template(), iter: ti.i32):
         for I in ti.grouped(w):
-            m[I] = adam_b1 * m[I] + (1 - adam_b1) * w.grad[I]
-            v[I] = adam_b2 * v[I] + (1 - adam_b2) * w.grad[I] * w.grad[I]
-            m_cap = m[I] / (1 - adam_b1 ** (iter + 1))
-            v_cap = v[I] / (1 - adam_b2 ** (iter + 1))
-            w[I] -= (adam_a * m_cap) / (ti.sqrt(v_cap) + 1e-8)
+            m[I] = self.adam_b1 * m[I] + (1 - self.adam_b1) * w.grad[I]
+            v[I] = self.adam_b2 * v[I] + (1 - self.adam_b2) * w.grad[I] * w.grad[I]
+            m_cap = m[I] / (1 - self.adam_b1 ** (iter + 1))
+            v_cap = v[I] / (1 - self.adam_b2 ** (iter + 1))
+            w[I] -= (self.learning_rate * m_cap) / (ti.sqrt(v_cap) + 1e-8)
 
     @ti.kernel
     def sgd_update(self, w: ti.template()):
         for I in ti.grouped(w):
-            w[I] -= w.grad[I] * learning_rate
+            w[I] -= w.grad[I] * self.learning_rate

@@ -1,5 +1,6 @@
 import os
 import sys
+import glob
 import taichi as ti
 from arguments import get_args
 from config_sim import ConfigSim
@@ -64,29 +65,40 @@ if __name__ == "__main__":
     config = ConfigSim.from_file(config_file, if_mkdir=False)
 
     # Enforce the batch size to 1
-    config._config["nn"]["batch"] = 1
+    config._config["nn"]["batch_size"] = 1
     trainer = DiffPhyTrainer(args, config=config)
 
-    # Enforce the batch size to 1
-    # trainer.batch_size = 1
-
     trainer.setup_robot()
+    model_path = glob.glob(os.path.join("saved_results", config_file.split('/')[1].split('.json')[0], "DiffTaichi_DiffPhy/*/models"), recursive=True)[0]
+    print("load from : ", model_path)
     # With actuation, can be still when v = 0 but can not jump
     # trainer.nn.load_weights("saved_results/weight.pkl")
 
     # No actuation, can jump but the monster is very active...
     # trainer.nn.load_weights("saved_results/reference/weights/last.pkl")
 
-    #
-    trainer.nn.load_weights(
-        "saved_results/sim_config_DiffPhy_with_actuation/DiffTaichi_DiffPhy/0713_155908/models/weight.pkl")
+    # With actuation, looks good
+    # trainer.nn.load_weights(
+    #     "saved_results/sim_config_DiffPhy_with_actuation/DiffTaichi_DiffPhy/0713_155908/models/weight.pkl")
+
+    # With actuation, looks good
+    # trainer.nn.load_weights(
+    #     "saved_results/sim_config_DiffPhy_with_actuation_robot5/DiffTaichi_DiffPhy/0713_220913/models/weight.pkl")
 
     # trainer.nn.load_weights("saved_results/sim_config_DiffPhy_batch_test/DiffTaichi_DiffPhy/0712_174022/models/weight.pkl")
     # trainer.nn.load_weights("remote_results/robot_5/weight.pkl")
     # trainer.nn.load_weights("saved_results/sim_config_DiffPhy_with_actuation_large_h_loss_act_h_v/DiffTaichi_DiffPhy/0713_173036/models/iter5000.pkl")
     # trainer.nn.load_weights(
     #     "saved_results/sim_config_DiffPhy_with_actuation_large_h_loss/DiffTaichi_DiffPhy/0713_180151/models/iter7800.pkl")
-    # trainer.nn.load_weights("saved_results/sim_config_DiffPhy_with_actuation_loss_act_h_v/DiffTaichi_DiffPhy/0713_190631/models/iter4500.pkl")
+
+    # trainer.nn.load_weights("saved_results/sim_config_DiffPhy_with_actuation_loss_act_h_v/DiffTaichi_DiffPhy/0713_190631/models/weight.pkl")
+
+    # With actuation, looks good
+    trainer.nn.load_weights(os.path.join(model_path, "weight.pkl"))
+
+    # trainer.nn.load_weights(
+    #     "saved_results/sim_config_DiffPhy_with_actuation_robot3_half_lr/DiffTaichi_DiffPhy/0713_031320/models/weight.pkl")
+
     print(trainer.x.to_numpy()[0, :, :])
     visualizer()
     while gui.running:
