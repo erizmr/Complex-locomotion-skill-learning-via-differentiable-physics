@@ -155,6 +155,9 @@ class BaseTrainer:
         self._hooks = []
         self.task_list = ["Move B&F", "Move B&F + jump", "Move B&F + crawl", "Keep still"]
 
+        self.current_max_height = scalar()
+        ti.root.place(self.current_max_height)
+
     @ti.kernel
     def nn_input(self, t: ti.i32, offset: ti.i32, max_speed: ti.f64, max_height: ti.f64):
         for k, j in ti.ndrange(self.batch_size, self.n_sin_waves):
@@ -194,7 +197,7 @@ class BaseTrainer:
                     loss_x = (self.center[t, k](0) - self.center[t - self.run_period, k](0) - self.target_v[
                         t - self.run_period, k](0)) ** 2 / self.batch_size
                     self.loss_velocity[None] += loss_x
-                    self.loss_velocity_batch[k] += loss_x
+                    self.loss_velocity_batch[k] += loss_x * self.batch_size
                 else:
                     loss_x = (self.center[t, k](0) - self.center[t - self.run_period, k](0) - self.target_v[
                         t - self.run_period, k](0)) ** 2 / self.batch_size
@@ -211,10 +214,10 @@ class BaseTrainer:
         for t, k in ti.ndrange((1, steps + 1), self.batch_size):
             if t % self.jump_period == self.jump_period - 1 and self.target_h[t, k] > 0.1:
                 loss_h = (self.height[t, k] - self.target_h[t, k]) ** 2 / self.batch_size / (steps // self.jump_period) * 100
-                # loss_h = (self.height[t, k] - self.target_h[t, k]) ** 2 / self.batch_size / (
-                #             steps // self.jump_period) * self.jump_period
                 self.loss_height[None] += loss_h
                 self.loss_height_batch[k] += loss_h * self.batch_size
+                if self.height[t, k] > self.current_max_height[None]:
+                    self.current_max_height[None] = self.height[t, k]
 
     @ti.kernel
     def compute_loss_pose(self, steps: ti.template()):
@@ -314,22 +317,32 @@ class BaseTrainer:
             if ti.static(self.dim == 2):
                 target_id = int(self.pool[q] * 4)
                 # print('Iter:', int(self.iter), 'Step:', int(t), 'Current task:', int(target_id))
+                target_id = 4
                 if target_id == 1:
+                    print("f&b")
                     # Move backward or forward
                     self.target_v[t, k][0] = (self.pool[q + 1] * 2 - 1) * max_velocity
                     self.target_h[t, k] = 0.1
                     self.target_c[t, k] = 0
                 elif target_id == 2:
+                    print("f&b jump")
                     # Move backward or forward & jump
                     self.target_v[t, k][0] = (self.pool[q + 1] * 2 - 1) * max_velocity
                     self.target_h[t, k] = self.pool[q + 2] * max_height + 0.1
                     self.target_c[t, k] = 0
                 elif target_id == 3:
+                    print("f&b&c")
                     # Move backward or forward & crawl
                     self.target_v[t, k][0] = (self.pool[q + 1] * 2 - 1) * max_velocity
                     self.target_h[t, k] = 0.1
                     self.target_c[t, k] = 1.
+                elif target_id == 4:
+                    # jump only
+                    self.target_v[t, k][0] = 0.
+                    self.target_h[t, k] = self.pool[q + 2] * max_height + 0.1
+                    self.target_c[t, k] = 0.
                 else:
+                    print("still")
                     # Keep still
                     self.target_v[t, k][0] = 0
                     self.target_h[t, k] = 0.1
@@ -470,7 +483,8 @@ class LegacyIO(HookBase):
             self.trainer.nn.load_weights(self.trainer.load_path)
         else:
             self.trainer.nn.weights_init()
-        self.trainer.nn.clear_adam()
+        if self.trainer.optimize_method == "adam":
+            self.trainer.nn.clear_adam()
 
     def after_step(self):
 
@@ -501,20 +515,25 @@ class LegacyIO(HookBase):
             print("TNS= ", self.trainer.total_norm_sqr, file=file)
             for name, l in self.trainer.loss_dict.items():
                 print("{}={}".format(name, l[None]), file=file)
+            print("{}={}".format("max height", self.trainer.current_max_height[None]), file=file)
 
         print_logs()
         log_file = open(os.path.join(self.trainer.log_dir, "training.log"), "a")
         print_logs(log_file)
         log_file.close()
+        self.trainer.current_max_height[None] = 0.
 
 
 class DiffPhyTrainer(BaseTrainer):
     def __init__(self, args, config):
         super(DiffPhyTrainer, self).__init__(args, config)
+        self.optimize_method = self.config["nn"]["optimizer"]
         # Initialize neural network model
         self.nn = Model(config, self.max_steps, self.batch_size, self.n_input_states, self.n_springs,
-                        self.input_state, self.actuation, self.n_hidden)
+                        self.input_state, self.actuation, self.n_hidden, method=self.optimize_method)
         self.max_reset_step = self.config["nn"]["max_reset_step"]
+        self.max_height = self.config["process"]["max_height"]
+        self.max_speed = self.config["process"]["max_speed"]
         self.loss_enable = self.task
         self.change_iter = 5000
         self.reset_step = 2
@@ -538,6 +557,7 @@ class DiffPhyTrainer(BaseTrainer):
         self.legacy_io = LegacyIO()
         self.metric_writer = MetricWriter()
         self.register_hooks([self.legacy_io, self.metric_writer])
+
 
     @debug
     def simulate(self, steps,
@@ -596,7 +616,10 @@ class DiffPhyTrainer(BaseTrainer):
         print("-------------------- {}iter #{} --------------------" \
               .format("" if self.prefix is None else "{}, ".format(self.prefix), self.iter))
 
-        self.simulate(self.max_steps, iter=self.iter, loss_enable=self.loss_enable)
+        self.simulate(self.max_steps, iter=self.iter,
+                      max_height=self.max_height,
+                      max_speed=self.max_speed,
+                      loss_enable=self.loss_enable)
 
         # weight_out = lambda x: os.path.join(self.weights_dir, x)
         # if self.iter <= self.change_iter and self.loss[None] < self.best:
@@ -639,12 +662,15 @@ class DiffPhyTrainer(BaseTrainer):
         self.metric_writer.train_metrics.update('training_loss', self.loss[None])
         self.metric_writer.train_metrics.update('best', self.best)
         self.metric_writer.train_metrics.update('TNS', self.total_norm_sqr)
+        self.metric_writer.train_metrics.update('current_max_height', self.current_max_height[None])
 
         # if self.iter % 100 == 0 or self.iter % 10 == 0 and self.iter < 500:
         #     plot_curve(self.losses, self.plot_path)
         #     plot_curve(self.losses[-200:], plot200_path)
 
     def evaluate(self, load_path, custom_loss_enable=None, output_video=False):
+        import glob
+        load_path = glob.glob(os.path.join(load_path, "*"))[0]
         gui = ti.GUI(background_color=0xFFFFFF, show_gui=False)
 
         def visualizer(t, batch_rank, folder, output_video):
@@ -662,7 +688,7 @@ class DiffPhyTrainer(BaseTrainer):
                                              os.path.join(load_path, "validation"),
                                              self.logger,
                                              enabled=True))
-        import glob
+
         if custom_loss_enable is None:
             loss_enable = self.task
         else:
@@ -732,7 +758,7 @@ class DiffPhyTrainer(BaseTrainer):
             for k in range(self.batch_size):
                 evaluator_writer.update(f"task_loss{suffix[k]}", self.loss_batch[k])
                 for name in self.validate_targets_values.keys():
-                    print(f"{name}_loss{suffix[k]}", self.loss_dict_batch[f"loss_{name}"][k])
+                    # print(f"{name}_loss{suffix[k]}", self.loss_dict_batch[f"loss_{name}"][k])
                     evaluator_writer.update(f"{name}_loss{suffix[k]}", self.loss_dict_batch[f"loss_{name}"][k])
 
             # for name, l in self.loss_dict.items():

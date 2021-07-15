@@ -18,6 +18,7 @@ class SolverMassSpring:
         self.n_springs = config.get_config()["robot"]["n_springs"]
         self.springs = config.get_config()["robot"]["springs"]
         self.dim = config.get_config()["robot"]["dim"]
+        self.jump_period = config.get_config()["process"]["jump_period"]
 
 
         self.x = vec(self.dim)
@@ -29,14 +30,17 @@ class SolverMassSpring:
         ti.root.dense(ti.ij, (self.max_steps, self.batch_size)).place(self.center)
         ti.root.dense(ti.ijk, (self.max_steps, self.batch_size, self.n_springs)).place(self.actuation)
 
+        # height here is the lower height i.e., the lowest point of the robot
         self.height = scalar()
+        self.upper_height = scalar()
         self.rotation = scalar()
         self.head_center = vec(self.dim)
         self.head_counter = scalar()
         self.tail_center = vec(self.dim)
         self.tail_counter = scalar()
         ti.root.dense(ti.ij, (self.max_steps, self.batch_size)).place(self.height, self.rotation, self.head_center,
-                                                            self.head_counter, self.tail_center, self.tail_counter)
+                                                            self.head_counter, self.tail_center, self.tail_counter,
+                                                                      self.upper_height)
 
         self.spring_anchor_a = ti.field(ti.i32)
         self.spring_anchor_b = ti.field(ti.i32)
@@ -138,7 +142,17 @@ class SolverMassSpring:
             h = 10.
             for i in ti.static(range(self.n_objects)):
                 h = float(ti.min(h, self.x[t, k, i](1)))
-            self.height[t, k] = h
+            # self.height[t, k] = h
+            if t % self.jump_period == 0:
+                self.height[t, k] = h
+            else:
+                self.height[t, k] = ti.max(self.height[t - 1, k], h)
+
+        for k in range(self.batch_size):
+            h = -10.
+            for i in ti.static(range(self.n_objects)):
+                h = ti.max(h, self.x[t, k, i](1))
+            self.upper_height[t, k] = h
 
     @ti.kernel
     def compute_rotation(self, t: ti.i32):

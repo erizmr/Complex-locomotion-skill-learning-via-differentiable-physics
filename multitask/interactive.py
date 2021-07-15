@@ -19,11 +19,19 @@ def set_target():
             set_target.target_h = 0.1
         elif e.key == gui.SPACE:
             set_target.target_v = 0.
-            set_target.target_h = 0.30
+            set_target.target_h = 0.2
+        elif e.key == gui.UP:
+            set_target.target_h += 0.01
+        elif e.key == gui.DOWN:
+            set_target.target_h -= 0.01
+        elif e.key == gui.LEFT:
+            set_target.target_v -= 0.01
+        elif e.key == gui.RIGHT:
+            set_target.target_v += 0.01
         elif e.key == gui.BACKSPACE:
             set_target.target_v = 0.
             set_target.target_h = 0.1
-    print("Status: ", set_target.target_v, set_target.target_h)
+    print("Status: {:.4f} {:.4f}".format(set_target.target_v, set_target.target_h))
     trainer.initialize_interactive(1, set_target.target_v, set_target.target_h)
 set_target.target_v = 0
 set_target.target_h = 0.1
@@ -53,7 +61,8 @@ def visualizer():
              color=0x000022,
              radius=3)
     trainer.solver.draw_robot(gui=gui, batch_rank=1, t=1, target_v=trainer.target_v)
-    gui.show('video/interactive/{:04d}.png'.format(visualizer.frame))
+    # gui.show('video/interactive/{:04d}.png'.format(visualizer.frame))
+    gui.show()
     visualizer.frame += 1
 visualizer.frame = 0
 
@@ -69,7 +78,9 @@ if __name__ == "__main__":
     trainer = DiffPhyTrainer(args, config=config)
 
     trainer.setup_robot()
-    model_path = glob.glob(os.path.join("saved_results", config_file.split('/')[1].split('.json')[0], "DiffTaichi_DiffPhy/*/models"), recursive=True)[0]
+    model_paths = glob.glob(os.path.join("saved_results", config_file.split('/')[1].split('.json')[0], "DiffTaichi_DiffPhy/*/models"), recursive=True)
+    model_path = sorted(model_paths, key=os.path.getmtime)[-1]
+
     print("load from : ", model_path)
     # With actuation, can be still when v = 0 but can not jump
     # trainer.nn.load_weights("saved_results/weight.pkl")
