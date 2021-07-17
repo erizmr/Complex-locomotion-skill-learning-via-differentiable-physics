@@ -111,7 +111,9 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     import glob
-    path_ours = glob.glob(os.path.join(args.our_file_path, "*/validation"))[0]
+    path_ours = glob.glob(os.path.join(args.our_file_path, "*/validation"))
+    print(path_ours)
+    path_ours = sorted(path_ours, key=os.path.getmtime)[-1]
     print("Path ours", path_ours)
     robot_id = path_ours.split("_robot")[-1].split('/')[0]
     df_ours = to_dataframe(path_ours)

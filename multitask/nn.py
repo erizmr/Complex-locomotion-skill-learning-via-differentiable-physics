@@ -2,7 +2,7 @@ import taichi as ti
 import pickle as pkl
 import math
 
-from utils import scalar, vec, mat
+from multitask.utils import scalar, vec, mat
 # from config import learning_rate, adam_a, adam_b1, adam_b2, dim
 
 @ti.kernel

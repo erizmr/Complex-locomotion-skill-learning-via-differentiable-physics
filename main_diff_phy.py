@@ -1,9 +1,9 @@
-from utils import real
+from multitask.utils import real
 import taichi as ti
 import time
-from arguments import get_args
-from config_sim import ConfigSim
-from multitask_obj import DiffPhyTrainer
+from multitask.arguments import get_args
+from multitask.config_sim import ConfigSim
+from multitask.multitask_obj import DiffPhyTrainer
 
 
 if __name__ == "__main__":
@@ -26,6 +26,8 @@ if __name__ == "__main__":
         print(config)
         batch_required = 1
         for k, v in config.get_config()["validation"].items():
+            if k not in config.get_config()["train"]["task"]:
+                continue
             batch_required *= len(v)
         print(f"Batch required {batch_required}")
         config._config["nn"]["batch_size"] = batch_required

@@ -55,7 +55,7 @@ ti.root.dense(ti.ijk, (max_steps, batch_size, n_input_states)).place(input_state
 target_v, target_h = vec(dim), scalar()
 ti.root.dense(ti.ij, (max_steps, batch_size)).place(target_v, target_h)
 
-sys.path.append("/home/mingrui/difftaichi/difftaichi2/pytorch-a2c-ppo-acktr-gail/")
+sys.path.append("/ppo/")
 print(sys.path)
 from a2c_ppo_acktr import get_args
 from config_sim import ConfigSim

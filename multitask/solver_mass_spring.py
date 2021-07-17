@@ -1,6 +1,6 @@
 import math
 import taichi as ti
-from utils import vec, scalar, real
+from multitask.utils import vec, scalar, real
 
 
 @ti.data_oriented

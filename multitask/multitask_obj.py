@@ -8,21 +8,23 @@ import weakref
 import threading
 import itertools
 
-# from multitask.nn import Model
-# from multitask.hooks import HookBase
-# from multitask.utils import Debug, real, plot_curve, load_string, scalar, vec, mat
-# from multitask.solver_mass_spring import SolverMassSpring
-# from multitask.solver_mpm import SolverMPM
 
 from collections import defaultdict
-from nn import Model
-from hooks import HookBase
-from utils import Debug, real, plot_curve, load_string, scalar, vec, mat
-from solver_mass_spring import SolverMassSpring
-from solver_mpm import SolverMPM
+# from nn import Model
+# from hooks import HookBase
+# from utils import Debug, real, plot_curve, load_string, scalar, vec, mat
+# from solver_mass_spring import SolverMassSpring
+# from solver_mpm import SolverMPM
 from logger import TensorboardWriter
-from hooks import Checkpointer, InfoPrinter, Timer, MetricWriter
+from multitask.hooks import Checkpointer, InfoPrinter, Timer, MetricWriter
 from util import MetricTracker
+
+
+from multitask.nn import Model
+from multitask.hooks import HookBase
+from multitask.utils import Debug, real, plot_curve, load_string, scalar, vec, mat
+from multitask.solver_mass_spring import SolverMassSpring
+from multitask.solver_mpm import SolverMPM
 
 debug = Debug(False)
 
@@ -64,7 +66,7 @@ class BaseTrainer:
 
         self.loss_types_collections = {"velocity", "height", "pose", "actuation", "rotation"}
         # Get the task, and ensure that the task loss is actually defined
-        self.task = set(self.config["train"]["task"])
+        self.task = list(self.config["train"]["task"])
         for tsk in self.task:
             assert tsk in self.loss_types_collections
 
@@ -194,8 +196,8 @@ class BaseTrainer:
         for t, k in ti.ndrange((self.run_period, steps + 1), self.batch_size):
             if t % self.turn_period > self.run_period:  # and target_h[t - run_period, k] < 0.1 + 1e-4:
                 if ti.static(self.dim == 2):
-                    loss_x = (self.center[t, k](0) - self.center[t - self.run_period, k](0) - self.target_v[
-                        t - self.run_period, k](0)) ** 2 / self.batch_size
+                    loss_x = (self.center[t, k](0) - self.center[t - self.run_period, k][0] - self.target_v[
+                        t - self.run_period, k][0] / (1 + self.target_c[t - self.run_period, k])) ** 2 / self.batch_size / steps * 100
                     self.loss_velocity[None] += loss_x
                     self.loss_velocity_batch[k] += loss_x * self.batch_size
                 else:
@@ -212,7 +214,7 @@ class BaseTrainer:
     @ti.kernel
     def compute_loss_height(self, steps: ti.template()):
         for t, k in ti.ndrange((1, steps + 1), self.batch_size):
-            if t % self.jump_period == self.jump_period - 1 and self.target_h[t, k] > 0.1:
+            if t % self.jump_period == self.jump_period - 1 and self.target_h[t, k] > 0.1 + 1e-6:
                 loss_h = (self.height[t, k] - self.target_h[t, k]) ** 2 / self.batch_size / (steps // self.jump_period) * 100
                 self.loss_height[None] += loss_h
                 self.loss_height_batch[k] += loss_h * self.batch_size
@@ -317,32 +319,33 @@ class BaseTrainer:
             if ti.static(self.dim == 2):
                 target_id = int(self.pool[q] * 4)
                 # print('Iter:', int(self.iter), 'Step:', int(t), 'Current task:', int(target_id))
-                target_id = 4
+                # if len(self.task) == 1 and self.task[0] == "height":
+                #     target_id = 4
                 if target_id == 1:
-                    print("f&b")
+                    # print("f&b")
                     # Move backward or forward
                     self.target_v[t, k][0] = (self.pool[q + 1] * 2 - 1) * max_velocity
                     self.target_h[t, k] = 0.1
                     self.target_c[t, k] = 0
                 elif target_id == 2:
-                    print("f&b jump")
+                    # print("f&b jump")
                     # Move backward or forward & jump
                     self.target_v[t, k][0] = (self.pool[q + 1] * 2 - 1) * max_velocity
                     self.target_h[t, k] = self.pool[q + 2] * max_height + 0.1
                     self.target_c[t, k] = 0
                 elif target_id == 3:
-                    print("f&b&c")
+                    # print("f&b&c")
                     # Move backward or forward & crawl
                     self.target_v[t, k][0] = (self.pool[q + 1] * 2 - 1) * max_velocity
                     self.target_h[t, k] = 0.1
                     self.target_c[t, k] = 1.
-                elif target_id == 4:
-                    # jump only
-                    self.target_v[t, k][0] = 0.
-                    self.target_h[t, k] = self.pool[q + 2] * max_height + 0.1
-                    self.target_c[t, k] = 0.
+                # elif target_id == 4:
+                #     # jump only
+                #     self.target_v[t, k][0] = 0.
+                #     self.target_h[t, k] = self.pool[q + 2] * max_height + 0.1
+                #     self.target_c[t, k] = 0.
                 else:
-                    print("still")
+                    # print("still")
                     # Keep still
                     self.target_v[t, k][0] = 0
                     self.target_h[t, k] = 0.1
@@ -534,7 +537,7 @@ class DiffPhyTrainer(BaseTrainer):
         self.max_reset_step = self.config["nn"]["max_reset_step"]
         self.max_height = self.config["process"]["max_height"]
         self.max_speed = self.config["process"]["max_speed"]
-        self.loss_enable = self.task
+        self.loss_enable = set(self.task)
         self.change_iter = 5000
         self.reset_step = 2
         self.total_norm_sqr = 0.
@@ -670,7 +673,10 @@ class DiffPhyTrainer(BaseTrainer):
 
     def evaluate(self, load_path, custom_loss_enable=None, output_video=False):
         import glob
-        load_path = glob.glob(os.path.join(load_path, "*"))[0]
+        load_paths = glob.glob(os.path.join(load_path, "*"))
+        load_paths = sorted(load_paths, key=os.path.getmtime)
+        load_path = load_paths[-1]
+
         gui = ti.GUI(background_color=0xFFFFFF, show_gui=False)
 
         def visualizer(t, batch_rank, folder, output_video):
@@ -690,7 +696,7 @@ class DiffPhyTrainer(BaseTrainer):
                                              enabled=True))
 
         if custom_loss_enable is None:
-            loss_enable = self.task
+            loss_enable = set(self.task)
         else:
             loss_enable = custom_loss_enable
         model_paths = glob.glob(os.path.join(load_path, "models/iter*.pkl"))

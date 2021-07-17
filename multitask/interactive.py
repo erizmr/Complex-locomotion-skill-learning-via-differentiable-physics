@@ -106,9 +106,8 @@ if __name__ == "__main__":
 
     # With actuation, looks good
     trainer.nn.load_weights(os.path.join(model_path, "weight.pkl"))
+    # trainer.nn.load_weights(os.path.join(model_path, "best.pkl"))
 
-    # trainer.nn.load_weights(
-    #     "saved_results/sim_config_DiffPhy_with_actuation_robot3_half_lr/DiffTaichi_DiffPhy/0713_031320/models/weight.pkl")
 
     print(trainer.x.to_numpy()[0, :, :])
     visualizer()

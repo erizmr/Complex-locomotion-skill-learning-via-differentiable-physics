@@ -2,13 +2,14 @@ import os
 import json
 from datetime import datetime
 from pathlib import Path
-# from multitask.robot_config import robots
-# from multitask.robot3d_config import robots3d
-# from multitask.robot_mpm import robots_mpm, n_grid, dx
 
-from robot_config import robots
-from robot3d_config import robots3d
-from robot_mpm import robots_mpm, n_grid, dx
+from multitask.robot_config import robots
+from multitask.robot3d_config import robots3d
+from multitask.robot_mpm import robots_mpm, n_grid, dx
+
+# from robot_config import robots
+# from robot3d_config import robots3d
+# from robot_mpm import robots_mpm, n_grid, dx
 
 from util import read_json, write_json
 import sys
