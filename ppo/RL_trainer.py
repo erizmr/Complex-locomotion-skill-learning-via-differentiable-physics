@@ -69,28 +69,25 @@ class RLTrainer(BaseTrainer):
         self.args = args
         self.config = config
         self.device = torch.device("cuda:0" if args.cuda else "cpu")
-        self.setup_robot()
-        # self.envs = make_vec_envs(self, args.env_name, args.seed,
-        #                           args.num_processes, args.gamma, self.device,
-        #                           False)
-        self.envs = make_vec_envs(self, args.env_name, args.seed,
-                                  args.num_processes, None, self.device,
-                                  False)
+        self.num_processes = args.num_processes
+        self.envs = make_vec_envs(config, args.env_name, args.seed,
+                                  args.num_processes, args.gamma, self.device,
+                                  False, training=args.train)
         # self.envs = make_env(self, args.env_name, args.seed, rank=0, allow_early_resets=False)()
 
-        obs_shape = list(self.envs.observation_space.shape)
-        obs_shape[0] = obs_shape[0] // self.batch_size
-        self.obs_shape = tuple(obs_shape)
-        print('env obs ', obs_shape, ' env act', self.envs.action_space)
+        # obs_shape = list(self.envs.observation_space.shape)
+        # obs_shape[0] = obs_shape[0] // self.batch_size
+        # self.obs_shape = tuple(obs_shape)
+        # print('env obs ', obs_shape, ' env act', self.envs.action_space)
+        #
+        # # We only need one shared parameters NN for all batches
+        # act_assign = np.ones(len(self.solver.act_list), dtype=np.float64)
+        # action_space_assigner = spaces.Box(-act_assign, act_assign)
 
-        # We only need one shared parameters NN for all batches
-        act_assign = np.ones(len(self.solver.act_list), dtype=np.float64)
-        action_space_assigner = spaces.Box(-act_assign, act_assign)
         self.actor_critic = Policy(
-            obs_shape,
-            action_space_assigner,
+            self.envs.observation_space.shape,
+            self.envs.action_space,
             base_kwargs={'recurrent': args.recurrent_policy})
-
         self.actor_critic.to(self.device)
 
         # Define the RL algorithm
@@ -102,18 +99,12 @@ class RLTrainer(BaseTrainer):
         self.gail_train_loader = None
         self._gail()
 
-        # self.rollouts = RolloutStorage(
-        #     args.num_steps, args.num_processes,
-        #     self.envs.observation_space.shape, self.envs.action_space,
-        #     self.actor_critic.recurrent_hidden_state_size)
-
         self.rollouts = RolloutStorage(
-            args.num_steps, self.batch_size,
-            obs_shape, action_space_assigner,
+            args.num_steps, args.num_processes,
+            self.envs.observation_space.shape, self.envs.action_space,
             self.actor_critic.recurrent_hidden_state_size)
 
         self.obs = self.envs.reset()
-        print('obs', self.obs_shape, obs_shape)
         self.rollouts.to(self.device)
 
         self.episode_rewards_len = 10
@@ -204,7 +195,6 @@ class RLTrainer(BaseTrainer):
 
             # Obser reward and next obs
             obs, reward, done, infos = self.envs.step(action)
-            # print('old reward', self.envs.old_reward)
 
             for info in infos:
                 if 'episode' in info.keys():
@@ -259,41 +249,39 @@ class RLTrainer(BaseTrainer):
         self.metric_writer.train_metrics.update("min_reward",
                                                 np.amin(self.episode_rewards))
 
-    def validate(self):
-        self._evaluate()
-
     def evaluate(self, exp_folder):
         import glob
         exp_folders = glob.glob(os.path.join(exp_folder, "*"))
         exp_folders = sorted(exp_folders, key=os.path.getmtime)
-        exp_folder = exp_folders[-1]
-        output_folder = os.path.join(exp_folder, 'validation')
-        os.makedirs(output_folder, exist_ok=True)
-        evaluator_writer = MetricTracker(*[],
-                                         writer=TensorboardWriter(
-                                             output_folder,
-                                             self.logger,
-                                             enabled=True))
-        self._evaluate(exp_folder=exp_folder, evaluator_writer=evaluator_writer)
+        # exp_folder = exp_folders[-1]
+        paths_to_evaluate = []
+        # Check whether this experiment has been evaluated before
+        for ef in exp_folders:
+            if len(os.listdir(os.path.join(lp, "validation"))) == 0:
+                paths_to_evaluate.append(lp)
+        print(f"All experiments to evaluate {paths_to_evaluate}")
+        for ef in paths_to_evaluate:
+            output_folder = os.path.join(ef, 'validation')
+            os.makedirs(output_folder, exist_ok=True)
+            evaluator_writer = MetricTracker(*[],
+                                             writer=TensorboardWriter(
+                                                 output_folder,
+                                                 self.logger,
+                                                 enabled=True))
+            self._evaluate(exp_folder=ef,
+                           evaluator_writer=evaluator_writer)
+
+        # self._evaluate(exp_folder=exp_folder, evaluator_writer=evaluator_writer)
 
     def _evaluate(self,
-                  exp_folder=None,
+                  exp_folder,
+                  evaluator_writer,
                   output_video=False,
-                  show_gui=False,
-                  evaluator_writer=None):
-        metric_writer = None
-        if evaluator_writer is None:
-            metric_writer = self.metric_writer.valid_metrics
-        else:
-            metric_writer = evaluator_writer
+                  show_gui=False):
 
-        video_path = None
-        if exp_folder is None:
-            model_folder = str(self.config.model_dir)
-            video_path = self.config.video_path
-        else:
-            model_folder = os.path.join(exp_folder, 'models')
-            video_path = os.path.join(exp_folder, 'video')
+        metric_writer = evaluator_writer
+        model_folder = os.path.join(exp_folder, 'models')
+        video_path = os.path.join(exp_folder, 'video')
 
         def visualizer(t, batch_rank, folder, output_video):
             gui.clear()
@@ -306,8 +294,6 @@ class RLTrainer(BaseTrainer):
             else:
                 gui.show()
 
-        # Set the trainer training mode to False to invoke the `initialize_validate`
-        self.training = False
         gui = ti.GUI(background_color=0xFFFFFF, show_gui=show_gui)
 
         # Construct the validation matrix i.e., combinations of all validation targets
@@ -341,7 +327,7 @@ class RLTrainer(BaseTrainer):
                 vec_norm.obs_rms = obs_rms
 
             sub_video_paths = []
-            for k in range(self.batch_size):
+            for k in range(self.num_processes):
                 # Make sub folder for each validation case
                 sub_video_path = os.path.join(video_path, suffix[k][1:], str(iter_num))
                 os.makedirs(sub_video_path, exist_ok=True)
@@ -358,7 +344,7 @@ class RLTrainer(BaseTrainer):
                 for k in range(self.batch_size):
                     l[k] = 0.
 
-            self.solver.clear_states(self.max_steps)
+            self.taichi_env.solver.clear_states(self.max_steps)
 
             eval_recurrent_hidden_states = self.rollouts.recurrent_hidden_states[0]
             eval_masks = self.rollouts.masks[0]

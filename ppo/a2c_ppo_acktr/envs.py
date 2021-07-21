@@ -18,7 +18,8 @@ from stable_baselines3.common.vec_env import (DummyVecEnv, SubprocVecEnv,
 from stable_baselines3.common.vec_env.vec_normalize import \
     VecNormalize as VecNormalize_
 
-from multitask.multitask_rl import MassSpringEnv
+# from multitask.multitask_rl import MassSpringEnv
+from multitask.mass_spring_env import MassSpringEnv
 
 try:
     import dmc2gym
@@ -36,26 +37,25 @@ except ImportError:
     pass
 
 
-def make_env(trainer,
+def make_env(config,
              env_id,
              seed,
              rank,
-             allow_early_resets):
+             allow_early_resets,
+             training):
 
-    def _thunk(trainer=trainer):
-        monitor_dir = trainer.config.monitor_dir
-        log_dir = trainer.config.log_dir
-        log_dir = None
-        simulator = trainer.simulator
+    def _thunk():
+        monitor_dir = config.monitor_dir
+        log_dir = config.log_dir
+        simulator = config.get_config()["robot"]["simulator"]
         if env_id.startswith("dm"):
             _, domain, task = env_id.split('.')
             env = dmc2gym.make(domain_name=domain, task_name=task)
             env = ClipAction(env)
         else:
             # env = gym.make(env_id)
-            # gui = ti.GUI(background_color=0xFFFFFF, show_gui=False)
             if simulator == "mass_spring":
-                env = MassSpringEnv(trainer=trainer)
+                env = MassSpringEnv(config=config, rank=rank, training=training)
             elif simulator == "mpm":
                 raise NotImplementedError
             else:
@@ -102,16 +102,17 @@ def make_env(trainer,
     return _thunk
 
 
-def make_vec_envs(trainer,
+def make_vec_envs(config,
                   env_name,
                   seed,
                   num_processes,
                   gamma,
                   device,
                   allow_early_resets,
+                  training,
                   num_frame_stack=None):
     envs = [
-        make_env(trainer, env_name, seed, i, allow_early_resets)
+        make_env(config, env_name, seed, i, allow_early_resets, training)
         for i in range(num_processes)
     ]
 
@@ -119,7 +120,7 @@ def make_vec_envs(trainer,
         envs = SubprocVecEnv(envs)
     else:
         envs = DummyVecEnv(envs)
-    print('env obs shape', type(envs.observation_space.shape))
+
     if len(envs.observation_space.shape) == 1:
         if gamma is None:
             envs = VecNormalize(envs, norm_reward=False)

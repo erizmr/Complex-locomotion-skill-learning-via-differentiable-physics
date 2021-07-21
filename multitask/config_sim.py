@@ -1,5 +1,6 @@
 import os
 import json
+import time
 from datetime import datetime
 from pathlib import Path
 
@@ -19,8 +20,9 @@ from logger import setup_logging
 
 
 class ConfigSim:
-    def __init__(self, config, file_name=None, if_mkdir=True):
+    def __init__(self, config, args=None, file_name=None, if_mkdir=True):
         self._config = config
+        self._args = args
         self.file_name = file_name.split("/")[-1].split(".")[0]
         self._add_adaptive_configs()
         save_dir = self._config["train"]["save_dir"]
@@ -58,6 +60,7 @@ class ConfigSim:
             1: logging.INFO,
             2: logging.DEBUG
         }
+        self.logger = None
 
     def _add_adaptive_configs(self):
         # Robot
@@ -122,15 +125,27 @@ class ConfigSim:
 
         self._config["nn"]["adam_a"] = self._config["nn"]["learning_rate"]
 
+        self._config["train"]["random_seed"] = int(time.time() * 1e6) % 10000
+
+        if self._args:
+            self._config["train"]["num_processes"] = self._args.num_processes
+
     @classmethod
     def from_file(cls, file_name, if_mkdir=True):
         config = read_json(file_name)
-        return cls(config, file_name, if_mkdir)
+        return cls(config, file_name, if_mkdir=if_mkdir)
+
+    @classmethod
+    def from_args_and_file(cls, args, file_name, if_mkdir=True):
+        config = read_json(file_name)
+        return cls(config, args=args, file_name=file_name, if_mkdir=if_mkdir)
 
     def get_config(self):
         return self._config
 
     def get_logger(self, name, verbosity=2):
+        if self.logger:
+            return self.logger
         msg_verbosity = 'verbosity option {} is invalid. Valid options are {}.'.format(
             verbosity, self.log_levels.keys())
         assert verbosity in self.log_levels, msg_verbosity
@@ -153,7 +168,8 @@ class ConfigSim:
         # add ch to logger
         logger.addHandler(ch)
         logger.propagate = False
-        return logger
+        self.logger = logger
+        return self.logger
 
     def print_config(self):
         return json.dumps(self._config, indent=4, sort_keys=True)

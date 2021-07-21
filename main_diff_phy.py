@@ -17,7 +17,7 @@ if __name__ == "__main__":
         print(config)
         diffphy_trainer = DiffPhyTrainer(args, config=config)
         ti.root.lazy_grad()
-        diffphy_trainer.train(start_iter=0, max_iter=10000 * config.get_config()["nn"]["batch_size"])
+        diffphy_trainer.train(start_iter=0, max_iter=10000)
         # diffphy_trainer.optimize(loss_enable={"velocity", "height"}, root_dir="/home/mingrui/difftaichi/difftaichi2/saved_results")
         # diffphy_trainer.optimize(iters=35000, loss_enable={"velocity", "height", "actuation"}, root_dir="/home/mingrui/difftaichi/difftaichi2/saved_results")
     if args.evaluate:

@@ -9,21 +9,19 @@ from multitask.config_sim import ConfigSim
 from ppo.RL_trainer import RLTrainer
 
 if __name__ == "__main__":
-    random_seed = int(time.time() * 1e6) % 10000
-    ti.init(arch=ti.gpu, default_fp=real, random_seed=random_seed)
+    # random_seed = int(time.time() * 1e6) % 10000
+    # ti.init(arch=ti.gpu, default_fp=real, random_seed=random_seed)
     args = get_args()
     print('args', args)
     config_file = args.config_file
 
     if args.train:
-        config = ConfigSim.from_file(config_file)
+        config = ConfigSim.from_args_and_file(args, config_file)
         print(config)
         rl_trainer = RLTrainer(args, config=config)
         rl_trainer.train(start_iter=0, max_iter=10000)
-        if args.validate:
-            rl_trainer.validate()
     if args.evaluate:
-        config = ConfigSim.from_file(config_file, if_mkdir=False)
+        config = ConfigSim.from_args_and_file(args, config_file, if_mkdir=False)
         batch_required = 1
         for k, v in config.get_config()["validation"].items():
             if k not in config.get_config()["train"]["task"]:
