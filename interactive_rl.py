@@ -2,11 +2,11 @@ import os
 import sys
 import glob
 import taichi as ti
-from arguments import get_args
-from config_sim import ConfigSim
-from multitask_obj import DiffPhyTrainer
-from solver_mass_spring import SolverMassSpring
-from solver_mpm import SolverMPM
+from multitask.arguments import get_args
+from multitask.config_sim import ConfigSim
+from ppo.RL_trainer import RLTrainer
+# from solver_mass_spring import SolverMassSpring
+# from solver_mpm import SolverMPM
 
 offset = 0
 def set_target():
@@ -80,7 +80,6 @@ if __name__ == "__main__":
     trainer.setup_robot()
     model_paths = glob.glob(os.path.join("saved_results", config_file.split('/')[1].split('.json')[0], "DiffTaichi_DiffPhy/*/models"), recursive=True)
     model_path = sorted(model_paths, key=os.path.getmtime)[-1]
-
     print("load from : ", model_path)
     # With actuation, can be still when v = 0 but can not jump
     # trainer.nn.load_weights("saved_results/weight.pkl")

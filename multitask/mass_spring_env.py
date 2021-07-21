@@ -2,7 +2,7 @@ import os
 import torch
 import gym
 import numpy as np
-
+from multitask.solver_mass_spring import SolverMassSpring
 from gym import spaces
 
 np.seterr(all='raise')
@@ -11,16 +11,18 @@ torch.autograd.set_detect_anomaly(True)
 
 class MassSpringEnv(gym.Env):
 
-    def __init__(self, trainer):
+    def __init__(self, config):
         super(MassSpringEnv, self).__init__()
-        self.trainer = trainer
-        self.act_spring = trainer.solver.act_list
-        self.max_speed = trainer.config.get_config()["process"]["max_speed"]
-        self.max_height = trainer.config.get_config()["process"]["max_height"]
+        self.solver = SolverMassSpring(config)
+        self.act_spring = self.solver.act_list
+        self.max_speed = config.get_config()["process"]["max_speed"]
+        self.max_height = config.get_config()["process"]["max_height"]
+        self.batch_size = config.get_config()["nn"]["batch_size"]
+        self.n_input_states = config.get_config()["nn"]["n_input_states"]
 
         # Flatten the features of all batches i.e. [1, batch_size * action_shape], [1, batch_size * obs_shape]
-        max_act = np.ones(self.trainer.batch_size * len(self.act_spring), dtype=np.float64)
-        max_obs = np.ones(self.trainer.batch_size * self.trainer.n_input_states, dtype=np.float64)
+        max_act = np.ones(self.batch_size * len(self.act_spring), dtype=np.float64)
+        max_obs = np.ones(self.batch_size * self.n_input_states, dtype=np.float64)
 
         self.training = True  # control which initialize function to use
         self.action_space = spaces.Box(-max_act, max_act)

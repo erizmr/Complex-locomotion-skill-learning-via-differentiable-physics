@@ -44,7 +44,7 @@ def make_env(trainer,
 
     def _thunk(trainer=trainer):
         monitor_dir = trainer.config.monitor_dir
-        # log_dir = trainer.config.log_dir
+        log_dir = trainer.config.log_dir
         log_dir = None
         simulator = trainer.simulator
         if env_id.startswith("dm"):
@@ -53,7 +53,7 @@ def make_env(trainer,
             env = ClipAction(env)
         else:
             # env = gym.make(env_id)
-            trainer.setup_robot()
+            # gui = ti.GUI(background_color=0xFFFFFF, show_gui=False)
             if simulator == "mass_spring":
                 env = MassSpringEnv(trainer=trainer)
             elif simulator == "mpm":
@@ -119,7 +119,7 @@ def make_vec_envs(trainer,
         envs = SubprocVecEnv(envs)
     else:
         envs = DummyVecEnv(envs)
-    print('env obs space', envs.observation_space.shape)
+    print('env obs shape', type(envs.observation_space.shape))
     if len(envs.observation_space.shape) == 1:
         if gamma is None:
             envs = VecNormalize(envs, norm_reward=False)

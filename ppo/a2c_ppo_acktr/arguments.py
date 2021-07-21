@@ -25,6 +25,10 @@ def get_args():
         default='',
         help='the folder to validate')
     parser.add_argument(
+        '--no-tensorboard',
+        action='store_true',
+        help='disable tensorboard')
+    parser.add_argument(
         '--algo', default='a2c', help='algorithm to use: a2c | ppo | acktr')
     parser.add_argument(
         '--gail',

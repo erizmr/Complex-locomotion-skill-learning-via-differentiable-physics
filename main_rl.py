@@ -14,13 +14,24 @@ if __name__ == "__main__":
     args = get_args()
     print('args', args)
     config_file = args.config_file
-    config = ConfigSim.from_file(config_file)
-    rl_trainer = RLTrainer(args, config=config)
-    print(config)
+
     if args.train:
+        config = ConfigSim.from_file(config_file)
+        print(config)
+        rl_trainer = RLTrainer(args, config=config)
         rl_trainer.train(start_iter=0, max_iter=10000)
-    if args.validate:
-        rl_trainer.validate()
+        if args.validate:
+            rl_trainer.validate()
     if args.evaluate:
+        config = ConfigSim.from_file(config_file, if_mkdir=False)
+        batch_required = 1
+        for k, v in config.get_config()["validation"].items():
+            if k not in config.get_config()["train"]["task"]:
+                continue
+            batch_required *= len(v)
+        print(f"Batch required {batch_required}")
+        config._config["nn"]["batch_size"] = batch_required
+        print(config)
+        rl_trainer = RLTrainer(args, config=config)
         eval_path = args.evaluate_path
         rl_trainer.evaluate(eval_path)

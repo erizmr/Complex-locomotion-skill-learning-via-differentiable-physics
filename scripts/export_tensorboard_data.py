@@ -108,6 +108,9 @@ if __name__ == '__main__':
     parser.add_argument('--rl_file_path',
                         default='',
                         help='experiment tensorboard file')
+    parser.add_argument('--no-rl',
+                        action='store_true',
+                        help='experiment tensorboard file')
     args = parser.parse_args()
 
     import glob
@@ -118,10 +121,17 @@ if __name__ == '__main__':
     robot_id = path_ours.split("_robot")[-1].split('/')[0]
     df_ours = to_dataframe(path_ours)
 
-    path_ppo = "saved_results/sim_config_RL/DiffTaichi_RL/0702_011543/validation"
-    df_ppo = to_dataframe(path_ppo)
+
+    path_rls = glob.glob(os.path.join(args.rl_file_path, "*/validation"))
+    print(path_rls)
+    path_rl = sorted(path_rls, key=os.path.getmtime)[-1]
+    print("Path rls", path_rls)
+
+    # path_ppo = "saved_results/sim_config_RL/DiffTaichi_RL/0702_011543/validation"
+    df_ppo = to_dataframe(path_rl)
 
     df_dict = {"Ours": df_ours, "PPO": df_ppo}
-    df_dict = {"Ours": df_ours}
+    if args.no_rl:
+        df_dict = {"Ours": df_ours}
     draw(df_dict, robot_id)
 
