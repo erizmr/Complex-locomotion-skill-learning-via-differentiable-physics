@@ -74,9 +74,9 @@ def make_env(config,
         if str(env.__class__.__name__).find('TimeLimit') >= 0:
             env = TimeLimitMask(env)
 
-        if log_dir is not None:
+        if log_dir is not None and training:
             env = Monitor(env,
-                          os.path.join(str(log_dir), str(rank)),
+                          os.path.join(str(monitor_dir), str(rank)),
                           allow_early_resets=allow_early_resets)
 
         if is_atari:
@@ -115,6 +115,9 @@ def make_vec_envs(config,
         make_env(config, env_name, seed, i, allow_early_resets, training)
         for i in range(num_processes)
     ]
+
+    if not training:
+        gamma = None
 
     if len(envs) > 1:
         envs = SubprocVecEnv(envs)

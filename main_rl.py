@@ -22,13 +22,14 @@ if __name__ == "__main__":
         rl_trainer.train(start_iter=0, max_iter=10000)
     if args.evaluate:
         config = ConfigSim.from_args_and_file(args, config_file, if_mkdir=False)
-        batch_required = 1
+        process_required = 1
         for k, v in config.get_config()["validation"].items():
             if k not in config.get_config()["train"]["task"]:
                 continue
-            batch_required *= len(v)
-        print(f"Batch required {batch_required}")
-        config._config["nn"]["batch_size"] = batch_required
+            process_required *= len(v)
+        print(f"Processes required {process_required}")
+        config._config["train"]["num_processes"] = process_required // 2
+        args.num_processes = process_required // 2
         print(config)
         rl_trainer = RLTrainer(args, config=config)
         eval_path = args.evaluate_path

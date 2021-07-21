@@ -70,19 +70,12 @@ class RLTrainer(BaseTrainer):
         self.config = config
         self.device = torch.device("cuda:0" if args.cuda else "cpu")
         self.num_processes = args.num_processes
+        self.max_steps = config.get_config()["process"]["max_steps"]
+        self.ground_height = config.get_config()["simulator"]["ground_height"]
+        self.task = config.get_config()["train"]["task"]
         self.envs = make_vec_envs(config, args.env_name, args.seed,
                                   args.num_processes, args.gamma, self.device,
                                   False, training=args.train)
-        # self.envs = make_env(self, args.env_name, args.seed, rank=0, allow_early_resets=False)()
-
-        # obs_shape = list(self.envs.observation_space.shape)
-        # obs_shape[0] = obs_shape[0] // self.batch_size
-        # self.obs_shape = tuple(obs_shape)
-        # print('env obs ', obs_shape, ' env act', self.envs.action_space)
-        #
-        # # We only need one shared parameters NN for all batches
-        # act_assign = np.ones(len(self.solver.act_list), dtype=np.float64)
-        # action_space_assigner = spaces.Box(-act_assign, act_assign)
 
         self.actor_critic = Policy(
             self.envs.observation_space.shape,
@@ -109,7 +102,6 @@ class RLTrainer(BaseTrainer):
 
         self.episode_rewards_len = 10
         self.episode_rewards = deque(maxlen=self.episode_rewards_len)
-
         # RL Training epochs
         self.num_updates = int(
             args.num_env_steps) // args.num_steps // args.num_processes
@@ -128,6 +120,14 @@ class RLTrainer(BaseTrainer):
             self.timer, self.checkpointer, self.info_printer,
             self.metric_writer
         ])
+
+        self.validate_targets = self.config.get_config()["validation"]
+        _to_remove = []
+        for k in self.validate_targets.keys():
+            if k not in self.config.get_config()["train"]["task"]:
+                _to_remove.append(k)
+        for k in _to_remove:
+            self.validate_targets.pop(k, None)
 
     def _select_algorithm(self):
         args = self.args
@@ -257,8 +257,8 @@ class RLTrainer(BaseTrainer):
         paths_to_evaluate = []
         # Check whether this experiment has been evaluated before
         for ef in exp_folders:
-            if len(os.listdir(os.path.join(lp, "validation"))) == 0:
-                paths_to_evaluate.append(lp)
+            if len(os.listdir(os.path.join(ef, "validation"))) == 0:
+                paths_to_evaluate.append(ef)
         print(f"All experiments to evaluate {paths_to_evaluate}")
         for ef in paths_to_evaluate:
             output_folder = os.path.join(ef, 'validation')
@@ -270,6 +270,7 @@ class RLTrainer(BaseTrainer):
                                                  enabled=True))
             self._evaluate(exp_folder=ef,
                            evaluator_writer=evaluator_writer)
+        self.envs.close()
 
         # self._evaluate(exp_folder=exp_folder, evaluator_writer=evaluator_writer)
 
@@ -303,18 +304,15 @@ class RLTrainer(BaseTrainer):
             targets_keys.append(k)
             targets_values.append(v)
         validation_matrix = list(itertools.product(*targets_values))
-        self.validate_targets_values = dict.fromkeys(self.task)
-        self.validate_targets_values = defaultdict(list)
         self.logger.info(f"Validation targets: {targets_keys} "
                          f"Validation Matrix: {validation_matrix}")
-
         suffix = []
         for element in validation_matrix:
             s_base = ""
             for i, name in enumerate(targets_keys):
-                self.validate_targets_values[name].append(element[i])
                 s_base += f"_{name}_{element[i]}"
             suffix.append(s_base)
+
         for iter_num in range(0, self.max_iter, self.args.save_interval):
             model_name = self.args.env_name + str(iter_num) + ".pt"
             load_path = os.path.join(model_folder, model_name)
@@ -333,32 +331,33 @@ class RLTrainer(BaseTrainer):
                 os.makedirs(sub_video_path, exist_ok=True)
                 sub_video_paths.append(sub_video_path)
 
-            self.loss[None] = 0.
-            for l in self.losses:
-                l[None] = 0.
+            # self.loss[None] = 0.
+            # for l in self.losses:
+            #     l[None] = 0.
+            #
+            # # Clear all batch losses
+            # for k in range(self.batch_size):
+            #     self.loss_batch[k] = 0.
+            # for l in self.losses_batch:
+            #     for k in range(self.batch_size):
+            #         l[k] = 0.
 
-            # Clear all batch losses
-            for k in range(self.batch_size):
-                self.loss_batch[k] = 0.
-            for l in self.losses_batch:
-                for k in range(self.batch_size):
-                    l[k] = 0.
+            # self.taichi_env.solver.clear_states(self.max_steps)
 
-            self.taichi_env.solver.clear_states(self.max_steps)
-
-            eval_recurrent_hidden_states = self.rollouts.recurrent_hidden_states[0]
-            eval_masks = self.rollouts.masks[0]
-            obs = self.obs.view(self.batch_size, self.obs_shape[0])
-            for step in range(self.args.num_steps):
+            eval_recurrent_hidden_states = torch.zeros(
+                self.num_processes, actor_critic.recurrent_hidden_state_size, device=self.device)
+            eval_masks = torch.zeros(self.num_processes, 1, device=self.device)
+            obs = self.obs
+            for step in range(self.max_steps):
                 # Sample actions
                 with torch.no_grad():
                     _, action, _, eval_recurrent_hidden_states = actor_critic.act(
                         obs,
                         eval_recurrent_hidden_states,
-                        eval_masks,deterministic=True)
+                        eval_masks,
+                        deterministic=True)
                 # Obser reward and next obs
-                obs, _, done, infos = self.envs.step(torch.unsqueeze(action, dim=0))
-                obs = obs.view(self.batch_size, self.obs_shape[0])
+                obs, _, done, infos = self.envs.step(action)
 
                 for info in infos:
                     if 'episode' in info.keys():
@@ -366,24 +365,32 @@ class RLTrainer(BaseTrainer):
                 # If done then clean the history of observations.
                 eval_masks = torch.FloatTensor([[0.0] if done_ else [1.0]
                                                 for done_ in done])
-                eval_masks = torch.cat([eval_masks for _ in range(self.batch_size)], dim=0)
-            for i in range(self.max_steps):
-                if i % 20 == 0:
-                    for k in range(self.batch_size):
-                        visualizer(i, k, sub_video_paths[k], output_video=output_video)
+            if show_gui:
+                for i in range(self.max_steps):
+                    if i % 20 == 0:
+                        for k in range(self.num_processes):
+                            visualizer(i, k, sub_video_paths[k], output_video=output_video)
 
-            self.get_loss(self.max_steps + 1, loss_enable=self.task)
-
-            # Write to tensorboard
             metric_writer.writer.set_step(step=iter_num)
-
-            for k in range(self.batch_size):
-                metric_writer.update(f"task_loss{suffix[k]}",
-                                     self.loss_batch[k])
+            for rank in range(self.num_processes):
+                # self.envs.get_attr("taichi_env", rank).get_loss(self.max_steps + 1, loss_enable=self.task)
+                self.envs.env_method("compute_losses", indices=rank)
+                loss, loss_dict = self.envs.env_method("get_losses", indices=rank)
+                metric_writer.update(f"task_loss{suffix[rank]}", loss)
                 for name in self.validate_targets_values.keys():
                     metric_writer.update(
-                        f"{name}_loss{suffix[k]}",
-                        self.loss_dict_batch[f"loss_{name}"][k])
+                        f"{name}_loss{suffix[rank]}", loss_dict[f"loss_{name}"])
+
+            # self.get_loss(self.max_steps + 1, loss_enable=self.task)
+            # Write to tensorboard
+            # metric_writer.writer.set_step(step=iter_num)
+            # for k in range(self.num_processes):
+            #     metric_writer.update(f"task_loss{suffix[k]}",
+            #                          self.loss_batch[k])
+            #     for name in self.validate_targets_values.keys():
+            #         metric_writer.update(
+            #             f"{name}_loss{suffix[k]}",
+            #             self.loss_dict_batch[f"loss_{name}"][k])
 
 
 # class RLTrainer(BaseTrainer):

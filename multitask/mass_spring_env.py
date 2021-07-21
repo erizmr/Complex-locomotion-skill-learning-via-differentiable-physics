@@ -29,6 +29,7 @@ class MassSpringEnv(gym.Env):
         self.robot_id = config.get_config()["robot"]["robot_id"]
         self.random_seed = config.get_config()["train"]["random_seed"]
         self.ground_height = config.get_config()["simulator"]["ground_height"]
+        self.task = config.get_config()["train"]["task"]
 
         # Flatten the features of all batches i.e. [1, batch_size * action_shape], [1, batch_size * obs_shape]
         max_act = np.ones(self.batch_size * len(self.act_spring), dtype=np.float64)
@@ -136,15 +137,36 @@ class MassSpringEnv(gym.Env):
         np_state = np_state.flatten()
         return np_state
 
+    def clear_losses(self):
+        self.taichi_env.loss[None] = 0.
+        for l in self.taichi_env.losses:
+            l[None] = 0.
+
+        # Clear all batch losses
+        for k in range(self.batch_size):
+            self.taichi_env.loss_batch[k] = 0.
+        for l in self.taichi_env.losses_batch:
+            for k in range(self.batch_size):
+                l[k] = 0.
+
+    def compute_losses(self):
+        self.taichi_env.get_loss(self.max_steps+1, loss_enable=self.task)
+
+    def get_losses(self):
+        return self.taichi_env.loss[None], self.taichi_env.loss_dict
+
     def reset(self):
         print(f"Rank:{self.rank} reset called")
         self.logger.info(f"Rank:{self.rank} reset called")
         if self.training:
             self.taichi_env.initialize_train(0, self.rollout_length, self.max_speed, self.max_height)
         else:
+            self.clear_losses()
+            self.taichi_env.solver.clear_states(self.max_steps)
             validate_v = self.taichi_env.validate_targets_values['velocity'][self.rank]
             validate_h = self.taichi_env.validate_targets_values['height'][self.rank]
             self.taichi_env.logger.info(f"Rank: {self.rank}, current max speed: {validate_v}, max height {validate_h}")
+            print(f"Rank: {self.rank}, current max speed: {validate_v}, max height {validate_h}")
             self.taichi_env.initialize_validate(self.rollout_length, np.array([validate_v]), np.array([validate_h]))
         self.t = 0
         self.rollout_times += 1

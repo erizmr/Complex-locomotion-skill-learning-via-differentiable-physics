@@ -2,8 +2,10 @@ import os
 import sys
 import math
 import time
+import itertools
 import taichi as ti
 import numpy as np
+from collections import defaultdict
 from multitask.utils import Debug, real, plot_curve, load_string, scalar, vec, mat
 from multitask.solver_mass_spring import SolverMassSpring
 from multitask.solver_mpm import SolverMPM
@@ -55,7 +57,17 @@ class TaichiEnv:
         for k in _to_remove:
             self.validate_targets.pop(k, None)
 
-        self.validate_targets_values = dict.fromkeys(self.task)
+        self.validate_targets_values = defaultdict(list)
+        # Construct the validation matrix i.e., combinations of all validation targets
+        targets_keys = []
+        targets_values = []
+        for k, v in self.validate_targets.items():
+            targets_keys.append(k)
+            targets_values.append(v)
+        validation_matrix = list(itertools.product(*targets_values))
+        for element in validation_matrix:
+            for i, name in enumerate(targets_keys):
+                self.validate_targets_values[name].append(element[i])
 
         self.loss = scalar()
         self.loss_velocity = scalar()
