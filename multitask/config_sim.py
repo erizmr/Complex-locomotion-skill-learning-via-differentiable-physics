@@ -54,7 +54,7 @@ class ConfigSim:
             write_json(self.config, self.save_dir / 'config.json')
 
         # configure logging module
-        setup_logging(save_dir)
+        # setup_logging(save_dir)
         self.log_levels = {
             0: logging.WARNING,
             1: logging.INFO,
@@ -133,7 +133,7 @@ class ConfigSim:
     @classmethod
     def from_file(cls, file_name, if_mkdir=True):
         config = read_json(file_name)
-        return cls(config, file_name, if_mkdir=if_mkdir)
+        return cls(config, file_name=file_name, if_mkdir=if_mkdir)
 
     @classmethod
     def from_args_and_file(cls, args, file_name, if_mkdir=True):

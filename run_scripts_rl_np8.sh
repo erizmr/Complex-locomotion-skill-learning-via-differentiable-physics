@@ -2,7 +2,7 @@
 for i in $(seq 2 5)
 do
 echo $(expr $i);
-python3 main_rl.py --config_file cfg/sim_config_RL_robot${i}.json --env-name "RL_Multitask" --algo ppo --use-gae --use-linear-lr-decay --train --num_processes 8
+python3 main_rl.py --config_file cfg/sim_config_RL_robot${i}.json --env-name "RL_Multitask" --algo ppo --use-gae --use-linear-lr-decay --train --num-processes 8
 
 done
 

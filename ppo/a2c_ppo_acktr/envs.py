@@ -42,7 +42,8 @@ def make_env(config,
              seed,
              rank,
              allow_early_resets,
-             training):
+             training,
+             interactive):
 
     def _thunk():
         monitor_dir = config.monitor_dir
@@ -55,7 +56,7 @@ def make_env(config,
         else:
             # env = gym.make(env_id)
             if simulator == "mass_spring":
-                env = MassSpringEnv(config=config, rank=rank, training=training)
+                env = MassSpringEnv(config=config, rank=rank, training=training, interactive=interactive)
             elif simulator == "mpm":
                 raise NotImplementedError
             else:
@@ -110,9 +111,10 @@ def make_vec_envs(config,
                   device,
                   allow_early_resets,
                   training,
+                  interactive,
                   num_frame_stack=None):
     envs = [
-        make_env(config, env_name, seed, i, allow_early_resets, training)
+        make_env(config, env_name, seed, i, allow_early_resets, training, interactive)
         for i in range(num_processes)
     ]
 

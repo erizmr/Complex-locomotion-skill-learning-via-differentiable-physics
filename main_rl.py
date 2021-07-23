@@ -20,17 +20,30 @@ if __name__ == "__main__":
         print(config)
         rl_trainer = RLTrainer(args, config=config)
         rl_trainer.train(start_iter=0, max_iter=10000)
+        rl_trainer.envs.close()
     if args.evaluate:
-        config = ConfigSim.from_args_and_file(args, config_file, if_mkdir=False)
-        process_required = 1
-        for k, v in config.get_config()["validation"].items():
-            if k not in config.get_config()["train"]["task"]:
-                continue
-            process_required *= len(v)
-        print(f"Processes required {process_required}")
-        config._config["train"]["num_processes"] = process_required // 2
-        args.num_processes = process_required // 2
-        print(config)
-        rl_trainer = RLTrainer(args, config=config)
-        eval_path = args.evaluate_path
-        rl_trainer.evaluate(eval_path)
+        import glob
+        exp_folders = glob.glob(os.path.join(args.evaluate_path, "*"))
+        exp_folders = sorted(exp_folders, key=os.path.getmtime)
+        print(exp_folders)
+        paths_to_evaluate = []
+        # Check whether this experiment has been evaluated before
+        for ef in exp_folders:
+            if len(os.listdir(os.path.join(ef, "validation"))) == 0:
+                paths_to_evaluate.append(ef)
+        print(f"All experiments to evaluate {paths_to_evaluate}")
+
+        for ef in exp_folders:
+            config_file = os.path.join(ef, "config.json")
+            config = ConfigSim.from_args_and_file(args, config_file, if_mkdir=False)
+            process_required = 1
+            for k, v in config.get_config()["validation"].items():
+                if k not in config.get_config()["train"]["task"]:
+                    continue
+                process_required *= len(v)
+            print(f"Processes required {process_required}")
+            args.num_processes = process_required
+            print(config)
+            # global_buffer.initialize(config)
+            rl_trainer = RLTrainer(args, config=config)
+            rl_trainer.evaluate(ef)

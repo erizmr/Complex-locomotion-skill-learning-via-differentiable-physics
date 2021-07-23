@@ -1,3 +1,4 @@
+import glob
 import os
 import torch
 import itertools
@@ -6,7 +7,6 @@ import numpy as np
 import taichi as ti
 
 from collections import defaultdict
-from gym import spaces
 from multitask.multitask_obj import BaseTrainer
 from ppo.a2c_ppo_acktr import algo, utils
 from ppo.a2c_ppo_acktr.algo import gail
@@ -24,7 +24,7 @@ class CheckpointerRL(Checkpointer):
         super(CheckpointerRL, self).__init__(save_path)
 
     def after_step(self):
-        if (self.trainer.iter % self.trainer.args.save_interval == 0 or
+        if (self.trainer.iter % self.trainer.save_interval == 0 or
             self.trainer.iter == self.trainer.num_updates - 1) and \
                 self.save_path != "":
 
@@ -50,7 +50,9 @@ class InfoPrinterRL(InfoPrinter):
                 self.trainer.iter + 1
             ) * self.trainer.args.num_processes * self.trainer.args.num_steps
             self.trainer.logger.info(
-                "Iterations: {}, num timesteps {}, FPS {} \n Last {} training episodes: mean/median reward {:.1f}/{:.1f}, min/max reward {:.1f}/{:.1f}\n"
+                "Iterations: {}, num timesteps {}, FPS {} \n "
+                "Last {} training episodes: mean/median reward {:.1f}/{:.1f}, min/max reward {:.1f}/{:.1f}\n"
+                "mean reward v {}, mean reward h {}"
                 .format(
                     self.trainer.iter, total_num_steps,
                     int(total_num_steps / (self.trainer.timer.step_end -
@@ -59,7 +61,9 @@ class InfoPrinterRL(InfoPrinter):
                     np.mean(self.trainer.episode_rewards),
                     np.median(self.trainer.episode_rewards),
                     np.min(self.trainer.episode_rewards),
-                    np.max(self.trainer.episode_rewards)
+                    np.max(self.trainer.episode_rewards),
+                    np.mean(np.array(self.trainer.reward_v)),
+                    np.mean(np.array(self.trainer.reward_h))
                 ))  #, dist_entropy, value_loss, action_loss))
 
 
@@ -70,12 +74,13 @@ class RLTrainer(BaseTrainer):
         self.config = config
         self.device = torch.device("cuda:0" if args.cuda else "cpu")
         self.num_processes = args.num_processes
+        self.save_interval = args.save_interval // self.num_processes
         self.max_steps = config.get_config()["process"]["max_steps"]
         self.ground_height = config.get_config()["simulator"]["ground_height"]
         self.task = config.get_config()["train"]["task"]
         self.envs = make_vec_envs(config, args.env_name, args.seed,
                                   args.num_processes, args.gamma, self.device,
-                                  False, training=args.train)
+                                  False, training=args.train, interactive=False)
 
         self.actor_critic = Policy(
             self.envs.observation_space.shape,
@@ -113,7 +118,7 @@ class RLTrainer(BaseTrainer):
         self.metric_writer = MetricWriter()
 
         # Metrics to tracking during training
-        self.metrics_train = ["mean_reward", "max_reward", "min_reward"]
+        self.metrics_train = ["mean_reward", "max_reward", "min_reward", "reward_v", "reward_h"]
         self.metrics_validation = ["task_loss", "velocity_loss", "height_loss"]
 
         self.register_hooks([
@@ -128,6 +133,9 @@ class RLTrainer(BaseTrainer):
                 _to_remove.append(k)
         for k in _to_remove:
             self.validate_targets.pop(k, None)
+
+        self.reward_v = []
+        self.reward_h = []
 
     def _select_algorithm(self):
         args = self.args
@@ -199,6 +207,8 @@ class RLTrainer(BaseTrainer):
             for info in infos:
                 if 'episode' in info.keys():
                     self.episode_rewards.append(info['episode']['r'])
+                    self.reward_v = np.sum(np.array(self.envs.get_attr("reward_v")), axis=1)
+                    self.reward_h = np.sum(np.array(self.envs.get_attr("reward_h")), axis=1)
 
             # If done then clean the history of observations.
             masks = torch.FloatTensor([[0.0] if done_ else [1.0]
@@ -248,28 +258,32 @@ class RLTrainer(BaseTrainer):
                                                 np.amax(self.episode_rewards))
         self.metric_writer.train_metrics.update("min_reward",
                                                 np.amin(self.episode_rewards))
+        self.metric_writer.train_metrics.update("reward_v",
+                                                np.mean(self.reward_v))
+        self.metric_writer.train_metrics.update("reward_h",
+                                                np.mean(self.reward_h))
+
 
     def evaluate(self, exp_folder):
-        import glob
-        exp_folders = glob.glob(os.path.join(exp_folder, "*"))
-        exp_folders = sorted(exp_folders, key=os.path.getmtime)
-        # exp_folder = exp_folders[-1]
-        paths_to_evaluate = []
-        # Check whether this experiment has been evaluated before
-        for ef in exp_folders:
-            if len(os.listdir(os.path.join(ef, "validation"))) == 0:
-                paths_to_evaluate.append(ef)
-        print(f"All experiments to evaluate {paths_to_evaluate}")
-        for ef in paths_to_evaluate:
-            output_folder = os.path.join(ef, 'validation')
-            os.makedirs(output_folder, exist_ok=True)
-            evaluator_writer = MetricTracker(*[],
-                                             writer=TensorboardWriter(
-                                                 output_folder,
-                                                 self.logger,
-                                                 enabled=True))
-            self._evaluate(exp_folder=ef,
-                           evaluator_writer=evaluator_writer)
+        # import glob
+        # exp_folders = glob.glob(os.path.join(exp_folder, "*"))
+        # exp_folders = sorted(exp_folders, key=os.path.getmtime)
+        # paths_to_evaluate = []
+        # # Check whether this experiment has been evaluated before
+        # for ef in exp_folders:
+        #     if len(os.listdir(os.path.join(ef, "validation"))) == 0:
+        #         paths_to_evaluate.append(ef)
+        # print(f"All experiments to evaluate {paths_to_evaluate}")
+        # for ef in paths_to_evaluate:
+        output_folder = os.path.join(exp_folder, 'validation')
+        os.makedirs(output_folder, exist_ok=True)
+        evaluator_writer = MetricTracker(*[],
+                                         writer=TensorboardWriter(
+                                             output_folder,
+                                             self.logger,
+                                             enabled=True))
+        self._evaluate(exp_folder=exp_folder,
+                       evaluator_writer=evaluator_writer)
         self.envs.close()
 
         # self._evaluate(exp_folder=exp_folder, evaluator_writer=evaluator_writer)
@@ -279,7 +293,8 @@ class RLTrainer(BaseTrainer):
                   evaluator_writer,
                   output_video=False,
                   show_gui=False):
-
+        training_num_processes = self.config.get_config()["train"]["num_processes"]
+        # training_save_interval = self.config.get_config()["train"]["save_interval"]
         metric_writer = evaluator_writer
         model_folder = os.path.join(exp_folder, 'models')
         video_path = os.path.join(exp_folder, 'video')
@@ -313,9 +328,14 @@ class RLTrainer(BaseTrainer):
                 s_base += f"_{name}_{element[i]}"
             suffix.append(s_base)
 
-        for iter_num in range(0, self.max_iter, self.args.save_interval):
-            model_name = self.args.env_name + str(iter_num) + ".pt"
-            load_path = os.path.join(model_folder, model_name)
+        all_model_names = glob.glob(os.path.join(model_folder, "*.pt"))
+        all_model_names = sorted(all_model_names, key=os.path.getmtime)
+        print("All models: ", all_model_names)
+        # for iter_num in range(0, self.max_iter, self.save_interval):
+        #     model_name = self.args.env_name + str(iter_num) + ".pt"
+        for iter_num, load_path in enumerate(all_model_names):
+            iter_num *= self.args.save_interval // training_num_processes
+            # load_path = os.path.join(model_folder, model_name)
             [actor_critic, obs_rms] = torch.load(load_path)
             self.logger.info(f"load {load_path}")
 
@@ -373,11 +393,11 @@ class RLTrainer(BaseTrainer):
 
             metric_writer.writer.set_step(step=iter_num)
             for rank in range(self.num_processes):
-                # self.envs.get_attr("taichi_env", rank).get_loss(self.max_steps + 1, loss_enable=self.task)
                 self.envs.env_method("compute_losses", indices=rank)
-                loss, loss_dict = self.envs.env_method("get_losses", indices=rank)
+                loss, loss_dict = self.envs.env_method("get_losses", indices=rank)[0]
+                # print(f"Rank: {rank}", loss, loss_dict)
                 metric_writer.update(f"task_loss{suffix[rank]}", loss)
-                for name in self.validate_targets_values.keys():
+                for name in self.validate_targets.keys():
                     metric_writer.update(
                         f"{name}_loss{suffix[rank]}", loss_dict[f"loss_{name}"])
 

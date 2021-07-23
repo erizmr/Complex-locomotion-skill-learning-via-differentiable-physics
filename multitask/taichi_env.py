@@ -10,6 +10,7 @@ from multitask.utils import Debug, real, plot_curve, load_string, scalar, vec, m
 from multitask.solver_mass_spring import SolverMassSpring
 from multitask.solver_mpm import SolverMPM
 
+
 debug = Debug(False)
 ti_random_seed = int(time.time() * 1e6) % 10000
 ti.init(arch=ti.gpu, default_fp=real, random_seed=ti_random_seed)
@@ -386,3 +387,10 @@ class TaichiEnv:
         for k, i in ti.ndrange(self.batch_size, self.n_objects):
             self.x[0, k, i] = self.x[steps, k, i]
             self.v[0, k, i] = self.v[steps, k, i]
+
+    @ti.kernel
+    def refresh_xv(self):
+        for i in range(self.n_objects):
+            self.x[0, 0, i] = self.x[1, 0, i]
+            self.v[0, 0, i] = self.v[1, 0, i]
+
