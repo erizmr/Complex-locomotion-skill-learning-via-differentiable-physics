@@ -335,6 +335,7 @@ class RLTrainer(BaseTrainer):
         #     model_name = self.args.env_name + str(iter_num) + ".pt"
         for iter_num, load_path in enumerate(all_model_names):
             iter_num *= self.args.save_interval // training_num_processes
+            print(f"Iter num: {iter_num}")
             # load_path = os.path.join(model_folder, model_name)
             [actor_critic, obs_rms] = torch.load(load_path)
             self.logger.info(f"load {load_path}")

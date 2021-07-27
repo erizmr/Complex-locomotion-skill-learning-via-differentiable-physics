@@ -118,10 +118,11 @@ class ConfigSim:
         n_objects = self._config["robot"]["n_objects"]
         duplicate_h = self._config["nn"]["duplicate_h"]
         duplicate_v = self._config["nn"]["duplicate_v"]
+        duplicate_c = self._config["nn"]["duplicate_c"]
 
         self._config["nn"][
             "n_input_states"] = n_sin_waves + dim * 2 * n_objects + duplicate_v * (
-                dim - 1) + duplicate_h
+                dim - 1) + duplicate_h + duplicate_c
 
         self._config["nn"]["adam_a"] = self._config["nn"]["learning_rate"]
 

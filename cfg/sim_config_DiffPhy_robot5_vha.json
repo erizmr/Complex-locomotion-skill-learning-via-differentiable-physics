@@ -4,7 +4,7 @@
     "save_dir": "/home/mingrui/difftaichi/difftaichi2/saved_results",
     "output_video_in_train": false,
     "output_video_in_validation": true,
-    "task": ["velocity", "height"]
+    "task": ["velocity", "height", "actuation"]
   },
   "validation": {
     "velocity": [-0.08, -0.06, -0.04, -0.02, 0.02, 0.04, 0.06, 0.08],
@@ -12,7 +12,7 @@
   },
   "robot": {
     "dim": 2,
-    "robot_id": 2,
+    "robot_id": 5,
     "simulator": "mass_spring"
   },
   "process":{

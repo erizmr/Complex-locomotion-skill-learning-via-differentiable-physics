@@ -182,7 +182,7 @@ class MassSpringEnv(gym.Env):
             validate_h = self.taichi_env.validate_targets_values['height'][self.rank]
             self.taichi_env.logger.info(f"Rank: {self.rank}, current max speed: {validate_v}, max height {validate_h}")
             print(f"Rank: {self.rank}, current max speed: {validate_v}, max height {validate_h}")
-            self.taichi_env.initialize_validate(self.rollout_length, np.array([validate_v]), np.array([validate_h]))
+            self.taichi_env.initialize_validate(self.rollout_length, np.array([validate_v]), np.array([validate_h]), np.array([0.0]))
 
     def set_targets(self, target_v, target_h):
         if self.t + 2 <= self.max_steps:

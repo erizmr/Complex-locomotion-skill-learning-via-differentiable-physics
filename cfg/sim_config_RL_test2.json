@@ -8,7 +8,7 @@
   },
   "validation": {
     "velocity": [-0.08, -0.06, -0.04, -0.02, 0.02, 0.04, 0.06, 0.08],
-    "height": [0.10, 0.15, 0.20, 0.25]
+    "height": [0.10, 0.15, 0.20]
   },
   "robot": {
     "dim": 2,
@@ -47,6 +47,7 @@
     "n_hidden": 64,
     "duplicate_v": 30,
     "duplicate_h": 30,
+    "duplicate_c": 10,
     "batch_size": 1,
     "max_reset_step": 4,
     "learning_rate": 3e-4,

@@ -40,10 +40,11 @@ class TaichiEnv:
         self.dt = self.config["process"]["dt"]
         self.duplicate_v = self.config["nn"]["duplicate_v"]
         self.duplicate_h = self.config["nn"]["duplicate_h"]
+        self.duplicate_c = self.config["nn"]["duplicate_c"]
         self.output_vis_interval = self.config["process"]["output_vis_interval"]
         self.ground_height = self.config["simulator"]["ground_height"]
 
-        self.loss_types_collections = {"velocity", "height", "pose", "actuation", "rotation"}
+        self.loss_types_collections = {"velocity", "height", "pose", "actuation", "rotation", "crawl"}
         # Get the task, and ensure that the task loss is actually defined
         self.task = list(self.config["train"]["task"])
         for tsk in self.task:
@@ -77,12 +78,14 @@ class TaichiEnv:
         self.loss_rotation = scalar()
         self.loss_weight = scalar()
         self.loss_act = scalar()
+        self.loss_crawl = scalar()
         self.loss_dict = {'loss_velocity': self.loss_velocity,
                           'loss_height': self.loss_height,
                           'loss_pose': self.loss_pose,
                           'loss_rotation': self.loss_rotation,
                           'loss_weight': self.loss_weight,
-                          'loss_actuation': self.loss_act}
+                          'loss_actuation': self.loss_act,
+                          'loss_crawl': self.loss_crawl}
         self.losses = self.loss_dict.values()
 
         ti.root.place(self.loss)
@@ -96,12 +99,14 @@ class TaichiEnv:
         self.loss_rotation_batch = scalar()
         self.loss_weight_batch = scalar()
         self.loss_act_batch = scalar()
+        self.loss_crawl_batch = scalar()
         self.loss_dict_batch = {'loss_velocity': self.loss_velocity_batch,
                                 'loss_height': self.loss_height_batch,
                                 'loss_pose': self.loss_pose_batch,
                                 'loss_rotation': self.loss_rotation_batch,
                                 'loss_weight': self.loss_weight_batch,
-                                'loss_actuation': self.loss_act_batch}
+                                'loss_actuation': self.loss_act_batch,
+                                'loss_crawl': self.loss_crawl_batch}
 
         # losses for each batch
         self.losses_batch = self.loss_dict_batch.values()
@@ -134,6 +139,7 @@ class TaichiEnv:
         self.v = self.solver.v
         self.center = self.solver.center
         self.height = self.solver.height
+        self.upper_height = self.solver.upper_height
         self.rotation = self.solver.rotation
         self.actuation = self.solver.actuation
 
@@ -175,6 +181,10 @@ class TaichiEnv:
                 self.input_state[t, k, self.n_objects * self.dim * 2 + self.n_sin_waves + self.duplicate_v * (
                             self.dim - 1) + j] = (self.target_h[
                                                       t, k] - 0.1) / max_height * 2 - 1
+
+        if ti.static(self.duplicate_c > 0):
+            for k, j in ti.ndrange(self.batch_size, self.duplicate_c):
+                self.input_state[t, k, self.n_objects * self.dim * 2 + self.n_sin_waves + self.duplicate_v * (self.dim - 1) + self.duplicate_h + j] = self.target_c[t, k]
 
     @ti.kernel
     def compute_loss_velocity(self, steps: ti.template()):
@@ -238,6 +248,14 @@ class TaichiEnv:
                 self.loss_act_batch[k] += loss_a * self.batch_size
 
     @ti.kernel
+    def compute_loss_crawl(self, steps: ti.template()):
+        for t, k in ti.ndrange((1, steps + 1), self.batch_size):
+            if self.target_c[t, k] > 1 - 1e-4:
+                loss_c = max(self.upper_height[t, k] - 0.1, 0) ** 2 / self.batch_size / steps * 10.
+                self.loss_crawl[None] += loss_c
+                self.loss_crawl_batch[k] += loss_c * self.batch_size
+
+    @ti.kernel
     def compute_loss_final(self, l: ti.template()):
         self.loss[None] += l[None]
 
@@ -257,6 +275,8 @@ class TaichiEnv:
             self.compute_loss_actuation(steps)
         if "rotation" in loss_enable:
             self.compute_loss_rotation(steps)
+        if "crawl" in loss_enable:
+            self.compute_loss_crawl(steps)
 
         for l in self.losses:
             self.compute_loss_final(l)
@@ -266,10 +286,11 @@ class TaichiEnv:
             self.compute_loss_final_batch(l)
 
     @ti.kernel
-    def initialize_interactive(self, steps: ti.template(), output_v: ti.f64, output_h: ti.f64):
+    def initialize_interactive(self, steps: ti.template(), output_v: ti.f64, output_h: ti.f64, output_c: ti.f64):
         for t, k in ti.ndrange(steps, self.batch_size):
             self.target_v[t, k][0] = output_v
             self.target_h[t, k] = output_h
+            self.target_c[t, k] = output_c
 
     @ti.kernel
     def initialize_script(self, steps: ti.template(), x0: real, y0: real, x1: real, y1: real, x2: real, y2: real,
@@ -291,10 +312,11 @@ class TaichiEnv:
             self.target_h[t, k] = 0.
 
     @ti.kernel
-    def initialize_validate(self, steps: ti.template(), output_v: ti.ext_arr(), output_h: ti.ext_arr()):
+    def initialize_validate(self, steps: ti.template(), output_v: ti.ext_arr(), output_h: ti.ext_arr(), output_c: ti.ext_arr()):
         for t, k in ti.ndrange(steps, self.batch_size):
             self.target_v[t, k][0] = output_v[k]
             self.target_h[t, k] = output_h[k]
+            self.target_c[t, k] = output_c[k]
 
     @ti.kernel
     def initialize_train(self, iter: ti.i32, steps: ti.template(), max_velocity: ti.f64, max_height: ti.f64):
@@ -306,7 +328,7 @@ class TaichiEnv:
             q = (t // self.turn_period * self.batch_size + k) * 3
             if ti.static(self.dim == 2):
                 target_id = int(self.pool[q] * 4)
-                # print('Iter:', int(self.iter), 'Step:', int(t), 'Current task:', int(target_id))
+                # print('Iter:', int(t), 'Step:', int(t), 'Current task:', int(target_id))
                 # if len(self.task) == 1 and self.task[0] == "height":
                 #     target_id = 4
                 if target_id == 1:
@@ -323,7 +345,7 @@ class TaichiEnv:
                     self.target_c[t, k] = 0
                 elif target_id == 3:
                     # print("f&b&c")
-                    # Move backward or forward & crawl
+                    # Move backward or forward & crawl0
                     self.target_v[t, k][0] = (self.pool[q + 1] * 2 - 1) * max_velocity
                     self.target_h[t, k] = 0.1
                     self.target_c[t, k] = 1.

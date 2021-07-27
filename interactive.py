@@ -20,6 +20,10 @@ def set_target():
         elif e.key == gui.SPACE:
             set_target.target_v = 0.
             set_target.target_h = 0.2
+        elif e.key == 'Control_L':
+            set_target.target_c = 1.0
+        elif e.key == 'Control_R':
+            set_target.target_c = 0.0
         elif e.key == gui.UP:
             set_target.target_h += 0.01
         elif e.key == gui.DOWN:
@@ -31,36 +35,37 @@ def set_target():
         elif e.key == gui.BACKSPACE:
             set_target.target_v = 0.
             set_target.target_h = 0.1
-    print("Status: {:.4f} {:.4f}".format(set_target.target_v, set_target.target_h))
-    trainer.initialize_interactive(1, set_target.target_v, set_target.target_h)
+    print("Status: v {:.4f} h {:.4f} c {:.4f}".format(set_target.target_v, set_target.target_h, set_target.target_c))
+    trainer.taichi_env.initialize_interactive(1, set_target.target_v, set_target.target_h, set_target.target_c)
 set_target.target_v = 0
 set_target.target_h = 0.1
+set_target.target_c = 0.0
 
 def make_decision():
     trainer.nn.clear_single(0)
-    trainer.solver.compute_center(0)
-    trainer.nn_input(0, offset, 0.08, 0.1)
+    trainer.taichi_env.solver.compute_center(0)
+    trainer.taichi_env.nn_input(0, offset, 0.08, 0.1)
     trainer.nn.forward(0)
 
 def forward_mass_spring():
-    trainer.solver.apply_spring_force(0)
-    trainer.solver.advance_toi(1)
-    trainer.solver.clear_states(1)
+    trainer.taichi_env.solver.apply_spring_force(0)
+    trainer.taichi_env.solver.advance_toi(1)
+    trainer.taichi_env.solver.clear_states(1)
 
 @ti.kernel
 def refresh_xv():
-    for i in range(trainer.n_objects):
-        trainer.x[0, 0, i] = trainer.x[1, 0, i]
-        trainer.v[0, 0, i] = trainer.v[1, 0, i]
+    for i in range(trainer.taichi_env.n_objects):
+        trainer.taichi_env.x[0, 0, i] = trainer.taichi_env.x[1, 0, i]
+        trainer.taichi_env.v[0, 0, i] = trainer.taichi_env.v[1, 0, i]
 
 # TODO: clean up
 gui = ti.GUI(background_color=0xFFFFFF)
 def visualizer():
     gui.clear()
-    gui.line((0, trainer.ground_height), (1, trainer.ground_height),
+    gui.line((0, trainer.taichi_env.ground_height), (1, trainer.taichi_env.ground_height),
              color=0x000022,
              radius=3)
-    trainer.solver.draw_robot(gui=gui, batch_rank=1, t=1, target_v=trainer.target_v)
+    trainer.taichi_env.solver.draw_robot(gui=gui, batch_rank=1, t=1, target_v=trainer.taichi_env.target_v)
     # gui.show('video/interactive/{:04d}.png'.format(visualizer.frame))
     gui.show()
     visualizer.frame += 1
@@ -77,7 +82,7 @@ if __name__ == "__main__":
     config._config["nn"]["batch_size"] = 1
     trainer = DiffPhyTrainer(args, config=config)
 
-    trainer.setup_robot()
+    trainer.taichi_env.setup_robot()
     model_paths = glob.glob(os.path.join("saved_results", config_file.split('/')[1].split('.json')[0], "DiffTaichi_DiffPhy/*/models"), recursive=True)
     model_path = sorted(model_paths, key=os.path.getmtime)[-1]
     print("load from : ", model_path)
@@ -108,7 +113,7 @@ if __name__ == "__main__":
     # trainer.nn.load_weights(os.path.join(model_path, "best.pkl"))
 
 
-    print(trainer.x.to_numpy()[0, :, :])
+    print(trainer.taichi_env.x.to_numpy()[0, :, :])
     visualizer()
     while gui.running:
         for i in range(10):

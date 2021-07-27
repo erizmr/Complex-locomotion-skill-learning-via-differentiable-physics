@@ -56,7 +56,7 @@ def to_dataframe(dpath):
 
 def draw(df_dict, robot_id):
     target_v = [-0.08, -0.06, -0.04, -0.02, 0.02, 0.04, 0.06, 0.08]
-    target_h = [0.10, 0.15, 0.20, 0.25]
+    target_h = [0.10, 0.15, 0.20]
     h_num = len(target_h)
     w_num = len(target_v)
     for k, v in df_dict.items():
@@ -121,17 +121,18 @@ if __name__ == '__main__':
     robot_id = path_ours.split("_robot")[-1].split('/')[0]
     df_ours = to_dataframe(path_ours)
 
+    if not args.no_rl:
+        path_rls = glob.glob(os.path.join(args.rl_file_path, "*/validation"))
+        print(path_rls)
+        path_rl = sorted(path_rls, key=os.path.getmtime)[0]
+        print("Path rls", path_rl)
+        # path_ppo = "saved_results/sim_config_RL/DiffTaichi_RL/0702_011543/validation"
+        df_ppo = to_dataframe(path_rl)
 
-    path_rls = glob.glob(os.path.join(args.rl_file_path, "*/validation"))
-    print(path_rls)
-    path_rl = sorted(path_rls, key=os.path.getmtime)[-1]
-    print("Path rls", path_rls)
-
-    # path_ppo = "saved_results/sim_config_RL/DiffTaichi_RL/0702_011543/validation"
-    df_ppo = to_dataframe(path_rl)
-
-    df_dict = {"Ours": df_ours, "PPO": df_ppo}
     if args.no_rl:
         df_dict = {"Ours": df_ours}
+    else:
+        df_dict = {"Ours": df_ours, "PPO": df_ppo}
+
     draw(df_dict, robot_id)
 

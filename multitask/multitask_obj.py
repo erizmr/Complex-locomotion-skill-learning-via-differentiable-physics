@@ -564,8 +564,8 @@ class LegacyIO(HookBase):
             self.trainer.nn.dump_weights(weight_out("iter{}.pkl".format(self.trainer.iter)))
 
         if self.trainer.iter % 100 == 0 or self.trainer.iter % 10 == 0 and self.trainer.iter < 500:
-            plot_curve(self.trainer.taichi_env.losses_list, self.plot_path)
-            plot_curve(self.trainer.taichi_env.losses_list[-200:], self.plot200_path)
+            plot_curve(self.trainer.losses_list, self.plot_path)
+            plot_curve(self.trainer.losses_list[-200:], self.plot200_path)
 
         def print_logs(file=None):
             if self.trainer.iter > self.trainer.change_iter:
@@ -601,6 +601,7 @@ class DiffPhyTrainer(BaseTrainer):
         self.max_reset_step = self.taichi_env.config["nn"]["max_reset_step"]
         self.max_height = self.taichi_env.config["process"]["max_height"]
         self.max_speed = self.taichi_env.config["process"]["max_speed"]
+        # self.max_steps = self.taichi_env.config["process"]["max_steps"]
         self.loss_enable = set(self.taichi_env.task)
         self.change_iter = 5000
         self.reset_step = 2
@@ -629,6 +630,7 @@ class DiffPhyTrainer(BaseTrainer):
     def simulate(self, steps,
                  output_v=None,
                  output_h=None,
+                 output_c=None,
                  train=True,
                  iter=0,
                  max_speed=0.08,
@@ -641,7 +643,7 @@ class DiffPhyTrainer(BaseTrainer):
         if train:
             self.taichi_env.initialize_train(iter, steps, max_speed, max_height)
         elif not train and self.taichi_env.dim == 2:
-            self.taichi_env.initialize_validate(steps, output_v, output_h)
+            self.taichi_env.initialize_validate(steps, output_v, output_h, output_c)
         elif not train and self.taichi_env.dim == 3:
             self.taichi_env.initialize_script(steps, 0.04, 0, 0, 0.04, -0.04, 0, 0, -0.04)
         self.taichi_env.loss[None] = 0.
@@ -682,7 +684,7 @@ class DiffPhyTrainer(BaseTrainer):
         print("-------------------- {}iter #{} --------------------" \
               .format("" if self.prefix is None else "{}, ".format(self.prefix), self.iter))
 
-        self.simulate(self.max_steps, iter=self.iter,
+        self.simulate(self.taichi_env.max_steps, iter=self.iter,
                       max_height=self.max_height,
                       max_speed=self.max_speed,
                       loss_enable=self.loss_enable)
@@ -690,7 +692,7 @@ class DiffPhyTrainer(BaseTrainer):
         # Total weights gradients norm square
         self.total_norm_sqr = self.nn.get_TNS()
         self.nn.gradient_update(self.iter)
-        self.losses_list.append(self.loss[None])
+        self.losses_list.append(self.taichi_env.loss[None])
 
         # Write to tensorboard
         self.metric_writer.writer.set_step(step=self.iter - 1)
@@ -787,10 +789,12 @@ class DiffPhyTrainer(BaseTrainer):
 
             validate_v = self.taichi_env.validate_targets_values['velocity']
             validate_h = self.taichi_env.validate_targets_values['height']
-            self.logger.info(f"current max speed: {validate_v}, max height {validate_h}")
+            validate_c = self.taichi_env.validate_targets_values['crawl']
+            self.logger.info(f"current max speed: {validate_v}, max height {validate_h}, max crawl {validate_c}")
             self.simulate(self.taichi_env.max_steps,
                           output_v=np.array(validate_v),
                           output_h=np.array(validate_h),
+                          output_c=np.array(validate_c),
                           iter=0,
                           train=False,
                           loss_enable=loss_enable)
@@ -805,7 +809,7 @@ class DiffPhyTrainer(BaseTrainer):
             for k in range(self.taichi_env.batch_size):
                 evaluator_writer.update(f"task_loss{suffix[k]}", self.taichi_env.loss_batch[k])
                 for name in self.taichi_env.validate_targets_values.keys():
-                    # print(f"{name}_loss{suffix[k]}", self.loss_dict_batch[f"loss_{name}"][k])
+                    # print(f"{name}_loss{suffix[k]}", self.taichi_env.loss_dict_batch[f"loss_{name}"][k])
                     evaluator_writer.update(f"{name}_loss{suffix[k]}", self.taichi_env.loss_dict_batch[f"loss_{name}"][k])
 
     # Legacy code from ljcc
