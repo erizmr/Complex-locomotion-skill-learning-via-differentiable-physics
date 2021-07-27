@@ -34,11 +34,12 @@ def set_target():
         elif e.key == gui.BACKSPACE:
             set_target.target_v = 0.
             set_target.target_h = 0.1
-    print("Status: {:.4f} {:.4f}".format(set_target.target_v, set_target.target_h))
-    eval_envs.env_method("set_targets", set_target.target_v, set_target.target_h, indices=0)
+    print("Modlel name {} Status: {:.4f} {:.4f} {:.4f}".format(model_name, set_target.target_v, set_target.target_h, set_target.target_c))
+    eval_envs.env_method("set_targets", set_target.target_v, set_target.target_h, set_target.target_c, indices=0)
 
 set_target.target_v = 0
 set_target.target_h = 0.1
+set_target.target_c = 0.
 
 
 # def make_decision():

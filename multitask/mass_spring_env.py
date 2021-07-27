@@ -184,9 +184,9 @@ class MassSpringEnv(gym.Env):
             print(f"Rank: {self.rank}, current max speed: {validate_v}, max height {validate_h}")
             self.taichi_env.initialize_validate(self.rollout_length, np.array([validate_v]), np.array([validate_h]), np.array([0.0]))
 
-    def set_targets(self, target_v, target_h):
+    def set_targets(self, target_v, target_h, target_c):
         if self.t + 2 <= self.max_steps:
-            self.taichi_env.initialize_interactive(self.t + 2, target_v, target_h)
+            self.taichi_env.initialize_interactive(self.t + 2, target_v, target_h, target_c)
         # self.t = 0
 
     def refresh_xv(self):
