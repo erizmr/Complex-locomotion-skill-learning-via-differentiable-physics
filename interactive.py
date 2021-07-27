@@ -35,7 +35,7 @@ def set_target():
         elif e.key == gui.BACKSPACE:
             set_target.target_v = 0.
             set_target.target_h = 0.1
-    print("Status: v {:.4f} h {:.4f} c {:.4f}".format(set_target.target_v, set_target.target_h, set_target.target_c))
+    print("Model Path {} Status: v {:.4f} h {:.4f} c {:.4f}".format(model_path, set_target.target_v, set_target.target_h, set_target.target_c))
     trainer.taichi_env.initialize_interactive(1, set_target.target_v, set_target.target_h, set_target.target_c)
 set_target.target_v = 0
 set_target.target_h = 0.1
@@ -86,31 +86,9 @@ if __name__ == "__main__":
     model_paths = glob.glob(os.path.join("saved_results", config_file.split('/')[1].split('.json')[0], "DiffTaichi_DiffPhy/*/models"), recursive=True)
     model_path = sorted(model_paths, key=os.path.getmtime)[-1]
     print("load from : ", model_path)
-    # With actuation, can be still when v = 0 but can not jump
-    # trainer.nn.load_weights("saved_results/weight.pkl")
 
-    # No actuation, can jump but the monster is very active...
-    # trainer.nn.load_weights("saved_results/reference/weights/last.pkl")
-
-    # With actuation, looks good
-    # trainer.nn.load_weights(
-    #     "saved_results/sim_config_DiffPhy_with_actuation/DiffTaichi_DiffPhy/0713_155908/models/weight.pkl")
-
-    # With actuation, looks good
-    # trainer.nn.load_weights(
-    #     "saved_results/sim_config_DiffPhy_with_actuation_robot5/DiffTaichi_DiffPhy/0713_220913/models/weight.pkl")
-
-    # trainer.nn.load_weights("saved_results/sim_config_DiffPhy_batch_test/DiffTaichi_DiffPhy/0712_174022/models/weight.pkl")
-    # trainer.nn.load_weights("remote_results/robot_5/weight.pkl")
-    # trainer.nn.load_weights("saved_results/sim_config_DiffPhy_with_actuation_large_h_loss_act_h_v/DiffTaichi_DiffPhy/0713_173036/models/iter5000.pkl")
-    # trainer.nn.load_weights(
-    #     "saved_results/sim_config_DiffPhy_with_actuation_large_h_loss/DiffTaichi_DiffPhy/0713_180151/models/iter7800.pkl")
-
-    # trainer.nn.load_weights("saved_results/sim_config_DiffPhy_with_actuation_loss_act_h_v/DiffTaichi_DiffPhy/0713_190631/models/weight.pkl")
-
-    # With actuation, looks good
-    trainer.nn.load_weights(os.path.join(model_path, "weight.pkl"))
-    # trainer.nn.load_weights(os.path.join(model_path, "best.pkl"))
+    # trainer.nn.load_weights(os.path.join(model_path, "weight.pkl"))
+    trainer.nn.load_weights(os.path.join(model_path, "best.pkl"))
 
 
     print(trainer.taichi_env.x.to_numpy()[0, :, :])

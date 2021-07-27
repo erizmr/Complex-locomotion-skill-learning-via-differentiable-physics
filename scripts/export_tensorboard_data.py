@@ -6,6 +6,7 @@ from functools import reduce
 
 from collections import defaultdict
 from tensorboard.backend.event_processing.event_accumulator import EventAccumulator
+from matplotlib.backends.backend_pdf import PdfPages
 
 
 def tabulate_events(dpath):
@@ -54,15 +55,16 @@ def to_dataframe(dpath):
     return df_base
 
 
-def draw(df_dict, robot_id):
+def draw(df_dict, robot_id, save=True):
     target_v = [-0.08, -0.06, -0.04, -0.02, 0.02, 0.04, 0.06, 0.08]
     target_h = [0.10, 0.15, 0.20]
     h_num = len(target_h)
     w_num = len(target_v)
+    iterations = None
     for k, v in df_dict.items():
         iterations = v.index
     # fig, axes = plt.subplots(h_num, w_num, figsize=(h_num*5, w_num*5),  constrained_layout=True)
-    fig, axes = plt.subplots(h_num, w_num, figsize=(h_num * 5, w_num * 5))
+    fig, axes = plt.subplots(h_num, w_num, figsize=(w_num * 5, h_num * 5))
     axes = axes.flatten()
 
     def _draw(df, tag, var, color, alpha, axes):
@@ -75,8 +77,11 @@ def draw(df_dict, robot_id):
                     if h > 0 and str(-h) in name:
                         continue
                     if str(v) in name and str(h) in name and var in name.split("_loss")[0]:
-                        axes[cnt].plot(iterations, df[name], color, label=tag+" "+var+" loss", alpha=alpha)
+                        # print(f"Iter len {len(iterations)}, Data len {len(df[name])}")
+                        draw_len = min(len(iterations), len(df[name]))
+                        axes[cnt].plot(iterations[:draw_len], df[name][:draw_len], color, label=tag+" "+var+" loss", alpha=alpha)
                         axes[cnt].set_title(name.split('/')[0].split('loss_')[1])
+                        axes[cnt].set_aspect('auto')
                         # axes[cnt].set_ylim([0.0, 5.0])
                         cnt += 1
                         break
@@ -95,6 +100,11 @@ def draw(df_dict, robot_id):
     fig.suptitle(f'Validation Loss - Robot {robot_id}', fontsize=20)
     # fig.tight_layout(pad=0.0, w_pad=0.0, h_pad=10.0)
     # plt.tight_layout()
+    img_save_name = f"imgs/validation_loss_robot_{robot_id}_{list(df_dict.keys())[-1]}"
+    if save:
+        with PdfPages(img_save_name + ".pdf") as pdf:
+            pdf.savefig(fig)
+    # plt.savefig(img_save_name, dpi=fig.dpi)
     plt.show()
 
 
@@ -111,6 +121,9 @@ if __name__ == '__main__':
     parser.add_argument('--no-rl',
                         action='store_true',
                         help='experiment tensorboard file')
+    parser.add_argument('--no-save',
+                        action='store_true',
+                        help='experiment tensorboard file')
     args = parser.parse_args()
 
     import glob
@@ -118,21 +131,23 @@ if __name__ == '__main__':
     print(path_ours)
     path_ours = sorted(path_ours, key=os.path.getmtime)[-1]
     print("Path ours", path_ours)
-    robot_id = path_ours.split("_robot")[-1].split('/')[0]
+    robot_id_our = path_ours.split("_robot")[-1].split('/')[0]
     df_ours = to_dataframe(path_ours)
 
     if not args.no_rl:
         path_rls = glob.glob(os.path.join(args.rl_file_path, "*/validation"))
         print(path_rls)
-        path_rl = sorted(path_rls, key=os.path.getmtime)[0]
+        path_rl = sorted(path_rls, key=os.path.getmtime)[-1]
         print("Path rls", path_rl)
+        robot_id_rl = path_rl.split("_robot")[-1].split('/')[0]
         # path_ppo = "saved_results/sim_config_RL/DiffTaichi_RL/0702_011543/validation"
         df_ppo = to_dataframe(path_rl)
-
+    assert robot_id_our == robot_id_rl
+    print(robot_id_our, robot_id_rl)
     if args.no_rl:
         df_dict = {"Ours": df_ours}
     else:
         df_dict = {"Ours": df_ours, "PPO": df_ppo}
 
-    draw(df_dict, robot_id)
+    draw(df_dict, robot_id_our, not args.no_save)
 

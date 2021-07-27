@@ -47,7 +47,7 @@
     "n_hidden": 64,
     "duplicate_v": 30,
     "duplicate_h": 30,
-    "duplicate_c": 10,
+    "duplicate_c": 0,
     "batch_size": 1,
     "max_reset_step": 4,
     "learning_rate": 3e-4,
