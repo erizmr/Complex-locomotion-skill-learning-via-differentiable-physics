@@ -87,8 +87,8 @@ if __name__ == "__main__":
     model_path = sorted(model_paths, key=os.path.getmtime)[-1]
     print("load from : ", model_path)
 
-    # trainer.nn.load_weights(os.path.join(model_path, "weight.pkl"))
-    trainer.nn.load_weights(os.path.join(model_path, "best.pkl"))
+    trainer.nn.load_weights(os.path.join(model_path, "weight.pkl"))
+    # trainer.nn.load_weights(os.path.join(model_path, "best.pkl"))
 
 
     print(trainer.taichi_env.x.to_numpy()[0, :, :])

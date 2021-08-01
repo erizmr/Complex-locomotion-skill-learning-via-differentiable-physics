@@ -124,22 +124,26 @@ class MassSpringEnv(gym.Env):
 
             # Reward for jumping
             height = self.taichi_env.solver.height[self.t, k]
+            # if height > self.last_height[k]:
+            d_reward = ((height - target_h) ** 2 - (self.last_height[k] - target_h) ** 2) / (target_h ** 2) * 10.0
+            reward_h[k] -= d_reward
             if height > self.last_height[k]:
-                d_reward = ((height - target_h) ** 2 - (self.last_height[k] - target_h) ** 2) / (target_h ** 2) * 10.0
-                reward_h[k] -= d_reward
                 self.last_height[k] = height
             reward[k] += reward_v[k] + reward_h[k]
 
-        return sum(reward) / self.batch_size, sum(reward_v) / self.batch_size, sum(reward_h) / self.batch_size,
+        return sum(reward) / self.batch_size, sum(reward_v) / self.batch_size, sum(reward_h) / self.batch_size
 
     # def get_reward(self):
     #     reward = np.zeros(self.batch_size)
-    #     self.taichi_env.get_loss(self.t, loss_enable=self.task)
+    #     reward_v = np.zeros(self.batch_size)
+    #     reward_h = np.zeros(self.batch_size)
+    #     self.taichi_env.get_loss(self.max_steps, loss_enable=self.task)
     #     # Reward for moving forward
     #     for k in range(self.batch_size):
-    #         reward[k] -= self.taichi_env.loss_dict_batch["loss_velocity"][k]
-    #         reward[k] -= self.taichi_env.loss_dict_batch["loss_height"][k]
-    #     return sum(reward) / self.batch_size
+    #         reward_v[k] -= self.taichi_env.loss_dict_batch["loss_velocity"][k]
+    #         reward_h[k] -= self.taichi_env.loss_dict_batch["loss_height"][k]
+    #         reward[k] += reward_v[k] + reward_h[k]
+    #     return sum(reward) / self.batch_size, sum(reward_v) / self.batch_size, sum(reward_h) / self.batch_size
 
 
     def get_state(self, t):

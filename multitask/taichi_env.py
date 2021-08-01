@@ -251,7 +251,7 @@ class TaichiEnv:
     def compute_loss_crawl(self, steps: ti.template()):
         for t, k in ti.ndrange((1, steps + 1), self.batch_size):
             if self.target_c[t, k] > 1 - 1e-4:
-                loss_c = max(self.upper_height[t, k] - 0.1, 0) ** 2 / self.batch_size / steps
+                loss_c = max(self.upper_height[t, k] - 0.1, 0) ** 2 / self.batch_size / steps * 5.
                 self.loss_crawl[None] += loss_c
                 self.loss_crawl_batch[k] += loss_c * self.batch_size
 

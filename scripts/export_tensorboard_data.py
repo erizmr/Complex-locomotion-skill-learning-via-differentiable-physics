@@ -55,50 +55,75 @@ def to_dataframe(dpath):
     return df_base
 
 
-def draw(df_dict, robot_id, save=True):
-    target_v = [-0.08, -0.06, -0.04, -0.02, 0.02, 0.04, 0.06, 0.08]
+def draw(df_dict, robot_id, save=True, normlize=False):
+    target_v = [-0.08, -0.06, -0.04, -0.02, 0.00, 0.02, 0.04, 0.06, 0.08]
     target_h = [0.10, 0.15, 0.20]
+    target_c = [0.0, 1.0]
     h_num = len(target_h)
     w_num = len(target_v)
     iterations = None
     for k, v in df_dict.items():
         iterations = v.index
     # fig, axes = plt.subplots(h_num, w_num, figsize=(h_num*5, w_num*5),  constrained_layout=True)
-    fig, axes = plt.subplots(h_num, w_num, figsize=(w_num * 5, h_num * 5))
+    fig, axes = plt.subplots(h_num + 1, w_num, figsize=(w_num * 5, (h_num + 1) * 5))
     axes = axes.flatten()
 
-    def _draw(df, tag, var, color, alpha, axes):
+    def _draw(df, tag, var, color, alpha, axes, normlize=False):
         cnt = 0
-        for h in target_h:
-            for v in target_v:
-                for name in df.columns:
-                    if v > 0 and str(-v) in name:
-                        continue
-                    if h > 0 and str(-h) in name:
-                        continue
-                    if str(v) in name and str(h) in name and var in name.split("_loss")[0]:
-                        # print(f"Iter len {len(iterations)}, Data len {len(df[name])}")
-                        draw_len = min(len(iterations), len(df[name]))
-                        axes[cnt].plot(iterations[:draw_len], df[name][:draw_len], color, label=tag+" "+var+" loss", alpha=alpha)
-                        axes[cnt].set_title(name.split('/')[0].split('loss_')[1])
-                        axes[cnt].set_aspect('auto')
-                        # axes[cnt].set_ylim([0.0, 5.0])
-                        cnt += 1
-                        break
+        if var == 'crawl':
+            cnt = len(target_v) * len(target_h)
+        for c in target_c:
+            if var == 'crawl' and c < 1e-6:
+                continue
+            for h in target_h:
+                if h > 0.1 and c > 0.0:
+                    continue
+                for v in target_v:
+                    for name in df.columns:
+                        if v > 0 and str(-v) in name:
+                            continue
+                        if h > 0 and str(-h) in name:
+                            continue
+                        if str(v) in name and str(h) in name and str(c) in name and var in name.split("_loss")[0]:
+                            # print(var + "_" + str(c))
+                            if var == 'crawl' and var + "_" + str(c) not in name:
+                                continue
+                            # print(f"Iter len {len(iterations)}, Data len {len(df[name])}")
+                            draw_len = min(len(iterations), len(df[name]))
+                            if normlize:
+                                base_loss = df[name][0]
+                            else:
+                                base_loss = 1.0
+                            axes[cnt].plot(iterations[:draw_len],
+                                           df[name][:draw_len] / base_loss, color,
+                                           label=tag+" "+var+" loss", alpha=alpha)
+                            axes[cnt].fill_between(iterations[:draw_len],
+                                             df[name][:draw_len] / base_loss - df[name+'_std'][:draw_len],
+                                             df[name][:draw_len] / base_loss + df[name+'_std'][:draw_len],
+                                             color=color, alpha=0.2)
+                            # axes[cnt].errorbar(iterations[:draw_len], df[name][:draw_len] / base_loss,
+                            #                    yerr=df[name+'_std'][:draw_len], color=color, ecolor=color,
+                            #                    label=tag+" "+var+" loss", alpha=0.1)
+                            axes[cnt].set_title(name.split('/')[0].split('loss_')[1], fontsize=12)
+                            axes[cnt].set_aspect('auto')
+                            # if normlize:
+                            #     axes[cnt].set_ylim([0.0, 1.2])
+                            cnt += 1
+                            break
         handles, labels = axes[-1].get_legend_handles_labels()
         fig.legend(handles, labels, fontsize=16)
 
-    vars = ['task', 'velocity', 'height']
-    colors = ['tab:blue', 'tab:orange', 'tab:green']
+    vars = ['task', 'velocity', 'height', 'crawl']
+    colors = ['tab:blue', 'tab:orange', 'tab:green', 'tab:pink']
 
     alpha = 1.0
     for tag, df in df_dict.items():
         for var, color in zip(vars, colors):
-            _draw(df, tag, var, color, alpha, axes)
+            _draw(df, tag, var, color, alpha, axes, normlize=normlize)
         alpha *= 0.5
 
     fig.suptitle(f'Validation Loss - Robot {robot_id}', fontsize=20)
-    # fig.tight_layout(pad=0.0, w_pad=0.0, h_pad=10.0)
+    # fig.tight_layout(pad=0.0, w_pad=2.0, h_pad=5.0)
     # plt.tight_layout()
     img_save_name = f"imgs/validation_loss_robot_{robot_id}_{list(df_dict.keys())[-1]}"
     if save:
@@ -106,6 +131,21 @@ def draw(df_dict, robot_id, save=True):
             pdf.savefig(fig)
     # plt.savefig(img_save_name, dpi=fig.dpi)
     plt.show()
+
+
+def merge_df_with_error_bar(df_list):
+    df_new = pd.DataFrame()
+    names = df_list[0].columns
+    for n in names:
+        vals = []
+        for df in df_list:
+            # print(df[n].values.shape)
+            vals.append(df[n].values)
+        print(np.array(vals).shape)
+        df_new[n] = np.mean(np.array(vals), axis=0)
+        df_new[n+'_std'] = np.std(np.array(vals), axis=0)
+        # print(df_new[n])
+    return df_new
 
 
 if __name__ == '__main__':
@@ -121,6 +161,9 @@ if __name__ == '__main__':
     parser.add_argument('--no-rl',
                         action='store_true',
                         help='experiment tensorboard file')
+    parser.add_argument('--no-normlize',
+                        action='store_true',
+                        help='experiment tensorboard file')
     parser.add_argument('--no-save',
                         action='store_true',
                         help='experiment tensorboard file')
@@ -129,11 +172,17 @@ if __name__ == '__main__':
     import glob
     path_ours = glob.glob(os.path.join(args.our_file_path, "*/validation"))
     print(path_ours)
-    path_ours = sorted(path_ours, key=os.path.getmtime)[-1]
+    path_ours = sorted(path_ours, key=os.path.getmtime)
     print("Path ours", path_ours)
-    robot_id_our = path_ours.split("_robot")[-1].split('/')[0]
-    df_ours = to_dataframe(path_ours)
+    robot_id_our = path_ours[0].split("_robot")[-1].split('/')[0]
+    # df_ours = to_dataframe(path_ours)
+    df_ours_all = []
+    for p in path_ours:
+        df_ours_all.append(to_dataframe(p))
+    df_ours = merge_df_with_error_bar(df_ours_all)
+    print(df_ours)
 
+    df_ppo = None
     if not args.no_rl:
         path_rls = glob.glob(os.path.join(args.rl_file_path, "*/validation"))
         print(path_rls)
@@ -142,12 +191,13 @@ if __name__ == '__main__':
         robot_id_rl = path_rl.split("_robot")[-1].split('/')[0]
         # path_ppo = "saved_results/sim_config_RL/DiffTaichi_RL/0702_011543/validation"
         df_ppo = to_dataframe(path_rl)
+    else:
+        robot_id_rl = robot_id_our
     assert robot_id_our == robot_id_rl
     print(robot_id_our, robot_id_rl)
     if args.no_rl:
         df_dict = {"Ours": df_ours}
     else:
+        assert df_ppo is not None
         df_dict = {"Ours": df_ours, "PPO": df_ppo}
-
-    draw(df_dict, robot_id_our, not args.no_save)
-
+    draw(df_dict, robot_id_our, not args.no_save, normlize=not args.no_normlize)

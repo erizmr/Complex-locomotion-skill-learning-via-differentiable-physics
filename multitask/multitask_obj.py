@@ -643,6 +643,8 @@ class DiffPhyTrainer(BaseTrainer):
         if train:
             self.taichi_env.initialize_train(iter, steps, max_speed, max_height)
         elif not train and self.taichi_env.dim == 2:
+            if output_c is None:
+                output_c = np.zeros(self.taichi_env.batch_size)
             self.taichi_env.initialize_validate(steps, output_v, output_h, output_c)
         elif not train and self.taichi_env.dim == 3:
             self.taichi_env.initialize_script(steps, 0.04, 0, 0, 0.04, -0.04, 0, 0, -0.04)
@@ -790,6 +792,8 @@ class DiffPhyTrainer(BaseTrainer):
             validate_v = self.taichi_env.validate_targets_values['velocity']
             validate_h = self.taichi_env.validate_targets_values['height']
             validate_c = self.taichi_env.validate_targets_values['crawl']
+            if len(validate_c) == 0:
+                validate_c = np.zeros(self.taichi_env.batch_size)
             self.logger.info(f"current max speed: {validate_v}, max height {validate_h}, max crawl {validate_c}")
             self.simulate(self.taichi_env.max_steps,
                           output_v=np.array(validate_v),
