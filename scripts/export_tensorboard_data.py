@@ -55,20 +55,41 @@ def to_dataframe(dpath):
     return df_base
 
 
-def draw(df_dict, robot_id, save=True, normlize=False):
+def draw(df_dict, robot_id, task, save=True, normlize=False, error_bar=False):
+
     target_v = [-0.08, -0.06, -0.04, -0.02, 0.00, 0.02, 0.04, 0.06, 0.08]
     target_h = [0.10, 0.15, 0.20]
     target_c = [0.0, 1.0]
     h_num = len(target_h)
     w_num = len(target_v)
+
+    # vars = ['task', 'velocity', 'height', 'crawl']
+    # colors = ['tab:blue', 'tab:orange', 'tab:green', 'tab:pink']
+
+    vars = []
+    colors = []
+    if 't' in task:
+        vars.append('task')
+        colors.append('tab:blue')
+    if 'v' in task:
+        vars.append('velocity')
+        colors.append('tab:orange')
+    if 'h' in task:
+        vars.append('height')
+        colors.append('tab:green')
+    if 'c' in task:
+        vars.append('crawl')
+        colors.append('tab:pink')
+        h_num += 1
+
     iterations = None
     for k, v in df_dict.items():
         iterations = v.index
     # fig, axes = plt.subplots(h_num, w_num, figsize=(h_num*5, w_num*5),  constrained_layout=True)
-    fig, axes = plt.subplots(h_num + 1, w_num, figsize=(w_num * 5, (h_num + 1) * 5))
+    fig, axes = plt.subplots(h_num, w_num, figsize=(w_num * 5, h_num * 5))
     axes = axes.flatten()
 
-    def _draw(df, tag, var, color, alpha, axes, normlize=False):
+    def _draw(df, tag, var, color, alpha, axes, normlize=False, error_bar=False):
         cnt = 0
         if var == 'crawl':
             cnt = len(target_v) * len(target_h)
@@ -97,10 +118,11 @@ def draw(df_dict, robot_id, save=True, normlize=False):
                             axes[cnt].plot(iterations[:draw_len],
                                            df[name][:draw_len] / base_loss, color,
                                            label=tag+" "+var+" loss", alpha=alpha)
-                            axes[cnt].fill_between(iterations[:draw_len],
-                                             df[name][:draw_len] / base_loss - df[name+'_std'][:draw_len],
-                                             df[name][:draw_len] / base_loss + df[name+'_std'][:draw_len],
-                                             color=color, alpha=0.2)
+                            if error_bar:
+                                axes[cnt].fill_between(iterations[:draw_len],
+                                                 df[name][:draw_len] / base_loss - df[name+'_std'][:draw_len],
+                                                 df[name][:draw_len] / base_loss + df[name+'_std'][:draw_len],
+                                                 color=color, alpha=0.2)
                             # axes[cnt].errorbar(iterations[:draw_len], df[name][:draw_len] / base_loss,
                             #                    yerr=df[name+'_std'][:draw_len], color=color, ecolor=color,
                             #                    label=tag+" "+var+" loss", alpha=0.1)
@@ -110,16 +132,13 @@ def draw(df_dict, robot_id, save=True, normlize=False):
                             #     axes[cnt].set_ylim([0.0, 1.2])
                             cnt += 1
                             break
-        handles, labels = axes[-1].get_legend_handles_labels()
+        handles, labels = axes[0].get_legend_handles_labels()
         fig.legend(handles, labels, fontsize=16)
-
-    vars = ['task', 'velocity', 'height', 'crawl']
-    colors = ['tab:blue', 'tab:orange', 'tab:green', 'tab:pink']
 
     alpha = 1.0
     for tag, df in df_dict.items():
         for var, color in zip(vars, colors):
-            _draw(df, tag, var, color, alpha, axes, normlize=normlize)
+            _draw(df, tag, var, color, alpha, axes, normlize=normlize, error_bar=error_bar)
         alpha *= 0.5
 
     fig.suptitle(f'Validation Loss - Robot {robot_id}', fontsize=20)
@@ -141,7 +160,7 @@ def merge_df_with_error_bar(df_list):
         for df in df_list:
             # print(df[n].values.shape)
             vals.append(df[n].values)
-        print(np.array(vals).shape)
+        # print(np.array(vals).shape)
         df_new[n] = np.mean(np.array(vals), axis=0)
         df_new[n+'_std'] = np.std(np.array(vals), axis=0)
         # print(df_new[n])
@@ -154,19 +173,25 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='draw')
     parser.add_argument('--our_file_path',
                         default='',
-                        help='experiment tensorboard file')
+                        help='DiffPhy experiment tensorboard file')
     parser.add_argument('--rl_file_path',
                         default='',
-                        help='experiment tensorboard file')
+                        help='RL experiment tensorboard file')
+    parser.add_argument('--task',
+                        default='tvh',
+                        help='task type, t: task total loss, v:velocity, h:height, c:crawl')
+    parser.add_argument('--error-bar',
+                        action='store_true',
+                        help='draw error bar')
     parser.add_argument('--no-rl',
                         action='store_true',
-                        help='experiment tensorboard file')
+                        help='exclude rl experiments')
     parser.add_argument('--no-normlize',
                         action='store_true',
-                        help='experiment tensorboard file')
+                        help='do not normlize the loss')
     parser.add_argument('--no-save',
                         action='store_true',
-                        help='experiment tensorboard file')
+                        help='do not save the plots in pdf')
     args = parser.parse_args()
 
     import glob
@@ -200,4 +225,7 @@ if __name__ == '__main__':
     else:
         assert df_ppo is not None
         df_dict = {"Ours": df_ours, "PPO": df_ppo}
-    draw(df_dict, robot_id_our, not args.no_save, normlize=not args.no_normlize)
+    draw(df_dict, robot_id_our, args.task,
+         save=not args.no_save,
+         normlize=not args.no_normlize,
+         error_bar=args.error_bar)

@@ -21,3 +21,11 @@
 `python3 interactive.py --config_file cfg/sim_config_DiffPhy_robot2_vh.json --no-tensorboard`
 
 
+## Output plots
+
+### DiffPhy Only
+`python3 scripts/export_tensorboard_data.py --our_file_path saved_results/sim_config_DiffPhy_robot4_vh/DiffTaichi_DiffPhy/ --no-rl --error-bar --task tvh`
+
+### DiffPhy and RL
+`python3 scripts/export_tensorboard_data.py --our_file_path saved_results/sim_config_DiffPhy_robot4_vh/DiffTaichi_DiffPhy/ --rl_file_path saved_results/sim_config_RL_robot4_vh/DiffTaichi_RL/ --task tvh`
+
