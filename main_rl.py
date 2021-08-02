@@ -33,9 +33,12 @@ if __name__ == "__main__":
                 paths_to_evaluate.append(ef)
         print(f"All experiments to evaluate {paths_to_evaluate}")
 
-        for ef in exp_folders:
+        for ef in paths_to_evaluate:
             config_file = os.path.join(ef, "config.json")
             config = ConfigSim.from_args_and_file(args, config_file, if_mkdir=False)
+
+            # Reset the number of processes to 1
+            args.num_processes = 1
             process_required = 1
             for k, v in config.get_config()["validation"].items():
                 if k not in config.get_config()["train"]["task"]:

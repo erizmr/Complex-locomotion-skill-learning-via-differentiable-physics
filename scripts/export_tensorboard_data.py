@@ -205,17 +205,21 @@ if __name__ == '__main__':
     for p in path_ours:
         df_ours_all.append(to_dataframe(p))
     df_ours = merge_df_with_error_bar(df_ours_all)
-    print(df_ours)
+    # print(df_ours)
 
     df_ppo = None
     if not args.no_rl:
         path_rls = glob.glob(os.path.join(args.rl_file_path, "*/validation"))
         print(path_rls)
-        path_rl = sorted(path_rls, key=os.path.getmtime)[-1]
-        print("Path rls", path_rl)
-        robot_id_rl = path_rl.split("_robot")[-1].split('/')[0]
-        # path_ppo = "saved_results/sim_config_RL/DiffTaichi_RL/0702_011543/validation"
-        df_ppo = to_dataframe(path_rl)
+        path_rls = sorted(path_rls, key=os.path.getmtime)
+        print("Path rls", path_rls)
+        robot_id_rl = path_rls[0].split("_robot")[-1].split('/')[0]
+        # df_ppo = to_dataframe(path_rl)
+        df_rl_all = []
+        for p in path_rls:
+            df_rl_all.append(to_dataframe(p))
+        df_ppo = merge_df_with_error_bar(df_rl_all)
+
     else:
         robot_id_rl = robot_id_our
     assert robot_id_our == robot_id_rl
