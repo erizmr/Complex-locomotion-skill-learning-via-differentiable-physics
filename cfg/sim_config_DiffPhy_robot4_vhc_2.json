@@ -1,7 +1,7 @@
 {
   "train": {
     "name": "DiffTaichi_DiffPhy",
-    "save_dir": "/home/mingrui/difftaichi/difftaichi2/saved_results",
+    "save_dir": "./saved_results",
     "output_video_in_train": false,
     "output_video_in_validation": true,
     "task": ["velocity", "height", "crawl"]
