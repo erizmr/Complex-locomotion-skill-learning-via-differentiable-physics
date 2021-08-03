@@ -1,13 +1,13 @@
 {
   "train": {
     "name": "DiffTaichi_RL",
-    "save_dir": "/home/mingrui/difftaichi/difftaichi2/saved_results",
+    "save_dir": "./saved_results",
     "output_video_in_train": false,
     "output_video_in_validation": true,
     "task": ["velocity", "height"]
   },
   "validation": {
-    "velocity": [-0.08, -0.06, -0.04, -0.02, 0.02, 0.04, 0.06, 0.08],
+    "velocity": [-0.08, -0.06, -0.04, 0.0, -0.02, 0.02, 0.04, 0.06, 0.08],
     "height": [0.10, 0.15, 0.20]
   },
   "robot": {
