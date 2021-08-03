@@ -49,6 +49,7 @@ def to_dataframe(dpath):
 
         df = pd.DataFrame(selected_val, index=selected_index, columns=[tag])
         df_collection.append(df)
+    print("current data path", dpath, len(df_collection))
     df_base = reduce(lambda x, y: pd.concat([x, y], axis=1, join="outer"), df_collection)
     # print(df_base)
     df_base.to_csv(os.path.join(dpath, 'summary.csv'))
@@ -152,18 +153,97 @@ def draw(df_dict, robot_id, task, save=True, normlize=False, error_bar=False):
     plt.show()
 
 
-def merge_df_with_error_bar(df_list):
+def draw_single(df_dict, robot_id, task, save=True, normlize=False, error_bar=False):
+    vars = []
+    colors = []
+    if 't' in task:
+        vars.append('task')
+        colors.append('tab:blue')
+    if 'v' in task:
+        vars.append('velocity')
+        colors.append('tab:orange')
+    if 'h' in task:
+        vars.append('height')
+        colors.append('tab:green')
+    if 'c' in task:
+        vars.append('crawl')
+        colors.append('tab:pink')
+    fig, ax = plt.subplots(1, 1, figsize=(16, 16))
+    alpha = 1.0
+    draw_len = 100000
+    for k, df in df_dict.items():
+        draw_len = min(len(df.index.values), draw_len)
+    for k, df in df_dict.items():
+        iterations = df.index.values
+        for i, name in enumerate(vars):
+            base_loss = 1.
+            if normlize:
+                base_loss = df[name].values[0]
+            ax.plot(iterations[:draw_len], df[name][:draw_len] / base_loss, color=colors[i], label=k+" "+name+" loss", alpha=alpha)
+            if error_bar:
+                ax.fill_between(iterations[:draw_len],
+                                       df[name][:draw_len] / base_loss - df[name + '_std'][:draw_len],
+                                       df[name][:draw_len] / base_loss + df[name + '_std'][:draw_len],
+                                       color=colors[i], alpha=0.2)
+        alpha *=0.5
+    if normlize:
+        ax.set_ylabel("Normlized Validation Loss")
+    else:
+        ax.set_ylabel("Loss")
+    ax.set_xlabel("Iterations")
+    ax.set_title(f"Validation total loss robot {robot_id}")
+    plt.legend()
+    img_save_name = f"imgs/validation_total_loss_robot_{robot_id}"
+    if save:
+        with PdfPages(img_save_name + ".pdf") as pdf:
+            pdf.savefig(fig)
+    plt.show()
+
+
+def merge_df_single_plot(df_list, task):
+    # df_new = merge_df_with_error_bar(df_list, std=False)
+    df_new_list = []
+
+    for df_new in df_list:
+        iterations = df_new.index
+        data_dict = defaultdict(list)
+        for name in df_new.columns:
+            tag = name.split('_')[0]
+            if '0.25' in name or tag[0] not in task:
+                continue
+            data_dict[tag].append(df_new[name].values)
+        key_list = list(data_dict.keys())
+        for k in key_list:
+            # print('k', k, np.array(data_dict[k]))
+            data_dict[k] = np.mean(np.array(data_dict[k]), axis=0)
+            # data_dict[k+'_std'] = np.std(np.array(data_dict[k]), axis=0)
+        df_sub_ret = pd.DataFrame(data_dict)
+        df_sub_ret.set_index(iterations.values, inplace=True)
+        df_new_list.append(df_sub_ret)
+    # print(df_new_list)
+    df_ret = merge_df_with_error_bar(df_new_list)
+    # print(df_ret)
+    return df_ret
+
+def merge_df_with_error_bar(df_list, std=True):
     df_new = pd.DataFrame()
     names = df_list[0].columns
+    iterations = df_list[0].index
+    # print(iterations)
     for n in names:
+        if '0.25' in n:
+            continue
         vals = []
         for df in df_list:
             # print(df[n].values.shape)
             vals.append(df[n].values)
         # print(np.array(vals).shape)
         df_new[n] = np.mean(np.array(vals), axis=0)
-        df_new[n+'_std'] = np.std(np.array(vals), axis=0)
+        if std:
+            df_new[n+'_std'] = np.std(np.array(vals), axis=0)
         # print(df_new[n])
+    df_new.set_index(iterations.values, inplace=True)
+    print(df_new)
     return df_new
 
 
@@ -186,28 +266,39 @@ if __name__ == '__main__':
     parser.add_argument('--no-rl',
                         action='store_true',
                         help='exclude rl experiments')
+    parser.add_argument('--no-diffphy',
+                        action='store_true',
+                        help='exclude rl experiments')
     parser.add_argument('--no-normlize',
                         action='store_true',
                         help='do not normlize the loss')
     parser.add_argument('--no-save',
                         action='store_true',
                         help='do not save the plots in pdf')
+    parser.add_argument('--draw-single',
+                        action='store_true',
+                        help='do not save the plots in pdf')
     args = parser.parse_args()
 
     import glob
-    path_ours = glob.glob(os.path.join(args.our_file_path, "*/validation"))
-    print(path_ours)
-    path_ours = sorted(path_ours, key=os.path.getmtime)
-    print("Path ours", path_ours)
-    robot_id_our = path_ours[0].split("_robot")[-1].split('/')[0]
-    # df_ours = to_dataframe(path_ours)
-    df_ours_all = []
-    for p in path_ours:
-        df_ours_all.append(to_dataframe(p))
-    df_ours = merge_df_with_error_bar(df_ours_all)
+    df_ours = None
+    robot_id_our = None
+    if not args.no_diffphy:
+        path_ours = glob.glob(os.path.join(args.our_file_path, "*/validation"))
+        print(path_ours)
+        path_ours = sorted(path_ours, key=os.path.getmtime)
+        print("Path ours", path_ours)
+        robot_id_our = path_ours[0].split("_robot")[-1].split('/')[0]
+        # df_ours = to_dataframe(path_ours)
+        df_ours_all = []
+        for p in path_ours:
+            df_ours_all.append(to_dataframe(p))
+        df_ours = merge_df_with_error_bar(df_ours_all)
+        df_ours_single = merge_df_single_plot(df_ours_all, args.task)
     # print(df_ours)
 
     df_ppo = None
+    robot_id_rl = None
     if not args.no_rl:
         path_rls = glob.glob(os.path.join(args.rl_file_path, "*/validation"))
         print(path_rls)
@@ -219,17 +310,33 @@ if __name__ == '__main__':
         for p in path_rls:
             df_rl_all.append(to_dataframe(p))
         df_ppo = merge_df_with_error_bar(df_rl_all)
-
-    else:
-        robot_id_rl = robot_id_our
-    assert robot_id_our == robot_id_rl
-    print(robot_id_our, robot_id_rl)
+        df_ppo_single = merge_df_single_plot(df_rl_all, args.task)
+    # else:
+    #     robot_id_rl = robot_id_our
+    if not args.no_rl and not args.no_diffphy:
+        assert robot_id_our == robot_id_rl
+        print(robot_id_our, robot_id_rl)
+    robot_id = robot_id_our if robot_id_our is not None else robot_id_rl
+    print(robot_id)
+    df_dict = None
     if args.no_rl:
         df_dict = {"Ours": df_ours}
-    else:
+    if args.no_diffphy:
+        df_dict = {"PPO": df_ppo}
+    if not args.no_rl and not args.no_diffphy:
         assert df_ppo is not None
         df_dict = {"Ours": df_ours, "PPO": df_ppo}
-    draw(df_dict, robot_id_our, args.task,
-         save=not args.no_save,
-         normlize=not args.no_normlize,
-         error_bar=args.error_bar)
+
+    if args.draw_single:
+        df_dict_single = {"Ours": df_ours_single, "PPO": df_ppo_single}
+        draw_single(df_dict_single,
+                    robot_id,
+                    args.task,
+                    save=not args.no_save,
+                    normlize=not args.no_normlize,
+                    error_bar=args.error_bar)
+    else:
+        draw(df_dict, robot_id, args.task,
+             save=not args.no_save,
+             normlize=not args.no_normlize,
+             error_bar=args.error_bar)
