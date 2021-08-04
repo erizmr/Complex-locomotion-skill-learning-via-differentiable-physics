@@ -4,7 +4,7 @@ import glob
 import taichi as ti
 from multitask.arguments import get_args
 from multitask.config_sim import ConfigSim
-from multitask.multitask_obj import DiffPhyTrainer
+from multitask.diffphy_trainer import DiffPhyTrainer
 # from solver_mass_spring import SolverMassSpring
 # from solver_mpm import SolverMPM
 

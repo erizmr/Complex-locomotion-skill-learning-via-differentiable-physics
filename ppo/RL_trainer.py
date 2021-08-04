@@ -7,7 +7,7 @@ import numpy as np
 import taichi as ti
 
 from collections import defaultdict
-from multitask.multitask_obj import BaseTrainer
+from multitask.base_trainer import BaseTrainer
 from ppo.a2c_ppo_acktr import algo, utils
 from ppo.a2c_ppo_acktr.algo import gail
 from ppo.a2c_ppo_acktr.envs import make_env, make_vec_envs
