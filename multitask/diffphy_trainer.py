@@ -211,7 +211,7 @@ class DiffPhyTrainer(BaseTrainer):
         self.register_hooks([self.legacy_io, self.metric_writer])
 
     @ti.kernel
-    def diff_copy(self, t):
+    def diff_copy(self, t: ti.i32):
         for k, i in ti.ndrange(self.taichi_env.batch_size, self.nn.n_output):
             self.taichi_env.solver.actuation[t, k, i] = self.taichi_env.solver.actuation[t-1, k, i]
     @debug
