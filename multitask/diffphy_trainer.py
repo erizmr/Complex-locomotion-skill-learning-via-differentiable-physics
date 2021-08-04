@@ -184,6 +184,7 @@ class DiffPhyTrainer(BaseTrainer):
         self.max_reset_step = self.taichi_env.config["nn"]["max_reset_step"]
         self.max_height = self.taichi_env.config["process"]["max_height"]
         self.max_speed = self.taichi_env.config["process"]["max_speed"]
+        self.control_length = self.taichi_env.config["robot"]["control_length"]
         # self.max_steps = self.taichi_env.config["process"]["max_steps"]
         self.loss_enable = set(self.taichi_env.task)
         self.change_iter = 5000
@@ -209,6 +210,10 @@ class DiffPhyTrainer(BaseTrainer):
         self.metric_writer = MetricWriter()
         self.register_hooks([self.legacy_io, self.metric_writer])
 
+    @ti.kernel
+    def diff_copy(self):
+        for k, i in ti.ndrange(self.taichi_env.batch_size, self.nn.n_output):
+            self.taichi_env.solver.actuation[t, k, i] = self.taichi_env.solver.actuation[t-1, k, i]
     @debug
     def simulate(self, steps,
                  output_v=None,
@@ -239,7 +244,10 @@ class DiffPhyTrainer(BaseTrainer):
             with ti.Tape(self.taichi_env.loss):
                 for t in range(steps + 1):
                     self.taichi_env.nn_input(t, 0, max_speed, max_height)
-                    self.nn.forward(t)
+                    if t // 10 == 0:
+                        self.nn.forward(t)
+                    else:
+                        self.diff_copy()
                     self.taichi_env.solver.advance(t)
                 self.taichi_env.get_loss(steps, *args, **kwargs)
         else:
