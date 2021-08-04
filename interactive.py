@@ -35,19 +35,27 @@ def set_target():
         elif e.key == gui.BACKSPACE:
             set_target.target_v = 0.
             set_target.target_h = 0.1
-    print("Model Path {} Status: v {:.4f} h {:.4f} c {:.4f}".format(model_path, set_target.target_v, set_target.target_h, set_target.target_c))
+    # print("Model Path {} Status: v {:.4f} h {:.4f} c {:.4f}".format(model_path, set_target.target_v, set_target.target_h, set_target.target_c))
     trainer.taichi_env.initialize_interactive(1, set_target.target_v, set_target.target_h, set_target.target_c)
 set_target.target_v = 0
 set_target.target_h = 0.1
 set_target.target_c = 0.0
 
+
+all_holder = []
 def make_decision():
     trainer.nn.clear_single(0)
     trainer.taichi_env.solver.compute_center(0)
     trainer.taichi_env.nn_input(0, offset, 0.08, 0.1)
     if offset % int(control_length) == 0:
         trainer.nn.forward(0)
-    # print(offset, trainer.taichi_env.solver.actuation[0])
+
+    holder = []
+    for i in range(trainer.taichi_env.solver.n_objects):
+        holder.append(round(trainer.taichi_env.solver.actuation[0, 0, i], 3))
+    if offset % int(control_length) == 0:
+        print(f"Frame: {offset}, control signal: {holder}")
+    all_holder.append(holder)
 
 def forward_mass_spring():
     trainer.taichi_env.solver.apply_spring_force(0)
@@ -94,14 +102,21 @@ if __name__ == "__main__":
     trainer.nn.load_weights(os.path.join(model_path, "weight.pkl"))
     # trainer.nn.load_weights(os.path.join(model_path, "best.pkl"))
 
-
     print(trainer.taichi_env.x.to_numpy()[0, :, :])
     visualizer()
     while gui.running:
-        for i in range(10):
+        for i in range(1):
             set_target()
             make_decision()
             forward_mass_spring()
             refresh_xv()
             offset += 1
         visualizer()
+    import matplotlib.pyplot as plt
+    import numpy as np
+    signal_num = np.array(all_holder).shape[1]
+    for i in range(0, 1):
+        plt.plot([x for x in range(offset)], np.array(all_holder)[:, i], label="control signal "+str(i))
+    plt.legend()
+    plt.show()
+

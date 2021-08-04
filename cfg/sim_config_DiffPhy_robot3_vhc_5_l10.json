@@ -7,15 +7,15 @@
     "task": ["velocity", "height", "crawl"]
   },
   "validation": {
-    "velocity": [-0.08, -0.06, -0.04, -0.02, 0.0, 0.02, 0.04, 0.06, 0.08],
+    "velocity": [-0.08, -0.06, -0.04, 0.0, -0.02, 0.02, 0.04, 0.06, 0.08],
     "height": [0.10, 0.15, 0.20],
     "crawl": [0.0, 1.0]
   },
   "robot": {
     "dim": 2,
-    "robot_id": 5,
+    "robot_id": 3,
     "simulator": "mass_spring",
-    "control_length": 1
+    "control_length": 10
   },
   "process":{
     "max_steps": 1000,

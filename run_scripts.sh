@@ -4,12 +4,12 @@
 for i in 2 3 4 5;
 do
 echo $(expr $i);
-python3 main_diff_phy.py --config_file cfg/sim_config_DiffPhy_robot${i}_vhc_5.json --train
+python3 main_diff_phy.py --config_file cfg/sim_config_DiffPhy_robot${i}_vhc_5_l10.json --train
 done
 
 for i in 2 3 4 5;
 do
 echo $(expr $i);
-python3 main_diff_phy.py --config_file cfg/sim_config_DiffPhy_robot${i}_vhc_5.json --evaluate --no-tensorboard --evaluate_path saved_results/sim_config_DiffPhy_robot${i}_vhc_5/DiffTaichi_DiffPhy
+python3 main_diff_phy.py --config_file cfg/sim_config_DiffPhy_robot${i}_vhc_5_l10.json --evaluate --no-tensorboard --evaluate_path saved_results/sim_config_DiffPhy_robot${i}_vhc_5_l10/DiffTaichi_DiffPhy
 done
 
