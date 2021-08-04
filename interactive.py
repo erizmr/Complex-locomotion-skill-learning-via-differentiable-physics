@@ -45,7 +45,9 @@ def make_decision():
     trainer.nn.clear_single(0)
     trainer.taichi_env.solver.compute_center(0)
     trainer.taichi_env.nn_input(0, offset, 0.08, 0.1)
-    trainer.nn.forward(0)
+    if offset % int(control_length) == 0:
+        trainer.nn.forward(0)
+    # print(offset, trainer.taichi_env.solver.actuation[0])
 
 def forward_mass_spring():
     trainer.taichi_env.solver.apply_spring_force(0)
@@ -77,6 +79,8 @@ if __name__ == "__main__":
     print('args', args)
     config_file = args.config_file
     config = ConfigSim.from_file(config_file, if_mkdir=False)
+
+    control_length = config.get_config()["robot"]["control_length"]
 
     # Enforce the batch size to 1
     config._config["nn"]["batch_size"] = 1

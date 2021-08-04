@@ -253,7 +253,11 @@ class DiffPhyTrainer(BaseTrainer):
         else:
             for t in range(steps + 1):
                 self.taichi_env.nn_input(t, 0, max_speed, max_height)
-                self.nn.forward(t)
+                # self.nn.forward(t)
+                if t % self.control_length == 0:
+                    self.nn.forward(t)
+                else:
+                    self.diff_copy(t)
                 self.taichi_env.solver.advance(t)
             # self.visualizer(steps, prefix=str(output_v) + "_" + str(output_h))
             self.taichi_env.get_loss(steps, *args, **kwargs)
