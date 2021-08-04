@@ -211,7 +211,7 @@ class DiffPhyTrainer(BaseTrainer):
         self.register_hooks([self.legacy_io, self.metric_writer])
 
     @ti.kernel
-    def diff_copy(self):
+    def diff_copy(self, t):
         for k, i in ti.ndrange(self.taichi_env.batch_size, self.nn.n_output):
             self.taichi_env.solver.actuation[t, k, i] = self.taichi_env.solver.actuation[t-1, k, i]
     @debug
@@ -247,7 +247,7 @@ class DiffPhyTrainer(BaseTrainer):
                     if t // 10 == 0:
                         self.nn.forward(t)
                     else:
-                        self.diff_copy()
+                        self.diff_copy(t)
                     self.taichi_env.solver.advance(t)
                 self.taichi_env.get_loss(steps, *args, **kwargs)
         else:
