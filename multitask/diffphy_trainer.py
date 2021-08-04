@@ -244,7 +244,7 @@ class DiffPhyTrainer(BaseTrainer):
             with ti.Tape(self.taichi_env.loss):
                 for t in range(steps + 1):
                     self.taichi_env.nn_input(t, 0, max_speed, max_height)
-                    if t // 10 == 0:
+                    if t % self.control_length == 0:
                         self.nn.forward(t)
                     else:
                         self.diff_copy(t)
