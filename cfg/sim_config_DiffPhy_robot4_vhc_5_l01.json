@@ -13,9 +13,9 @@
   },
   "robot": {
     "dim": 2,
-    "robot_id": 2,
+    "robot_id": 4,
     "simulator": "mass_spring",
-    "control_length": 10
+    "control_length": 1
   },
   "process":{
     "max_steps": 1000,
