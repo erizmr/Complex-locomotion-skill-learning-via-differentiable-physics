@@ -148,9 +148,10 @@ class TaichiEnv:
 
     @ti.kernel
     def nn_input(self, t: ti.i32, offset: ti.i32, max_speed: ti.f64, max_height: ti.f64):
-        for k, j in ti.ndrange(self.batch_size, self.n_sin_waves):
-            self.input_state[t, k, j] = ti.sin(
-                self.spring_omega * (t + offset) * self.dt + 2 * math.pi / self.n_sin_waves * j)
+        if ti.static(self.n_sin_waves > 0):
+            for k, j in ti.ndrange(self.batch_size, self.n_sin_waves):
+                self.input_state[t, k, j] = ti.sin(
+                    self.spring_omega * (t + offset) * self.dt + 2 * math.pi / self.n_sin_waves * j)
         for k, j in ti.ndrange(self.batch_size, self.n_objects):
             vec_x = self.x[t, k, j] - self.center[t, k]
             for d in ti.static(range(self.dim)):

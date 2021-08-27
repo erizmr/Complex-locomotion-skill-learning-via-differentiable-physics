@@ -132,54 +132,54 @@ if __name__ == "__main__":
     print(trainer.taichi_env.x.to_numpy()[0, :, :])
     visualizer()
     while gui.running:
-        for i in range(1):
+        for i in range(6):
             set_target()
             make_decision()
             forward_mass_spring()
             refresh_xv()
             offset += 1
         visualizer()
-        # if offset < 100:
-        #     set_target.target_v = 0.0
-        #     set_target.target_h = 0.1
-        #     set_target.target_c = 0.0
-        # if offset > 100 and offset <= 500:
-        #     set_target.target_v = 0.01
-        #     set_target.target_h = 0.1
-        #     set_target.target_c = 0.0
-        # if offset > 500 and offset < 2000:
-        #     set_target.target_v = 0.015 * (offset // 500)
-        #     set_target.target_h = 0.1
-        #     set_target.target_c = 0.0
-        # if offset >= 2000 and offset < 3500:
-        #     set_target.target_v = -0.015 * ((offset - 1500) // 500)
-        #     set_target.target_h = 0.1
-        #     set_target.target_c = 0.0
-        # if offset >= 3500 and offset < 4000:
-        #     set_target.target_v = 0.0
-        #     set_target.target_h = 0.15
-        #     set_target.target_c = 0.0
-        # if offset >= 4000 and offset < 4500:
-        #     set_target.target_v = 0.0
-        #     set_target.target_h = 0.18
-        #     set_target.target_c = 0.0
-        # if offset >= 4500 and offset < 5000:
-        #     set_target.target_v = 0.01 * ((offset - 4500) // 100)
-        #     set_target.target_h = 0.1
-        #     set_target.target_c = 1.0
+        if offset < 100:
+            set_target.target_v = 0.0
+            set_target.target_h = 0.1
+            set_target.target_c = 0.0
+        if offset > 100 and offset <= 500:
+            set_target.target_v = 0.01
+            set_target.target_h = 0.1
+            set_target.target_c = 0.0
+        if offset > 500 and offset < 2000:
+            set_target.target_v = 0.015 * (offset // 500)
+            set_target.target_h = 0.1
+            set_target.target_c = 0.0
+        if offset >= 2000 and offset < 3500:
+            set_target.target_v = -0.015 * ((offset - 1500) // 500)
+            set_target.target_h = 0.1
+            set_target.target_c = 0.0
+        if offset >= 3500 and offset < 4000:
+            set_target.target_v = 0.0
+            set_target.target_h = 0.15
+            set_target.target_c = 0.0
+        if offset >= 4000 and offset < 4500:
+            set_target.target_v = 0.0
+            set_target.target_h = 0.18
+            set_target.target_c = 0.0
+        if offset >= 4500 and offset < 6000:
+            set_target.target_v = 0.015 * ((offset - 4000) // 500)
+            set_target.target_h = 0.1
+            set_target.target_c = 1.0
         #
         # set_target.target_v = min(0.01 * (offset // 400), 0.06)
         # set_target.target_h = 0.1
         # set_target.target_c = 0.0
 
-        if offset == 5000:
+        if offset == 6000:
             break
 
 
     # Draw control signal
-    signal_num = np.array(all_holder).shape[1]
-    for i in range(0, 1):
-        plt.plot([x for x in range(offset)], np.array(all_holder)[:, i], '-x', label="control signal "+str(i))
+    # signal_num = np.array(all_holder).shape[1]
+    # for i in range(0, 1):
+    #     plt.plot([x for x in range(offset)], np.array(all_holder)[:, i], '-x', label="control signal "+str(i))
     # plt.legend()
     # plt.show()
     # print(velocity_holder)

@@ -65,6 +65,9 @@ class ConfigSim:
     def _add_adaptive_configs(self):
         # Robot
         robot_id = self._config["robot"]["robot_id"]
+        actuation = None
+        if "actuation" in self._config["robot"]:
+            actuation = self._config["robot"]["actuation"]
         faces = []
         if robot_id >= 10000:
             self._config["robot"]["simulator"] = "mpm"
@@ -75,7 +78,10 @@ class ConfigSim:
             self._config["robot"]["simulator"] = "mass_spring"
             if robot_id < 100:
                 self._config["robot"]["dim"] = 2
-                objects, springs = robots[robot_id]()
+                if actuation is None:
+                    objects, springs = robots[robot_id]()
+                else:
+                    objects, springs = robots[robot_id](actuation=actuation)
             else:
                 self._config["robot"]["dim"] = 3
                 objects, springs, faces = robots3d[robot_id - 100]()

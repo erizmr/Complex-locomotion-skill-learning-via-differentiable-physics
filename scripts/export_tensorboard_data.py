@@ -225,6 +225,7 @@ def merge_df_single_plot(df_list, task):
     # print(df_ret)
     return df_ret
 
+
 def merge_df_with_error_bar(df_list, std=True):
     df_new = pd.DataFrame()
     names = df_list[0].columns
@@ -313,9 +314,9 @@ if __name__ == '__main__':
         df_ppo_single = merge_df_single_plot(df_rl_all, args.task)
     # else:
     #     robot_id_rl = robot_id_our
-    if not args.no_rl and not args.no_diffphy:
-        assert robot_id_our == robot_id_rl
-        print(robot_id_our, robot_id_rl)
+    # if not args.no_rl and not args.no_diffphy:
+    #     assert robot_id_our == robot_id_rl
+    #     print(robot_id_our, robot_id_rl)
     robot_id = robot_id_our if robot_id_our is not None else robot_id_rl
     print(robot_id)
     df_dict = None
@@ -328,7 +329,7 @@ if __name__ == '__main__':
         df_dict = {"Ours": df_ours, "PPO": df_ppo}
 
     if args.draw_single:
-        df_dict_single = {"Ours": df_ours_single, "PPO": df_ppo_single}
+        df_dict_single = {"control length 5": df_ours_single, "control length 1": df_ppo_single}
         draw_single(df_dict_single,
                     robot_id,
                     args.task,
