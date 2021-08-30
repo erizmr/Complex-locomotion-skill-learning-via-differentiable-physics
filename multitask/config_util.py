@@ -17,7 +17,7 @@ def dump_to_json(solver, objects, springs, file = None):
     if file is None:
         str = json.dumps(item)
         return str
-    json.dump(item, open(file, "w"))
+    json.dump(item, open(file, "w"), indent=4, sort_keys=False)
 
 
 if __name__ == "__main__":
@@ -31,8 +31,9 @@ if __name__ == "__main__":
     for builder in robot_builders:
         id = builder.robot_id
         obj, spr = builder.build()
+        builder.draw()
         dump_to_json("mass_spring", obj, spr, file=os.path.join(current_path(), "robot_configs/{}.json".format(id)))
         robot_config.clear()
     
-    for id in range(5):
-        print(load_from_json_file(id))
+    # for id in range(5):
+    #     print(load_from_json_file(id))
