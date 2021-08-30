@@ -1,6 +1,9 @@
 objects = []
 springs = []
 
+def clear():
+    objects = []
+    springs = []
 
 def add_object(x):
     objects.append(x)
