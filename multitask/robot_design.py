@@ -1,6 +1,8 @@
 from util import read_json, write_json
 from config_util import dump_to_json
 
+import numpy as np
+
 
 class RobotDesignBase:
     def __init__(self, cfg):
@@ -32,9 +34,85 @@ class RobotDesignBase:
         return cls(config)
 
 
+class RobotDesignMPM(RobotDesignBase):
+    def __init__(self, cfg):
+        super(RobotDesignMPM, self).__init__(cfg)
+        assert self.config["robot"]["solver"] == "mpm"
+        self.robot_id = self.config["robot"]["id"]
+        self.robot_name = self.config["robot"]["name"]
+        # design data holders
+        self.n_particles = 0
+        self.n_solid_particles = 0
+        self.pos = []
+        self.actuator_id = []
+
+        self.square_size = self.config["design_parameter"]["square_size"]
+
+        self.n_num = self.config["design_parameter"]["particle_in_square"]
+
+        self.actuator_num = self.config["design_parameter"]["actuator_num"]
+
+        if "offset" in self.config["design_parameter"].keys():
+            self.offset = np.array((
+                self.config["design_parameter"]["offset"]["x"],
+                self.config["design_parameter"]["offset"]["y"]))
+        else:
+            self.offset = np.array([0, 0])
+
+        self.built = False
+
+    def add_particle(self, pos, act_id):
+        assert act_id >= -1 and act_id < self.actuator_num
+        self.pos.append(self.offset + pos)
+        self.actuator_id.append(act_id)
+        self.n_particles += 1
+        self.n_solid_particles += int(act_id == -1)
+
+    def add_square(self, pos, act_id):
+        dx = self.square_size / self.n_num
+        for i in range(self.n_num):
+            for j in range(self.n_num):
+                self.add_particle(
+                    (pos[0] * self.square_size + (i + 0.5) * dx,
+                     pos[1] * self.square_size + (j + 0.5) * dx),
+                    act_id)
+
+    def add_rect(self, pos, shape, act_id):
+        for i in range(shape[0]):
+            for j in range(shape[1]):
+                self.add_square(
+                    (pos[0] + i, pos[1] + j), act_id)
+
+    def get_objects(self):
+        assert self.built
+        return self.pos, self.actuator_id, self.actuator_num
+
+    def build(self):
+        positions = self.config["design"]["anchor"]
+        shapes = self.config["design"]["shape"]
+        act_ids = self.config["design"]["actuator"]
+        mesh_types = self.config["design"]["mesh_type"]
+        for id, mesh_type in enumerate(mesh_types):
+            if mesh_type == "rectangle":
+                self.add_rect(positions[id], shapes[id], act_ids[id])
+            else:
+                raise NotImplementedError(
+                    "{} mesh not implemented!".format(mesh_type))
+        self.built = True
+        return self.get_objects()
+
+    def clear(self):
+        self.pos.clear()
+        self.actuator_id.clear()
+        self.n_particles = 0
+        self.n_solid_particles = 0
+        self.built = False
+
+
 class RobotDesignMassSpring(RobotDesignBase):
     def __init__(self, cfg):
         super(RobotDesignMassSpring, self).__init__(cfg)
+        assert self.config["robot"]["solver"] == "mass_spring"
         self.robot_id = self.config["robot"]["id"]
         self.solver = self.config["robot"]["solver"]
         # design data holders
