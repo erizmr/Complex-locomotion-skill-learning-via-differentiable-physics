@@ -32,7 +32,8 @@ if __name__ == "__main__":
         id = builder.robot_id
         obj, spr = builder.build()
         builder.draw()
-        dump_to_json("mass_spring", obj, spr, file=os.path.join(current_path(), "robot_configs/{}.json".format(id)))
+        builder.dump_to_json(file=os.path.join(current_path(), "robot_configs/{}.json".format(id)))
+        # dump_to_json("mass_spring", obj, spr, file=os.path.join(current_path(), "robot_configs/{}.json".format(id)))
         robot_config.clear()
     
     # for id in range(5):

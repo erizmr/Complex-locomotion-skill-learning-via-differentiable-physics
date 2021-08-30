@@ -102,9 +102,20 @@ class RobotDesignMassSpring(RobotDesignBase):
 
     def dump_to_json(self, file=None):
         assert self.built
+        objects_for_dump = []
+        springs_for_dump = []
+        for obj in self.objects:
+            objects_for_dump.append({"x": obj[0], "y": obj[1]})
+        for spr in self.springs:
+            springs_for_dump.append({"vertex_1": spr[0],
+                                     "vertex_2": spr[1],
+                                     "length": spr[2],
+                                     "stiffness": spr[3],
+                                     "actuation": spr[4]})
+
         return dump_to_json(solver=self.solver,
-                            objects=self.objects,
-                            springs=self.springs,
+                            objects=objects_for_dump,
+                            springs=springs_for_dump,
                             file=file)
 
     def draw(self):
