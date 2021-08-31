@@ -7,6 +7,7 @@ from pathlib import Path
 from multitask.robot_config import robots
 from multitask.robot3d_config import robots3d
 from multitask.robot_mpm import robots_mpm, n_grid, dx
+from multitask.robot_design import RobotDesignBase, RobotDesignMassSpring, RobotDesignMPM
 
 # from robot_config import robots
 # from robot3d_config import robots3d
@@ -23,6 +24,7 @@ class ConfigSim:
     def __init__(self, config, args=None, file_name=None, if_mkdir=True):
         self._config = config
         self._args = args
+        self.robot_builder = RobotDesignBase(cfg=None)
         self.file_name = file_name.split("/")[-1].split(".")[0]
         self._add_adaptive_configs()
         save_dir = self._config["train"]["save_dir"]
@@ -52,6 +54,8 @@ class ConfigSim:
 
             # save updated config file to the checkpoint dir
             write_json(self.config, self.save_dir / 'config.json')
+            # save robot design to the checkpoint dir
+            self.robot_builder.dump_to_json(file=self.save_dir / 'robot_design.json')
 
         # configure logging module
         # setup_logging(save_dir)
@@ -66,23 +70,37 @@ class ConfigSim:
         # Robot
         robot_id = self._config["robot"]["robot_id"]
         faces = []
-        if robot_id >= 10000:
-            self._config["robot"]["simulator"] = "mpm"
-            self._config["robot"]["dim"] = 2
-            objects, springs, n_springs = robots_mpm[robot_id - 10000]()
-            n_objects = len(objects)
+        robot_dim = self._config["robot"]["dim"]
+        robot_design_file = self._config["robot"]["design_file"]
+        solver_type = self._config["robot"]["simulator"]
+        if solver_type == "mass_spring":
+            self.robot_builder = RobotDesignMassSpring.from_file(file_name=robot_design_file)
+            objects, springs = self.robot_builder.build()
+        elif solver_type == "mpm":
+            self.robot_builder = RobotDesignMPM.from_file(file_name=robot_design_file)
+            objects, springs, n_springs = self.robot_builder.build()
         else:
-            self._config["robot"]["simulator"] = "mass_spring"
-            if robot_id < 100:
-                self._config["robot"]["dim"] = 2
-                objects, springs = robots[robot_id]()
+            raise NotImplementedError(f"{solver_type} not implemented.")
 
-            else:
-                self._config["robot"]["dim"] = 3
-                objects, springs, faces = robots3d[robot_id - 100]()
-            n_objects = len(objects)
-            n_springs = len(springs)
+        # if robot_id >= 10000:
+        #     self._config["robot"]["simulator"] = "mpm"
+        #     self._config["robot"]["dim"] = 2
+        #     objects, springs, n_springs = robots_mpm[robot_id - 10000]()
+        #     n_objects = len(objects)
+        # else:
+        #     self._config["robot"]["simulator"] = "mass_spring"
+        #     if robot_id < 100:
+        #         self._config["robot"]["dim"] = 2
+        #         objects, springs = robots[robot_id]()
+        #
+        #     else:
+        #         self._config["robot"]["dim"] = 3
+        #         objects, springs, faces = robots3d[robot_id - 100]()
+        #     n_objects = len(objects)
+        #     n_springs = len(springs)
 
+        n_objects = len(objects)
+        n_springs = len(springs)
         self._config["robot"]["objects"] = objects
         self._config["robot"]["springs"] = springs
         self._config["robot"]["faces"] = faces

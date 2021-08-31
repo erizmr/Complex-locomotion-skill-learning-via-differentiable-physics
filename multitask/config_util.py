@@ -9,7 +9,7 @@ def current_path():
     return os.path.dirname(os.path.realpath(__file__))
 
 def load_from_json_file(prefix):
-    items = json.load(open(os.path.join(current_path(), "robot_configs/{}.json".format(prefix)), "r"))
+    items = json.load(open(os.path.join(current_path(), "robot_design_data/{}.json".format(prefix)), "r"))
     return items["solver"], items["objects"], items["springs"]
 
 def dump_to_json(solver, objects, springs, file = None):
@@ -32,8 +32,8 @@ if __name__ == "__main__":
         id = builder.robot_id
         obj, spr = builder.build()
         builder.draw()
-        builder.dump_to_json(file=os.path.join(current_path(), "robot_configs/{}.json".format(id)))
-        # dump_to_json("mass_spring", obj, spr, file=os.path.join(current_path(), "robot_configs/{}.json".format(id)))
+        builder.dump_to_json(file=os.path.join(current_path(), "robot_design_data/{}.json".format(id)))
+        # dump_to_json("mass_spring", obj, spr, file=os.path.join(current_path(), "robot_design_data/{}.json".format(id)))
         robot_config.clear()
     
     # for id in range(5):

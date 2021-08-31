@@ -1,5 +1,5 @@
 from util import read_json, write_json
-from config_util import dump_to_json
+from multitask.config_util import dump_to_json
 
 import numpy as np
 
@@ -48,7 +48,7 @@ class RobotDesignMPM(RobotDesignBase):
 
         self.square_size = self.config["design_parameter"]["square_size"]
 
-        self.n_num = self.config["design_parameter"]["particle_in_square"]
+        self.n_num = self.config["design_parameter"]["particle_in_square_edge"]
 
         self.actuator_num = self.config["design_parameter"]["actuator_num"]
 
@@ -126,13 +126,20 @@ class RobotDesignMassSpring(RobotDesignBase):
         self.built = False
 
     def build(self):
-        stiffnesses = self.config["design"]["physical_parameter"]["stiffness"]
-        actuations = self.config["design"]["physical_parameter"]["actuation"]
+        anchors = self.config["design"]["anchor"]
+        elements_num = len(anchors)
         mesh_types = self.config["design"]["mesh_type"]
+        assert len(mesh_types) == elements_num
+        stiffnesses = self.config["design"]["physical_parameter"]["stiffness"]
+        assert len(stiffnesses) == elements_num
+        actuations = self.config["design"]["physical_parameter"]["actuation"]
+        assert len(actuations) == elements_num
         actuation_enables = self.config["design"]["actuation_enable"]
+        assert len(actuation_enables) == elements_num
         active_spring_mechanisms = self.config["design"]["active_spring_mechanism"]
+        assert len(active_spring_mechanisms) == elements_num
 
-        for i, anchor in enumerate(self.config["design"]["anchor"]):
+        for i, anchor in enumerate(anchors):
             x, y = anchor[0], anchor[1]
             mesh_type = mesh_types[i]
             actuation = actuations[i]

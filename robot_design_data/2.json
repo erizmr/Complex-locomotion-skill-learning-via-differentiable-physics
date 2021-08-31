@@ -79,7 +79,7 @@
             "vertex_2": 2,
             "length": 0.05000000000000002,
             "stiffness": 30000.0,
-            "actuation": 0.0
+            "actuation": 0.2
         },
         {
             "vertex_1": 0,
@@ -100,7 +100,7 @@
             "vertex_2": 3,
             "length": 0.05000000000000002,
             "stiffness": 30000.0,
-            "actuation": 0.0
+            "actuation": 0.2
         },
         {
             "vertex_1": 2,
@@ -191,7 +191,7 @@
             "vertex_2": 9,
             "length": 0.04999999999999999,
             "stiffness": 30000.0,
-            "actuation": 0.0
+            "actuation": 0.2
         },
         {
             "vertex_1": 8,
@@ -212,7 +212,7 @@
             "vertex_2": 10,
             "length": 0.04999999999999999,
             "stiffness": 30000.0,
-            "actuation": 0.0
+            "actuation": 0.2
         },
         {
             "vertex_1": 9,

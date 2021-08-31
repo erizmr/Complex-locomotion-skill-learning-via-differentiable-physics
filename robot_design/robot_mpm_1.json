@@ -6,7 +6,7 @@
     },
     "design_parameter": {
         "square_size": 0.05,
-        "particle_in_square": 4,
+        "particle_in_square_edge": 4,
         "actuator_num": 4,
         "offset":{
             "x": 0,
