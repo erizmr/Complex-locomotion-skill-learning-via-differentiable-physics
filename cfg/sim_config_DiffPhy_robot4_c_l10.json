@@ -13,6 +13,7 @@
     "dim": 2,
     "robot_id": 4,
     "simulator": "mass_spring",
+    "design_file": "./robot_design/robot_4.json",
     "control_length": 10
   },
   "process":{

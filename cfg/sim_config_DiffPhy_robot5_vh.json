@@ -13,7 +13,9 @@
   "robot": {
     "dim": 2,
     "robot_id": 5,
-    "simulator": "mass_spring"
+    "simulator": "mass_spring",
+    "design_file": "./robot_design/robot_5.json",
+    "control_length": 1
   },
   "process":{
     "max_steps": 1000,

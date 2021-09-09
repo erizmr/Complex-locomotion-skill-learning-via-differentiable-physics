@@ -1,7 +1,7 @@
 {
   "train": {
     "name": "DiffTaichi_DiffPhy",
-    "save_dir": "/home/mingrui/difftaichi/difftaichi2/saved_results",
+    "save_dir": "./saved_results",
     "output_video_in_train": false,
     "output_video_in_validation": true,
     "task": ["velocity", "height", "actuation"]
@@ -13,7 +13,9 @@
   "robot": {
     "dim": 2,
     "robot_id": 3,
-    "simulator": "mass_spring"
+    "design_file": "./robot_design/robot_3.json",
+    "simulator": "mass_spring",
+    "control_length": 100
   },
   "process":{
     "max_steps": 1000,
