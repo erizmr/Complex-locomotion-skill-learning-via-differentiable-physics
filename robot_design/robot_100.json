@@ -1,0 +1,7 @@
+{
+  "robot": {
+    "name": "ljcc",
+    "id": 100,
+    "solver": "mass_spring"
+  }
+}

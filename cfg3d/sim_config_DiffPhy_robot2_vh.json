@@ -7,18 +7,18 @@
     "task": ["velocity", "height"]
   },
   "validation": {
-    "velocity": [-0.08, -0.06, -0.04, -0.02, 0.0, 0.02, 0.04, 0.06, 0.08],
-    "height": [0.10, 0.15, 0.20]
+    "velocity": [999999999.0],
+    "height": [999999999.0]
   },
   "robot": {
-    "dim": 2,
-    "robot_id": 2,
+    "dim": 3,
+    "robot_id": 100,
     "simulator": "mass_spring",
-    "design_file": "./robot_design/robot_2.json",
+    "design_file": "./robot_design/robot_100.json",
     "control_length": 1
   },
   "process":{
-    "max_steps": 1000,
+    "max_steps": 4000,
     "vis_interval": 256,
     "output_vis_interval": 8,
     "run_period": 100,
@@ -40,15 +40,15 @@
     "E": 40,
     "mu": 40,
     "la": 40,
-    "act_strength": 40,
+    "act_strength": 4,
     "bound": 3,
     "coeff": 5
   },
   "nn": {
     "n_sin_waves": 10,
     "n_hidden": 64,
-    "duplicate_v": 30,
-    "duplicate_h": 30,
+    "duplicate_v": 1,
+    "duplicate_h": 0,
     "duplicate_c": 0,
     "batch_size": 32,
     "max_reset_step": 4,

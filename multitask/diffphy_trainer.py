@@ -235,7 +235,7 @@ class DiffPhyTrainer(BaseTrainer):
                 output_c = np.zeros(self.taichi_env.batch_size)
             self.taichi_env.initialize_validate(steps, output_v, output_h, output_c)
         elif not train and self.taichi_env.dim == 3:
-            self.taichi_env.initialize_script(steps, 0.04, 0, 0, 0.04, -0.04, 0, 0, -0.04)
+            self.taichi_env.initialize_script(steps, 0.05, 0, 0.05, 0, 0.05, 0, 0.05, 0)
         self.taichi_env.loss[None] = 0.
         for l in self.taichi_env.losses:
             l[None] = 0.
@@ -263,10 +263,6 @@ class DiffPhyTrainer(BaseTrainer):
                 self.taichi_env.solver.advance(t)
             # self.visualizer(steps, prefix=str(output_v) + "_" + str(output_h))
             self.taichi_env.get_loss(steps, *args, **kwargs)
-            if self.taichi_env.dim == 3:
-                x_ = self.taichi_env.x.to_numpy()
-                t = threading.Thread(target=output_mesh, args=(steps, x_, str(output_v) + '_' + str(output_h)))
-                t.start()
 
     def rounded_train(self, steps, iter, reset_step):
         self.taichi_env.copy_robot(steps)
@@ -322,15 +318,30 @@ class DiffPhyTrainer(BaseTrainer):
         gui = ti.GUI(background_color=0xFFFFFF, show_gui=False)
 
         def visualizer(t, batch_rank, folder, output_video):
-            gui.clear()
-            gui.line((0, self.taichi_env.ground_height), (1, self.taichi_env.ground_height),
-                     color=0x000022,
-                     radius=3)
-            self.taichi_env.solver.draw_robot(gui, batch_rank, t, self.taichi_env.target_v)
-            if output_video:
-                gui.show('{}/{:04d}.png'.format(folder, t))
+            if self.taichi_env.dim == 2:
+                gui.clear()
+                gui.line((0, self.taichi_env.ground_height), (1, self.taichi_env.ground_height),
+                         color=0x000022,
+                         radius=3)
+                self.taichi_env.solver.draw_robot(gui, batch_rank, t, self.taichi_env.target_v)
+                if output_video:
+                    gui.show('{}/{:04d}.png'.format(folder, t))
+                else:
+                    gui.show()
             else:
-                gui.show()
+                x_ = self.taichi_env.x.to_numpy()
+
+                def another_output_mesh(x_, fn):
+                    for t in range(1, x_.shape[0]):
+                        f = open(fn + f'/{t:06d}.obj', 'w')
+                        for i in range(x_.shape[2]):
+                            f.write('v %.6f %.6f %.6f\n' % (x_[t, 0, i, 0], x_[t, 0, i, 1], x_[t, 0, i, 2]))
+                        for [p0, p1, p2] in self.taichi_env.config["robot"]["faces"]:
+                            f.write('f %d %d %d\n' % (p0 + 1, p1 + 1, p2 + 1))
+                        f.close()
+
+                t = threading.Thread(target=another_output_mesh, args=(x_, folder))
+                t.start()
         evaluator_writer = MetricTracker(*[],
                                          writer=TensorboardWriter(
                                              os.path.join(load_path, "validation"),
@@ -522,17 +533,6 @@ class DiffPhyTrainer(BaseTrainer):
                 plot_curve(losses[-200:], plot200_path)
 
         return losses
-
-
-def output_mesh(steps, x_, fn):
-    os.makedirs('video/' + fn + '_objs', exist_ok=True)
-    for t in range(1, steps):
-        f = open('video/' + fn + f'_objs/{t:06d}.obj', 'w')
-        for i in range(n_objects):
-            f.write('v %.6f %.6f %.6f\n' % (x_[t, 0, i, 0], x_[t, 0, i, 1], x_[t, 0, i, 2]))
-        for [p0, p1, p2] in faces:
-            f.write('f %d %d %d\n' % (p0 + 1, p1 + 1, p2 + 1))
-        f.close()
 
 
 # if __name__ == '__main__':

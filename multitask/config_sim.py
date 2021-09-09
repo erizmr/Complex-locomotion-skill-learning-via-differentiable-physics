@@ -7,7 +7,7 @@ from pathlib import Path
 from multitask.robot_config import robots
 from multitask.robot3d_config import robots3d
 from multitask.robot_mpm import robots_mpm, n_grid, dx
-from multitask.robot_design import RobotDesignBase, RobotDesignMassSpring, RobotDesignMPM
+from multitask.robot_design import RobotDesignBase, RobotDesignMassSpring, RobotDesignMassSpring3D, RobotDesignMPM
 
 # from robot_config import robots
 # from robot3d_config import robots3d
@@ -73,9 +73,12 @@ class ConfigSim:
         robot_dim = self._config["robot"]["dim"]
         robot_design_file = self._config["robot"]["design_file"]
         solver_type = self._config["robot"]["simulator"]
-        if solver_type == "mass_spring":
+        if solver_type == "mass_spring" and robot_dim == 2:
             self.robot_builder = RobotDesignMassSpring.from_file(file_name=robot_design_file)
             objects, springs = self.robot_builder.build()
+        elif solver_type == "mass_spring" and robot_dim == 3:
+            self.robot_builder = RobotDesignMassSpring3D.from_file(file_name=robot_design_file)
+            objects, springs, faces = self.robot_builder.build()
         elif solver_type == "mpm":
             self.robot_builder = RobotDesignMPM.from_file(file_name=robot_design_file)
             objects, springs, n_springs = self.robot_builder.build()

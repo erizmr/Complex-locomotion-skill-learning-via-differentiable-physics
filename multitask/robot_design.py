@@ -314,3 +314,124 @@ class RobotDesignMassSpring(RobotDesignBase):
     #                          stiffness=stiffness,
     #                          actuation=actuation,
     #                          active_spring=active_spring)
+
+class RobotDesignMassSpring3D(RobotDesignBase):
+    def __init__(self, cfg):
+        super(RobotDesignMassSpring3D, self).__init__(cfg)
+        assert self.config["robot"]["solver"] == "mass_spring"
+        self.robot_id = self.config["robot"]["id"]
+        self.solver = self.config["robot"]["solver"]
+        # design data holders
+        self.objects = []
+        self.springs = []
+
+        self.points = []
+        self.point_id = []
+        self.mesh_springs = []
+        self.faces = []
+
+        self.built = False
+
+    def add_object(self, x):
+        self.objects.append(x)
+        return len(self.objects) - 1
+
+    def add_spring(self, a, b, length=None, stiffness=1, actuation=0.1):
+        if length == None:
+            length = ((self.objects[a][0] - self.objects[b][0])**2 +
+                      (self.objects[a][1] - self.objects[b][1])**2 +
+                      (self.objects[a][2] - self.objects[b][2])**2)**0.5
+        self.springs.append([a, b, length, stiffness, actuation])
+
+    def add_mesh_point(self, i, j, k):
+        if (i, j, k) not in self.points:
+            id = self.add_object((i * 0.05 + 0.1, j * 0.05 + 0.1, k * 0.05 + 0.1))
+            self.points.append((i, j, k))
+            self.point_id.append(id)
+        return self.point_id[self.points.index((i, j, k))]
+
+    def add_foot_point(self, i, j, k):
+        if (i, j, k) not in self.points:
+            id = self.add_object((i * 0.05 + 0.125, j * 0.05 + 0.1, k * 0.05 + 0.125))
+            self.points.append((i, j, k))
+            self.point_id.append(id)
+        return self.point_id[self.points.index((i, j, k))]
+
+    def add_mesh_spring(self, a, b, s, act):
+        if (a, b) in self.mesh_springs or (b, a) in self.mesh_springs:
+            return
+
+        self.mesh_springs.append((a, b))
+        self.add_spring(a, b, stiffness=s, actuation=act)
+
+    def add_mesh_square(self, i, j, k, actuation=0.0):
+        a = self.add_mesh_point(i, j, k)
+        b = self.add_mesh_point(i, j + 1, k)
+        c = self.add_mesh_point(i + 1, j, k)
+        d = self.add_mesh_point(i + 1, j + 1, k)
+        e = self.add_mesh_point(i, j, k + 1)
+        f = self.add_mesh_point(i, j + 1, k + 1)
+        g = self.add_mesh_point(i + 1, j, k + 1)
+        h = self.add_mesh_point(i + 1, j + 1, k + 1)
+
+        # b d
+        # a c
+        self.add_mesh_spring(a, b, 3e4, actuation)
+        self.add_mesh_spring(c, d, 3e4, actuation)
+        self.add_mesh_spring(e, f, 3e4, actuation)
+        self.add_mesh_spring(g, h, 3e4, actuation)
+
+        self.add_mesh_spring(b, d, 3e4, 0)
+        self.add_mesh_spring(a, c, 3e4, 0)
+        self.add_mesh_spring(f, h, 3e4, 0)
+        self.add_mesh_spring(e, g, 3e4, 0)
+
+        self.add_mesh_spring(b, f, 3e4, 0)
+        self.add_mesh_spring(d, h, 3e4, 0)
+        self.add_mesh_spring(a, e, 3e4, 0)
+        self.add_mesh_spring(c, g, 3e4, 0)
+
+        self.add_mesh_spring(b, g, 3e4, 0)
+        self.add_mesh_spring(d, e, 3e4, 0)
+        self.add_mesh_spring(f, c, 3e4, 0)
+        self.add_mesh_spring(h, a, 3e4, 0)
+
+        def append_square_face(a, b, c, d):
+            self.faces.append((a, b, c))
+            self.faces.append((d, a, c))
+        append_square_face(a, b, d, c)
+        append_square_face(b, f, h, d)
+        append_square_face(f, e, g, h)
+        append_square_face(e, a, c, g)
+        append_square_face(h, g, c, d)
+        append_square_face(b, a, e, f)
+
+    def robotA(self):
+        self.add_mesh_square(0, 0, 0, actuation=0.2)
+        self.add_mesh_square(2, 0, 2, actuation=0.2)
+        self.add_mesh_square(0, 0, 2, actuation=0.2)
+        self.add_mesh_square(2, 0, 0, actuation=0.2)
+
+        self.add_mesh_square(0, 1, 0, actuation=0)
+        self.add_mesh_square(0, 1, 1, actuation=0)
+        self.add_mesh_square(0, 1, 2, actuation=0)
+        self.add_mesh_square(1, 1, 0, actuation=0)
+        self.add_mesh_square(1, 1, 1, actuation=0)
+        self.add_mesh_square(1, 1, 2, actuation=0)
+        self.add_mesh_square(2, 1, 0, actuation=0)
+        self.add_mesh_square(2, 1, 1, actuation=0)
+        self.add_mesh_square(2, 1, 2, actuation=0)
+
+    def build(self):
+        if self.robot_id == 100:
+            self.robotA()
+        else:
+            print("Invalid robot id ", self.robot_id)
+            assert False
+        self.built = True
+        return self.get_objects()
+
+    def get_objects(self):
+        assert self.built
+        return self.objects, self.springs, self.faces
+

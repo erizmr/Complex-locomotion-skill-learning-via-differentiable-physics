@@ -159,7 +159,7 @@ class TaichiEnv:
                     self.input_state[t, k, j * self.dim * 2 + self.n_sin_waves + d] = vec_x[d] / 0.2
                     self.input_state[t, k, j * self.dim * 2 + self.n_sin_waves + self.dim + d] = 0
                 else:
-                    self.input_state[t, k, j * self.dim * 2 + self.n_sin_waves + d] = vec_x[d] * float(sys.argv[2])
+                    self.input_state[t, k, j * self.dim * 2 + self.n_sin_waves + d] = vec_x[d] * 0.04
                     self.input_state[t, k, j * self.dim * 2 + self.n_sin_waves + self.dim + d] = 0
 
         if ti.static(self.duplicate_v > 0):
@@ -170,13 +170,9 @@ class TaichiEnv:
             else:
                 for k, j in ti.ndrange(self.batch_size, self.duplicate_v):
                     self.input_state[t, k, self.n_objects * self.dim * 2 + self.n_sin_waves + j * (self.dim - 1)] = \
-                    self.target_v[t, k][0] * float(
-                        sys.argv[3])
-                    self.input_state[
-                        t, k, self.n_objects * self.dim * 2 + self.n_sin_waves + j * (self.dim - 1) + 1] = \
-                    self.target_v[t, k][
-                        2] * float(
-                        sys.argv[3])
+                    self.target_v[t, k][0] * 0.15
+                    self.input_state[t, k, self.n_objects * self.dim * 2 + self.n_sin_waves + j * (self.dim - 1) + 1] = \
+                    self.target_v[t, k][2] * 0.15
         if ti.static(self.duplicate_h > 0):
             for k, j in ti.ndrange(self.batch_size, self.duplicate_h):
                 self.input_state[t, k, self.n_objects * self.dim * 2 + self.n_sin_waves + self.duplicate_v * (
@@ -364,11 +360,11 @@ class TaichiEnv:
             else:
                 r = ti.sqrt(self.pool[q + 1])
                 angle = self.pool[q + 2] * 2 * 3.1415926
-                # r = 1.
-                # angle = 0.
+                r = 1.
+                angle = 0.
                 self.target_v[t, k][0] = r * ti.cos(angle) * 0.05
                 self.target_v[t, k][2] = r * ti.sin(angle) * 0.05
-                self.target_h[t, k] = 0.
+                self.target_h[t, k] = 0.1
 
     @debug
     def visualizer(self, steps, prefix):
