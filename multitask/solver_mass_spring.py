@@ -26,9 +26,13 @@ class SolverMassSpring:
         self.center = vec(self.dim)
         self.actuation = scalar()
         self.act_list = []
-        ti.root.dense(ti.ijk, (self.max_steps, self.batch_size, self.n_objects)).place(self.x, self.v)
-        ti.root.dense(ti.ij, (self.max_steps, self.batch_size)).place(self.center)
-        ti.root.dense(ti.ijk, (self.max_steps, self.batch_size, self.n_springs)).place(self.actuation)
+        batch_node = ti.root.dense(ti.ij, (self.max_steps, self.batch_size))
+        # ti.root.dense(ti.ijk, (self.max_steps, self.batch_size, self.n_objects)).place(self.x, self.v)
+        # ti.root.dense(ti.ij, (self.max_steps, self.batch_size)).place(self.center)
+        # ti.root.dense(ti.ijk, (self.max_steps, self.batch_size, self.n_springs)).place(self.actuation)
+        batch_node.dense(ti.k, (self.n_objects)).place(self.x, self.v)
+        batch_node.place(self.center)
+        batch_node.dense(ti.k, (self.n_springs)).place(self.actuation)
 
         # height here is the lower height i.e., the lowest point of the robot
         self.height = scalar()
@@ -38,7 +42,7 @@ class SolverMassSpring:
         self.head_counter = scalar()
         self.tail_center = vec(self.dim)
         self.tail_counter = scalar()
-        ti.root.dense(ti.ij, (self.max_steps, self.batch_size)).place(self.height, self.rotation, self.head_center,
+        batch_node.place(self.height, self.rotation, self.head_center,
                                                             self.head_counter, self.tail_center, self.tail_counter,
                                                                       self.upper_height)
 
@@ -51,7 +55,7 @@ class SolverMassSpring:
         ti.root.dense(ti.i, self.n_springs).place(self.spring_anchor_a, self.spring_anchor_b,
                                              self.spring_length, self.spring_stiffness,
                                              self.spring_actuation)
-        ti.root.dense(ti.ijk, (self.max_steps, self.batch_size, self.n_objects)).place(self.v_inc)
+        batch_node.dense(ti.k, (self.n_objects)).place(self.v_inc)
 
     def initialize_robot(self):
         for i in range(self.n_springs):
