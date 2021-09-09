@@ -38,3 +38,8 @@
 
 #### Single-Plot
 `python3 scripts/export_tensorboard_data.py --our_file_path saved_results/sim_config_DiffPhy_robot4_vh/DiffTaichi_DiffPhy/ --rl_file_path saved_results/sim_config_RL_robot4_vh/DiffTaichi_RL/ --task tvh --draw-single --error-bar`
+
+
+## 3D
+python3 main_diff_phy.py --config_file cfg3d/sim_config_DiffPhy_robot2_vh.json --train
+python3 main_diff_phy.py --config_file cfg3d/sim_config_DiffPhy_robot2_vh.json --evaluate --no-tensorboard --evaluate_path saved_results/sim_config_DiffPhy_robot2_vh/DiffTaichi_DiffPhy
