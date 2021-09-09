@@ -171,11 +171,13 @@ class SolverMassSpring:
             direction = -self.head_center[t, k] * self.tail_counter[t, k] + self.tail_center[t, k] * self.head_counter[t, k]
             self.rotation[t, k] = ti.atan2(direction[2], direction[0])
 
-    def advance(self, t):
+    def pre_advance(self, t):
         self.compute_center(t)
         self.compute_height(t)
         if self.dim == 3:
             self.compute_rotation(t)
+
+    def advance(self, t):
         self.apply_spring_force(t)
         self.advance_toi(t + 1)
 

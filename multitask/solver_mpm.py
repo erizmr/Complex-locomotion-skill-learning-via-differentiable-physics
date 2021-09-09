@@ -189,8 +189,10 @@ class SolverMPM:
         self.grid_op.grad()
         self.p2g.grad(t)
 
-    def advance(self, s):
+    def pre_advance(self, s):
         self.compute_center(s)
+
+    def advance(self, s):
         self.advance_core(s)
 
     def draw_robot(self, gui, t, target_v):
