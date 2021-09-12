@@ -178,7 +178,7 @@ class DiffPhyTrainer(BaseTrainer):
                         self.taichi_env.n_input_states,
                         self.taichi_env.n_springs,
                         self.taichi_env.input_state,
-                        self.taichi_env.actuation,
+                        self.taichi_env.solver_actuation,
                         self.taichi_env.n_hidden,
                         method=self.optimize_method)
         self.max_reset_step = self.taichi_env.config["nn"]["max_reset_step"]

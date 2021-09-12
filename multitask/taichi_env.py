@@ -44,6 +44,13 @@ class TaichiEnv:
         self.output_vis_interval = self.config["process"]["output_vis_interval"]
         self.ground_height = self.config["simulator"]["ground_height"]
 
+        if "n_models" in self.config["nn"].keys():
+            self.n_models = self.config["nn"]["n_models"]
+        else:
+            self.n_models = 1
+        
+        self.default_model_id = 0
+
         self.loss_types_collections = {"velocity", "height", "pose", "actuation", "rotation", "crawl"}
         # Get the task, and ensure that the task loss is actually defined
         self.task = list(self.config["train"]["task"])
@@ -110,8 +117,9 @@ class TaichiEnv:
 
         # losses for each batch
         self.losses_batch = self.loss_dict_batch.values()
-        ti.root.dense(ti.i, self.batch_size).place(self.loss_batch)
-        ti.root.dense(ti.i, self.batch_size).place(*self.losses_batch)
+        batch_node = ti.root.dense(ti.ij, (self.n_models, self.batch_size))
+        batch_node.place(self.loss_batch)
+        batch_node.place(*self.losses_batch)
 
         # Robot objects
         self.initial_objects = vec(self.dim)
@@ -122,7 +130,7 @@ class TaichiEnv:
 
         # NN input state
         self.input_state = scalar()
-        ti.root.dense(ti.ijk, (self.max_steps, self.batch_size, self.n_input_states)).place(self.input_state)
+        ti.root.dense(ti.ijkl, (self.n_models, self.max_steps, self.batch_size, self.n_input_states)).place(self.input_state)
 
         # Target velocity, height, crawl
         self.target_v, self.target_h, self.target_c = vec(self.dim), scalar(), scalar(),
@@ -135,13 +143,13 @@ class TaichiEnv:
         # Initialize a simulator
         self.solver = SolverMPM() if self.simulator == "mpm" else SolverMassSpring(config)
         # self.sovler = solver
-        self.x = self.solver.x
-        self.v = self.solver.v
-        self.center = self.solver.center
-        self.height = self.solver.height
-        self.upper_height = self.solver.upper_height
-        self.rotation = self.solver.rotation
-        self.actuation = self.solver.actuation
+        self.solver_x = self.solver.x
+        self.solver_v = self.solver.v
+        self.solver_center = self.solver.center
+        self.solver_height = self.solver.height
+        self.solver_upper_height = self.solver.upper_height
+        self.solver_rotation = self.solver.rotation
+        self.solver_actuation = self.solver.actuation
 
         self.pool = ti.field(ti.f64, shape=(5 * self.batch_size * (1000 // self.turn_period + 1)))
         self.gui = ti.GUI(show_gui=False, background_color=0xFFFFFF)
@@ -149,117 +157,117 @@ class TaichiEnv:
     @ti.kernel
     def nn_input(self, t: ti.i32, offset: ti.i32, max_speed: ti.f64, max_height: ti.f64):
         if ti.static(self.n_sin_waves > 0):
-            for k, j in ti.ndrange(self.batch_size, self.n_sin_waves):
-                self.input_state[t, k, j] = ti.sin(
+            for model_id, k, j in ti.ndrange(self.n_models, self.batch_size, self.n_sin_waves):
+                self.input_state[model_id, t, k, j] = ti.sin(
                     self.spring_omega * (t + offset) * self.dt + 2 * math.pi / self.n_sin_waves * j)
-        for k, j in ti.ndrange(self.batch_size, self.n_objects):
-            vec_x = self.x[t, k, j] - self.center[t, k]
+        for model_id, k, j in ti.ndrange(self.n_models, self.batch_size, self.n_objects):
+            vec_x = self.solver_x[model_id, t, k, j] - self.solver_center[model_id, t, k]
             for d in ti.static(range(self.dim)):
                 if ti.static(self.dim == 2):
-                    self.input_state[t, k, j * self.dim * 2 + self.n_sin_waves + d] = vec_x[d] / 0.2
-                    self.input_state[t, k, j * self.dim * 2 + self.n_sin_waves + self.dim + d] = 0
+                    self.input_state[model_id, t, k, j * self.dim * 2 + self.n_sin_waves + d] = vec_x[d] / 0.2
+                    self.input_state[model_id, t, k, j * self.dim * 2 + self.n_sin_waves + self.dim + d] = 0
                 else:
-                    self.input_state[t, k, j * self.dim * 2 + self.n_sin_waves + d] = vec_x[d] * 0.04
-                    self.input_state[t, k, j * self.dim * 2 + self.n_sin_waves + self.dim + d] = 0
+                    self.input_state[model_id, t, k, j * self.dim * 2 + self.n_sin_waves + d] = vec_x[d] * 0.04
+                    self.input_state[model_id, t, k, j * self.dim * 2 + self.n_sin_waves + self.dim + d] = 0
 
         if ti.static(self.duplicate_v > 0):
             if ti.static(self.dim == 2):
-                for k, j in ti.ndrange(self.batch_size, self.duplicate_v):
-                    self.input_state[t, k, self.n_objects * self.dim * 2 + self.n_sin_waves + j * (self.dim - 1)] = \
+                for model_id, k, j in ti.ndrange(self.n_models, self.batch_size, self.duplicate_v):
+                    self.input_state[model_id, t, k, self.n_objects * self.dim * 2 + self.n_sin_waves + j * (self.dim - 1)] = \
                     self.target_v[t, k][0] / max_speed
             else:
-                for k, j in ti.ndrange(self.batch_size, self.duplicate_v):
-                    self.input_state[t, k, self.n_objects * self.dim * 2 + self.n_sin_waves + j * (self.dim - 1)] = \
+                for model_id, k, j in ti.ndrange(self.n_models, self.batch_size, self.duplicate_v):
+                    self.input_state[model_id, t, k, self.n_objects * self.dim * 2 + self.n_sin_waves + j * (self.dim - 1)] = \
                     self.target_v[t, k][0] * 0.15
-                    self.input_state[t, k, self.n_objects * self.dim * 2 + self.n_sin_waves + j * (self.dim - 1) + 1] = \
+                    self.input_state[model_id, t, k, self.n_objects * self.dim * 2 + self.n_sin_waves + j * (self.dim - 1) + 1] = \
                     self.target_v[t, k][2] * 0.15
         if ti.static(self.duplicate_h > 0):
-            for k, j in ti.ndrange(self.batch_size, self.duplicate_h):
-                self.input_state[t, k, self.n_objects * self.dim * 2 + self.n_sin_waves + self.duplicate_v * (
+            for model_id, k, j in ti.ndrange(self.n_models, self.batch_size, self.duplicate_h):
+                self.input_state[model_id, t, k, self.n_objects * self.dim * 2 + self.n_sin_waves + self.duplicate_v * (
                             self.dim - 1) + j] = (self.target_h[
                                                       t, k] - 0.1) / max_height * 2 - 1
 
         if ti.static(self.duplicate_c > 0):
-            for k, j in ti.ndrange(self.batch_size, self.duplicate_c):
-                self.input_state[t, k, self.n_objects * self.dim * 2 + self.n_sin_waves + self.duplicate_v * (self.dim - 1) + self.duplicate_h + j] = self.target_c[t, k]
+            for model_id, k, j in ti.ndrange(self.n_models, self.batch_size, self.duplicate_c):
+                self.input_state[model_id, t, k, self.n_objects * self.dim * 2 + self.n_sin_waves + self.duplicate_v * (self.dim - 1) + self.duplicate_h + j] = self.target_c[t, k]
 
     @ti.kernel
     def compute_loss_velocity(self, steps: ti.template()):
-        for t, k in ti.ndrange((self.run_period, steps + 1), self.batch_size):
+        for model_id, t, k in ti.ndrange(self.n_models, (self.run_period, steps + 1), self.batch_size):
             if t % self.turn_period > self.run_period:  # and target_h[t - run_period, k] < 0.1 + 1e-4:
                 if ti.static(self.dim == 2):
-                    loss_x = (self.center[t, k](0) - self.center[t - self.run_period, k][0] - self.target_v[
+                    loss_x = (self.solver_center[model_id, t, k](0) - self.solver_center[model_id, t - self.run_period, k][0] - self.target_v[
                         t - self.run_period, k][0] / (1 + self.target_c[
                         t - self.run_period, k])) ** 2 / self.batch_size / steps * 100
                     self.loss_velocity[None] += loss_x
-                    self.loss_velocity_batch[k] += loss_x * self.batch_size
+                    self.loss_velocity_batch[model_id, k] += loss_x * self.batch_size
                 else:
-                    loss_x = (self.center[t, k](0) - self.center[t - self.run_period, k](0) - self.target_v[
+                    loss_x = (self.solver_center[model_id, t, k](0) - self.solver_center[model_id, t - self.run_period, k](0) - self.target_v[
                         t - self.run_period, k](0)) ** 2 / self.batch_size
-                    loss_y = (self.center[t, k](2) - self.center[t - self.run_period, k](2) - self.target_v[
+                    loss_y = (self.solver_center[model_id, t, k](2) - self.solver_center[model_id, t - self.run_period, k](2) - self.target_v[
                         t - self.run_period, k](2)) ** 2 / self.batch_size
 
                     self.loss_velocity[None] += loss_x + loss_y
-                    self.loss_velocity_batch[k] += (loss_x + loss_y) * self.batch_size
+                    self.loss_velocity_batch[model_id, k] += (loss_x + loss_y) * self.batch_size
         # if k == 0:
         #     print("Mark run: ", center[t, 0](0) - center[t - run_period, 0](0), target_v[t - run_period, 0](0))
 
     @ti.kernel
     def compute_loss_height(self, steps: ti.template()):
-        for t, k in ti.ndrange((1, steps + 1), self.batch_size):
+        for model_id, t, k in ti.ndrange(self.n_models, (1, steps + 1), self.batch_size):
             if t % self.jump_period == self.jump_period - 1 and self.target_h[t, k] > 0.1 + 1e-6:
-                loss_h = (self.height[t, k] - self.target_h[t, k]) ** 2 / self.batch_size / (
+                loss_h = (self.solver_height[model_id, t, k] - self.target_h[t, k]) ** 2 / self.batch_size / (
                             steps // self.jump_period) * 100
                 self.loss_height[None] += loss_h
-                self.loss_height_batch[k] += loss_h * self.batch_size
-                if self.height[t, k] > self.current_max_height[None]:
-                    self.current_max_height[None] = self.height[t, k]
+                self.loss_height_batch[model_id, k] += loss_h * self.batch_size
+                if self.solver_height[model_id, t, k] > self.current_max_height[None]:
+                    self.current_max_height[None] = self.solver_height[model_id, t, k]
 
     @ti.kernel
     def compute_loss_pose(self, steps: ti.template()):
         # TODO: This doesn't work for 3D
-        for t, k, i in ti.ndrange((1, steps + 1), self.batch_size, self.n_objects):
+        for model_id, t, k, i in ti.ndrange(self.n_models, (1, steps + 1), self.batch_size, self.n_objects):
             if t % self.jump_period == 0:
                 # dist2 = sum((x[t, k, i] - center[t, k] - initial_objects[i] + initial_center[None]) ** 2)
-                dist2 = sum((self.x[t, k, i] - self.initial_objects[i]) ** 2)
+                dist2 = sum((self.solver_x[model_id, t, k, i] - self.initial_objects[i]) ** 2)
                 loss_p = dist2 / self.batch_size / (steps // self.jump_period)
                 self.loss_pose[None] += loss_p
-                self.loss_pose_batch[k] += loss_p * self.batch_size
+                self.loss_pose_batch[model_id, k] += loss_p * self.batch_size
 
     @ti.kernel
     def compute_loss_rotation(self, steps: ti.template()):
-        for t, k in ti.ndrange((1, steps + 1), self.batch_size):
-            loss_r = self.rotation[t, k] ** 2 / self.batch_size / 5
+        for model_id, t, k in ti.ndrange(self.n_models, (1, steps + 1), self.batch_size):
+            loss_r = self.solver_rotation[model_id, t, k] ** 2 / self.batch_size / 5
             self.loss_rotation[None] += loss_r
-            self.loss_rotation_batch[k] += loss_r * self.batch_size
+            self.loss_rotation_batch[model_id, k] += loss_r * self.batch_size
 
     @ti.kernel
     def compute_loss_actuation(self, steps: ti.template()):
-        for t, k, i in ti.ndrange(steps, self.batch_size, self.n_springs):
+        for model_id, t, k, i in ti.ndrange(self.n_models, steps, self.batch_size, self.n_springs):
             if self.target_h[t, k] < 0.1 + 1e-4:
-                loss_a = ti.max(ti.abs(self.actuation[t, k, i]) - (ti.abs(self.target_v[t, k][0]) / 0.08) ** 0.5,
+                loss_a = ti.max(ti.abs(self.solver_actuation[model_id, t, k, i]) - (ti.abs(self.target_v[t, k][0]) / 0.08) ** 0.5,
                                 0.) / self.n_springs / self.batch_size / steps * 10
-                # loss_a = ti.max(ti.abs(self.actuation[t, k, i]) - (ti.abs(self.target_v[t, k][0]) / 0.16 + ti.abs(self.target_h[t, k]) /0.16 ) ** 0.5,
+                # loss_a = ti.max(ti.abs(self.solver_actuation[t, k, i]) - (ti.abs(self.target_v[t, k][0]) / 0.16 + ti.abs(self.target_h[t, k]) /0.16 ) ** 0.5,
                 #                          0.) / self.n_springs / self.batch_size / steps * 10
                 self.loss_act[None] += loss_a
-                self.loss_act_batch[k] += loss_a * self.batch_size
+                self.loss_act_batch[model_id, k] += loss_a * self.batch_size
 
     @ti.kernel
     def compute_loss_crawl(self, steps: ti.template()):
-        for t, k in ti.ndrange((1, steps + 1), self.batch_size):
+        for model_id, t, k in ti.ndrange(self.n_models, (1, steps + 1), self.batch_size):
             if self.target_c[t, k] > 1 - 1e-4:
-                loss_c = max(self.upper_height[t, k] - 0.1, 0) ** 2 / self.batch_size / steps * 5.
+                loss_c = max(self.solver_upper_height[model_id, t, k] - 0.1, 0) ** 2 / self.batch_size / steps * 5.
                 self.loss_crawl[None] += loss_c
-                self.loss_crawl_batch[k] += loss_c * self.batch_size
+                self.loss_crawl_batch[model_id, k] += loss_c * self.batch_size
 
     @ti.kernel
     def compute_loss_final(self, l: ti.template()):
         self.loss[None] += l[None]
 
     @ti.kernel
-    def compute_loss_final_batch(self, l: ti.template()):
-        for k in range(self.batch_size):
-            self.loss_batch[k] += l[k]
+    def compute_loss_final_batch(self, l_batch: ti.template()):
+        for model_id, k in ti.ndrange(self.n_models, self.batch_size):
+            self.loss_batch[model_id, k] += l_batch[model_id, k]
 
     def get_loss(self, steps, loss_enable, *args, **kwargs):
         if "velocity" in loss_enable:
@@ -384,8 +392,8 @@ class TaichiEnv:
 
     @ti.kernel
     def reset_robot(self, start: ti.template(), step: ti.template(), times: ti.template()):
-        for k, i in ti.ndrange(times, self.n_objects):
-            self.x[0, k * step + start, i] = self.initial_objects[i]
+        for model_id, k, i in ti.ndrange(self.n_models, times, self.n_objects):
+            self.solver_x[model_id, 0, k * step + start, i] = self.initial_objects[i]
 
     @ti.kernel
     def get_center(self):
@@ -403,13 +411,13 @@ class TaichiEnv:
 
     @ti.kernel
     def copy_robot(self, steps: ti.i32):
-        for k, i in ti.ndrange(self.batch_size, self.n_objects):
-            self.x[0, k, i] = self.x[steps, k, i]
-            self.v[0, k, i] = self.v[steps, k, i]
+        for model_id, k, i in ti.ndrange(self.n_models, self.batch_size, self.n_objects):
+            self.solver_x[model_id, 0, k, i] = self.solver_x[model_id, steps, k, i]
+            self.solver_v[model_id, 0, k, i] = self.solver_v[model_id, steps, k, i]
 
     @ti.kernel
     def refresh_xv(self):
-        for i in range(self.n_objects):
-            self.x[0, 0, i] = self.x[1, 0, i]
-            self.v[0, 0, i] = self.v[1, 0, i]
+        for model_id, i in ti.ndrange(self.n_models, self.n_objects):
+            self.solver_x[model_id, 0, 0, i] = self.solver_x[model_id, 1, 0, i]
+            self.solver_v[model_id, 0, 0, i] = self.solver_v[model_id, 1, 0, i]
 
