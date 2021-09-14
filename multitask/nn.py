@@ -113,9 +113,8 @@ class Model:
 
         ti.root.place(self.TNS)
 
-        self.batch_node.dense(ti.ijkl, (1, self.steps, self.batch_size, self.n_hidden)).place(self.hidden, self.hidden_act)
-        self.batch_node.dense(ti.ijkl, (1, self.steps, self.batch_size, self.n_output)).place(self.output)
-        
+        self.batch_node.dense(ti.axes(1, 2, 3), (self.steps, self.batch_size, self.n_hidden)).place(self.hidden, self.hidden_act)
+        self.batch_node.dense(ti.axes(1, 2, 3), (self.steps, self.batch_size, self.n_output)).place(self.output)
 
         self.weights_allocate()
         if self.method == "adam":

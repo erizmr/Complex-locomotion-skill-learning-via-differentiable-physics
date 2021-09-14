@@ -1,4 +1,6 @@
 import sys
+
+import pandas as pd
 import taichi as ti
 import math
 import numpy as np
@@ -430,7 +432,7 @@ class DiffPhyTrainer(BaseTrainer):
 
             # Output videos
             for i in range(self.taichi_env.max_steps):
-                if i % 20 == 0:
+                if i % 50000 == 0:
                     for k in range(self.taichi_env.batch_size):
                         visualizer(i, k, sub_video_paths[k], output_video=output_video)
 
@@ -451,6 +453,8 @@ class DiffPhyTrainer(BaseTrainer):
                 evaluator_writer.writer.set_step(step=current_iter)
                 for k, val in sub_dict.items():
                     evaluator_writer.update(k, val)
+        df_all_results = pd.DataFrame(tensorboard_buffer)
+        df_all_results.to_csv(os.path.join(load_path, "validation/summary.csv"))
 
     # Legacy code from ljcc
     def optimize(self, iters=100000, change_iter=5000, prefix=None, root_dir="./", \

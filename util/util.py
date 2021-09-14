@@ -64,12 +64,12 @@ class MetricTracker:
     def update(self, key, value, n=1):
         if self.writer is not None:
             self.writer.add_scalar(key, value)
-        if key not in self._data.keys():
-            new_data = pd.DataFrame(index=[key], columns=['total', 'counts', 'average'])
-            self._data = self._data.append(new_data)
-        self._data.total[key] += value * n
-        self._data.counts[key] += n
-        self._data.average[key] = self._data.total[key] / self._data.counts[key]
+        # if key not in self._data.keys():
+        #     new_data = pd.DataFrame(index=[key], columns=['total', 'counts', 'average'])
+        #     self._data = self._data.append(new_data)
+        # self._data.total[key] += value * n
+        # self._data.counts[key] += n
+        # self._data.average[key] = self._data.total[key] / self._data.counts[key]
 
     def avg(self, key):
         return self._data.average[key]

@@ -47,7 +47,6 @@ class TaichiEnv:
         if "n_models" in self.config["nn"].keys() and not train:
             self.n_models = self.config["nn"]["n_models"]
         else:
-            print("train")
             self.n_models = 1
         
         self.default_model_id = 0
