@@ -209,7 +209,7 @@ class SolverMassSpring:
         for i in range(self.n_objects):
             color = (0.06640625, 0.06640625, 0.06640625)
             circle(self.x[self.default_model_id, t, batch_rank, i][0], self.x[self.default_model_id, t, batch_rank, i][1], color)
-        if target_v[self.default_model_id, t, batch_rank][0] > 0:
+        if target_v[t, batch_rank][0] > 0:
             circle(0.5, 0.5, (1, 0, 0))
             circle(0.6, 0.5, (1, 0, 0))
         else:

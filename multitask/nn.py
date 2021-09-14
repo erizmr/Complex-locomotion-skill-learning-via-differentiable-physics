@@ -181,7 +181,7 @@ class Model:
         for (i, ) in ti.grouped(src):
             dst[model_id, i] = src[i]
 
-    def load_weights(self, model_id = 0, name = "save.pkl"):
+    def load_weights(self, name="save.pkl", model_id=0):
         w_val = pkl.load(open(name, 'rb'))
         for w, val in zip(self.weights, w_val):
             if len(w.shape) == 3:
