@@ -32,5 +32,7 @@ if __name__ == "__main__":
         print(f"Batch required {batch_required}")
         config._config["nn"]["batch_size"] = batch_required
         diffphy_trainer = DiffPhyTrainer(args, config=config)
-        diffphy_trainer.evaluate(load_path=load_path, custom_loss_enable={"velocity", "height", "crawl"})
+        diffphy_trainer.evaluate(load_path=load_path,
+                                 custom_loss_enable={"velocity", "height", "crawl"},
+                                 write_to_tensorboard=not args.no_tensorboard_evaluate)
         # diffphy_trainer.evaluate(load_path=load_path, custom_loss_enable={"velocity", "height"})
