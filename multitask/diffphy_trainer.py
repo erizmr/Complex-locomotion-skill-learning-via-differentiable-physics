@@ -170,7 +170,7 @@ class LegacyIO(HookBase):
 class DiffPhyTrainer(BaseTrainer):
     def __init__(self, args, config):
         super(DiffPhyTrainer, self).__init__(args, config)
-        self.taichi_env = TaichiEnv(config)
+        self.taichi_env = TaichiEnv(config, train=args.train)
         self.optimize_method = self.taichi_env.config["nn"]["optimizer"]
         # Initialize neural network model
         self.nn = Model(config, self.taichi_env.max_steps,
@@ -179,7 +179,8 @@ class DiffPhyTrainer(BaseTrainer):
                         self.taichi_env.n_springs,
                         self.taichi_env.input_state,
                         self.taichi_env.solver_actuation,
-                        self.taichi_env.n_hidden,
+                        n_models=self.taichi_env.n_models,
+                        n_hidden=self.taichi_env.n_hidden,
                         method=self.optimize_method)
         self.max_reset_step = self.taichi_env.config["nn"]["max_reset_step"]
         self.max_height = self.taichi_env.config["process"]["max_height"]
@@ -229,6 +230,7 @@ class DiffPhyTrainer(BaseTrainer):
         self.taichi_env.solver.clear_states(steps)
         self.nn.clear()
         if train:
+            self.taichi_env.n_models = 1
             self.taichi_env.initialize_train(iter, steps, max_speed, max_height)
         elif not train and self.taichi_env.dim == 2:
             if output_c is None:

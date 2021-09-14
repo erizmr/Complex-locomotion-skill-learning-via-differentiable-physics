@@ -19,7 +19,7 @@ ti.init(arch=ti.gpu, default_fp=real, random_seed=ti_random_seed)
 # Manage all shared parameters and taichi fields
 @ti.data_oriented
 class TaichiEnv:
-    def __init__(self, config):
+    def __init__(self, config, train=True):
         self.config_ = config
         self.config = config.get_config()
         self.logger = config.get_logger(name=__name__)
@@ -44,9 +44,10 @@ class TaichiEnv:
         self.output_vis_interval = self.config["process"]["output_vis_interval"]
         self.ground_height = self.config["simulator"]["ground_height"]
 
-        if "n_models" in self.config["nn"].keys():
+        if "n_models" in self.config["nn"].keys() and not train:
             self.n_models = self.config["nn"]["n_models"]
         else:
+            print("train")
             self.n_models = 1
         
         self.default_model_id = 0

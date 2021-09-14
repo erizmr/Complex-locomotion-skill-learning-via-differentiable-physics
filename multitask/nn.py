@@ -77,17 +77,14 @@ class Model:
         '''
 
     def __init__(self, config, steps, batch_size, n_input, n_output, \
-                 input, output, n_hidden = 64, method = "adam"):
+                 input, output, n_models, n_hidden = 64, method = "adam"):
 
         self.adam_b1 = config.get_config()["nn"]["adam_b1"]
         self.adam_b2 = config.get_config()["nn"]["adam_b2"]
         self.learning_rate = config.get_config()["nn"]["learning_rate"]
         self.dim = config.get_config()["robot"]["dim"]
 
-        if "n_models" in config.get_config()["nn"].keys():
-            self.n_models = config.get_config()["nn"]["n_models"]
-        else:
-            self.n_models = 1
+        self.n_models = n_models
         
         self.default_model_id = 0
 
