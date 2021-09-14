@@ -37,7 +37,7 @@ debug = Debug(False)
 #         self.max_iter = 10000  # Default training iterations, can be overwrote by args
 #         self.writer = TensorboardWriter(config.log_dir,
 #                                         self.logger,
-#                                         enabled=(not args.no_tensorboard))
+#                                         enabled=(not args.no_tensorboard_train))
 #         self._hooks = []
 #
 #     def before_train(self):
@@ -170,7 +170,7 @@ class LegacyIO(HookBase):
 class DiffPhyTrainer(BaseTrainer):
     def __init__(self, args, config):
         super(DiffPhyTrainer, self).__init__(args, config)
-        self.taichi_env = TaichiEnv(config)
+        self.taichi_env = TaichiEnv(config, train=args.train)
         self.optimize_method = self.taichi_env.config["nn"]["optimizer"]
         # Initialize neural network model
         self.nn = Model(config, self.taichi_env.max_steps,
@@ -178,8 +178,9 @@ class DiffPhyTrainer(BaseTrainer):
                         self.taichi_env.n_input_states,
                         self.taichi_env.n_springs,
                         self.taichi_env.input_state,
-                        self.taichi_env.actuation,
-                        self.taichi_env.n_hidden,
+                        self.taichi_env.solver_actuation,
+                        n_models=self.taichi_env.n_models,
+                        n_hidden=self.taichi_env.n_hidden,
                         method=self.optimize_method)
         self.max_reset_step = self.taichi_env.config["nn"]["max_reset_step"]
         self.max_height = self.taichi_env.config["process"]["max_height"]
@@ -229,6 +230,7 @@ class DiffPhyTrainer(BaseTrainer):
         self.taichi_env.solver.clear_states(steps)
         self.nn.clear()
         if train:
+            self.taichi_env.n_models = 1
             self.taichi_env.initialize_train(iter, steps, max_speed, max_height)
         elif not train and self.taichi_env.dim == 2:
             if output_c is None:
@@ -298,7 +300,7 @@ class DiffPhyTrainer(BaseTrainer):
         self.metric_writer.train_metrics.update('TNS', self.total_norm_sqr)
         self.metric_writer.train_metrics.update('current_max_height', self.taichi_env.current_max_height[None])
 
-    def evaluate(self, load_path, custom_loss_enable=None, output_video=False):
+    def evaluate(self, load_path, custom_loss_enable=None, output_video=False, write_to_tensorboard=False):
 
         load_paths = glob.glob(os.path.join(load_path, "*"))
         load_paths = sorted(load_paths, key=os.path.getmtime)
@@ -312,9 +314,10 @@ class DiffPhyTrainer(BaseTrainer):
         for lp in paths_to_evaluate:
             self._evaluate(load_path=lp,
                            custom_loss_enable=custom_loss_enable,
-                           output_video=output_video)
+                           output_video=output_video,
+                           write_to_tensorboard=write_to_tensorboard)
 
-    def _evaluate(self, load_path, custom_loss_enable=None, output_video=False):
+    def _evaluate(self, load_path, custom_loss_enable=None, output_video=False, write_to_tensorboard=False):
         gui = ti.GUI(background_color=0xFFFFFF, show_gui=False)
 
         def visualizer(t, batch_rank, folder, output_video):
@@ -353,7 +356,9 @@ class DiffPhyTrainer(BaseTrainer):
         else:
             loss_enable = custom_loss_enable
         model_paths = glob.glob(os.path.join(load_path, "models/iter*.pkl"))
-        model_paths = sorted(model_paths,  key=os.path.getmtime)
+        a = [(int(x.split('/')[-1][4:-4]), x) for x in model_paths]
+        model_paths = [y for x, y in sorted(a)]
+        # model_paths = sorted(model_paths,  key=os.path.getmtime)
         self.logger.info("{} models {}".format(len(model_paths), [m.split('/')[-1] for m in model_paths]))
         video_path = os.path.join(load_path, "video")
 
@@ -377,25 +382,37 @@ class DiffPhyTrainer(BaseTrainer):
                 s_base += f"_{name}_{element[i]}"
             suffix.append(s_base)
 
-        for model_path in model_paths:
-            current_iter = int(model_path.split('.pkl')[0].split('iter')[1])
+        model_nums = len(model_paths)
+        model_load_num = self.taichi_env.config["nn"]["n_models"]
+        tensorboard_buffer = {}
+        for current_model_index in range(0, model_nums, model_load_num):
+            current_iters = []
+            sub_model_paths = model_paths[current_model_index:current_model_index+10]
+
             sub_video_paths = []
-            for k in range(self.taichi_env.batch_size):
-                # Make sub folder for each validation case
-                sub_video_path = os.path.join(video_path, suffix[k][1:], str(current_iter))
-                os.makedirs(sub_video_path, exist_ok=True)
-                sub_video_paths.append(sub_video_path)
+            for model_id, model_path in enumerate(sub_model_paths):
+                current_iter = int(model_path.split('.pkl')[0].split('iter')[1])
+                current_iters.append(current_iter)
+                self.nn.load_weights(model_path, model_id=model_id)
+                self.logger.info("Current iter {}, load from {}".format(current_iter, model_path))
+
+                for k in range(self.taichi_env.batch_size):
+                    # Make sub folder for each validation case
+                    sub_video_path = os.path.join(video_path, suffix[k][1:], str(current_iter))
+                    os.makedirs(sub_video_path, exist_ok=True)
+                    sub_video_paths.append(sub_video_path)
 
             self.taichi_env.setup_robot()
-            self.logger.info("Current iter {}, load from {}".format(current_iter, model_path))
-            self.nn.load_weights(model_path)
 
-            # Clear all batch losses
-            for k in range(self.taichi_env.batch_size):
-                self.taichi_env.loss_batch[k] = 0.
-            for l in self.taichi_env.losses_batch:
+            # Clear all batch losses for all models
+            for m in range(model_load_num):
                 for k in range(self.taichi_env.batch_size):
-                    l[k] = 0.
+                    self.taichi_env.loss_batch[m, k] = 0.
+
+            for l in self.taichi_env.losses_batch:
+                for m in range(model_load_num):
+                    for k in range(self.taichi_env.batch_size):
+                        l[m, k] = 0.
 
             validate_v = self.taichi_env.validate_targets_values['velocity']
             validate_h = self.taichi_env.validate_targets_values['height']
@@ -411,18 +428,29 @@ class DiffPhyTrainer(BaseTrainer):
                           train=False,
                           loss_enable=loss_enable)
 
+            # Output videos
             for i in range(self.taichi_env.max_steps):
                 if i % 20 == 0:
                     for k in range(self.taichi_env.batch_size):
                         visualizer(i, k, sub_video_paths[k], output_video=output_video)
 
+            # Collect all results
+            for m, current_iter in enumerate(current_iters):
+                print(f"Collecting results, current iter {current_iter}")
+                tensorboard_buffer[current_iter] = {}
+                for k in range(self.taichi_env.batch_size):
+                    tensorboard_buffer[current_iter][f"task_loss{suffix[k]}"] = self.taichi_env.loss_batch[m, k]
+                    for name in self.taichi_env.validate_targets_values.keys():
+                        # print(f"{name}_loss{suffix[k]}", self.taichi_env.loss_dict_batch[f"loss_{name}"][m, k])
+                        tensorboard_buffer[current_iter][f"{name}_loss{suffix[k]}"] = self.taichi_env.loss_dict_batch[f"loss_{name}"][m, k]
+
+        if write_to_tensorboard:
             # Write to tensorboard
-            evaluator_writer.writer.set_step(step=current_iter)
-            for k in range(self.taichi_env.batch_size):
-                evaluator_writer.update(f"task_loss{suffix[k]}", self.taichi_env.loss_batch[k])
-                for name in self.taichi_env.validate_targets_values.keys():
-                    # print(f"{name}_loss{suffix[k]}", self.taichi_env.loss_dict_batch[f"loss_{name}"][k])
-                    evaluator_writer.update(f"{name}_loss{suffix[k]}", self.taichi_env.loss_dict_batch[f"loss_{name}"][k])
+            for current_iter, sub_dict in tensorboard_buffer.items():
+                print(f"Writing to tensorboard, current iter {current_iter}")
+                evaluator_writer.writer.set_step(step=current_iter)
+                for k, val in sub_dict.items():
+                    evaluator_writer.update(k, val)
 
     # Legacy code from ljcc
     def optimize(self, iters=100000, change_iter=5000, prefix=None, root_dir="./", \

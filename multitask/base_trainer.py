@@ -14,7 +14,7 @@ class BaseTrainer:
         self.max_iter = 10000  # Default training iterations, can be overwrote by args
         self.writer = TensorboardWriter(config.log_dir,
                                         self.logger,
-                                        enabled=(not args.no_tensorboard))
+                                        enabled=(not args.no_tensorboard_train))
         self._hooks = []
 
     def before_train(self):

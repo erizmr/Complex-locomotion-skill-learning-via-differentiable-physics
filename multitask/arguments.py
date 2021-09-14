@@ -19,9 +19,13 @@ def get_args():
         action='store_true',
         help='whether evaluate model, default false')
     parser.add_argument(
-        '--no-tensorboard',
+        '--no-tensorboard-train',
         action='store_true',
-        help='disable tensorboard')
+        help='disable tensorboard for training')
+    parser.add_argument(
+        '--no-tensorboard-evaluate',
+        action='store_true',
+        help='disable tensorboard for evaluating')
     parser.add_argument(
         '--evaluate_path',
         default='',

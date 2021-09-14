@@ -15,10 +15,10 @@
 `python3 main_diff_phy.py --config_file cfg/sim_config_DiffPhy_robot2_vh.json --train`
 
 ### Evaluate
-`python3 main_diff_phy.py --config_file cfg/sim_config_DiffPhy_robot2_vh.json --evaluate --no-tensorboard --evaluate_path saved_results/sim_config_DiffPhy_robot2_vh/DiffTaichi_DiffPhy`
+`python3 main_diff_phy.py --config_file cfg/sim_config_DiffPhy_robot2_vh.json --evaluate --no-tensorboard-train --evaluate_path saved_results/sim_config_DiffPhy_robot2_vh/DiffTaichi_DiffPhy`
 
 ###  Interactive
-`python3 interactive.py --config_file cfg/sim_config_DiffPhy_robot2_vh.json --no-tensorboard`
+`python3 interactive.py --config_file cfg/sim_config_DiffPhy_robot2_vh.json --no-tensorboard-train`
 
 
 ## Output plots
@@ -42,4 +42,4 @@
 
 ## 3D
 python3 main_diff_phy.py --config_file cfg3d/sim_config_DiffPhy_robot2_vh.json --train
-python3 main_diff_phy.py --config_file cfg3d/sim_config_DiffPhy_robot2_vh.json --evaluate --no-tensorboard --evaluate_path saved_results/sim_config_DiffPhy_robot2_vh/DiffTaichi_DiffPhy
+python3 main_diff_phy.py --config_file cfg3d/sim_config_DiffPhy_robot2_vh.json --evaluate --no-tensorboard-train --evaluate_path saved_results/sim_config_DiffPhy_robot2_vh/DiffTaichi_DiffPhy
