@@ -24,7 +24,7 @@
     "run_period": 100,
     "jump_period": 500,
     "turn_period": 500,
-    "max_speed": 0.08,
+    "max_speed": 0.1,
     "max_height": 0.1,
     "dt": 0.004
   },

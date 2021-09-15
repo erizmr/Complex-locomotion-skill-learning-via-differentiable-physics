@@ -170,9 +170,9 @@ class TaichiEnv:
             else:
                 for k, j in ti.ndrange(self.batch_size, self.duplicate_v):
                     self.input_state[t, k, self.n_objects * self.dim * 2 + self.n_sin_waves + j * (self.dim - 1)] = \
-                    self.target_v[t, k][0] / 0.05
+                    self.target_v[t, k][0] / max_speed
                     self.input_state[t, k, self.n_objects * self.dim * 2 + self.n_sin_waves + j * (self.dim - 1) + 1] = \
-                    self.target_v[t, k][2] / 0.05
+                    self.target_v[t, k][2] / max_speed
         if ti.static(self.duplicate_h > 0):
             for k, j in ti.ndrange(self.batch_size, self.duplicate_h):
                 self.input_state[t, k, self.n_objects * self.dim * 2 + self.n_sin_waves + self.duplicate_v * (
@@ -364,8 +364,8 @@ class TaichiEnv:
                 r = 1.
                 angle = 0.
                 r = self.pool[q + 1] * 2. - 1.
-                self.target_v[t, k][0] = r * ti.cos(angle) * 0.05
-                self.target_v[t, k][2] = r * ti.sin(angle) * 0.05
+                self.target_v[t, k][0] = r * ti.cos(angle) * max_velocity
+                self.target_v[t, k][2] = r * ti.sin(angle) * max_velocity
                 self.target_h[t, k] = 0.1
 
     @debug
