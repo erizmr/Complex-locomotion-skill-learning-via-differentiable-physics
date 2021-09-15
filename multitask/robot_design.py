@@ -376,25 +376,40 @@ class RobotDesignMassSpring3D(RobotDesignBase):
 
         # b d
         # a c
-        self.add_mesh_spring(a, b, 3e4, actuation)
-        self.add_mesh_spring(c, d, 3e4, actuation)
-        self.add_mesh_spring(e, f, 3e4, actuation)
-        self.add_mesh_spring(g, h, 3e4, actuation)
+        self.add_mesh_spring(a, b, 1e4, actuation)
+        self.add_mesh_spring(c, d, 1e4, actuation)
+        self.add_mesh_spring(e, f, 1e4, actuation)
+        self.add_mesh_spring(g, h, 1e4, actuation)
 
-        self.add_mesh_spring(b, d, 3e4, 0)
-        self.add_mesh_spring(a, c, 3e4, 0)
-        self.add_mesh_spring(f, h, 3e4, 0)
-        self.add_mesh_spring(e, g, 3e4, 0)
+        self.add_mesh_spring(b, d, 1e4, 0)
+        self.add_mesh_spring(a, c, 1e4, 0)
+        self.add_mesh_spring(f, h, 1e4, 0)
+        self.add_mesh_spring(e, g, 1e4, 0)
 
-        self.add_mesh_spring(b, f, 3e4, 0)
-        self.add_mesh_spring(d, h, 3e4, 0)
-        self.add_mesh_spring(a, e, 3e4, 0)
-        self.add_mesh_spring(c, g, 3e4, 0)
+        self.add_mesh_spring(b, f, 1e4, 0)
+        self.add_mesh_spring(d, h, 1e4, 0)
+        self.add_mesh_spring(a, e, 1e4, 0)
+        self.add_mesh_spring(c, g, 1e4, 0)
 
-        self.add_mesh_spring(b, g, 3e4, 0)
-        self.add_mesh_spring(d, e, 3e4, 0)
-        self.add_mesh_spring(f, c, 3e4, 0)
-        self.add_mesh_spring(h, a, 3e4, 0)
+        self.add_mesh_spring(b, g, 1e4, 0)
+        self.add_mesh_spring(d, e, 1e4, 0)
+        self.add_mesh_spring(f, c, 1e4, 0)
+        self.add_mesh_spring(h, a, 1e4, 0)
+
+        self.add_mesh_spring(e, c, 1e4, 0)
+        self.add_mesh_spring(a, g, 1e4, 0)
+        self.add_mesh_spring(h, b, 1e4, 0)
+        self.add_mesh_spring(d, f, 1e4, 0)
+
+        self.add_mesh_spring(e, b, 1e4, actuation)
+        self.add_mesh_spring(a, f, 1e4, actuation)
+        self.add_mesh_spring(h, c, 1e4, actuation)
+        self.add_mesh_spring(d, g, 1e4, actuation)
+
+        self.add_mesh_spring(f, g, 1e4, actuation)
+        self.add_mesh_spring(e, h, 1e4, actuation)
+        self.add_mesh_spring(a, d, 1e4, actuation)
+        self.add_mesh_spring(c, b, 1e4, actuation)
 
         def append_square_face(a, b, c, d):
             self.faces.append((a, b, c))

@@ -33,7 +33,7 @@
       "n_grid": 32
     },
     "ground_height": 0.1,
-    "gravity": -1.8,
+    "gravity": -9.8,
     "drag_damping": 0,
     "dash_damping": 0.2,
     "p_vol": 1,
