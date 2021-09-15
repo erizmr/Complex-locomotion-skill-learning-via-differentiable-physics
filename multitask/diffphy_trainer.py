@@ -170,6 +170,8 @@ class LegacyIO(HookBase):
 class DiffPhyTrainer(BaseTrainer):
     def __init__(self, args, config):
         super(DiffPhyTrainer, self).__init__(args, config)
+        if args.evaluate:
+            config.get_config()["process"]["max_steps"] = config.get_config()["process"]["evaluate_max_steps"]
         self.taichi_env = TaichiEnv(config)
         self.optimize_method = self.taichi_env.config["nn"]["optimizer"]
         # Initialize neural network model
