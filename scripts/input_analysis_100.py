@@ -12,10 +12,10 @@ def load_weights(name="save.pkl"):
         print(val, val.shape)
         weight_list.append(val)
 
-robot_id = 4
+robot_id = 100
 # model_path = glob.glob(f"./saved_results/sim_config_DiffPhy_robot{robot_id}_vhc_5_l05/DiffTaichi_DiffPhy/*/models/weight.pkl")[-1]
 # model_path = "./saved_results/sim_config_DiffPhy_robot4_vhc_5_l05/DiffTaichi_DiffPhy/*/models/weight.pkl"
-model_path = glob.glob(f"./saved_results/sim_config_DiffPhy_robot{robot_id}_vha/DiffTaichi_DiffPhy/*/models/weight.pkl")[-1]
+model_path = glob.glob(f"./saved_results/sim_config_DiffPhy_robot2_vh/DiffTaichi_DiffPhy/*/models/iter0.pkl")[-1]
 load_weights(model_path)
 weight_1 = weight_list[0]
 weight_2 = weight_list[1]

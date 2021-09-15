@@ -161,14 +161,8 @@ class SolverMassSpring:
     @ti.kernel
     def compute_rotation(self, t: ti.i32):
         for k in range(self.batch_size):
-            for i in ti.static(range(self.n_objects)):
-                if self.x[0, k, i](0) < self.center[0, k](0):
-                    self.head_center[t, k] += self.x[t, k, i]
-                    self.head_counter[t, k] += 1.
-                else:
-                    self.tail_center[t, k] += self.x[t, k, i]
-                    self.tail_counter[t, k] += 1.
-            direction = -self.head_center[t, k] * self.tail_counter[t, k] + self.tail_center[t, k] * self.head_counter[t, k]
+            # TODO: hard-code robot 100
+            direction = self.x[t, k, 45] + self.x[t, k, 46] - self.x[t, k, 34] - self.x[t, k, 36]
             self.rotation[t, k] = ti.atan2(direction[2], direction[0])
 
     def pre_advance(self, t):

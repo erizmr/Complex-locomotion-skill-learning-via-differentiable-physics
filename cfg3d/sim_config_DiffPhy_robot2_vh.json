@@ -4,7 +4,7 @@
     "save_dir": "./saved_results",
     "output_video_in_train": false,
     "output_video_in_validation": true,
-    "task": ["velocity", "height"]
+    "task": ["velocity"]
   },
   "validation": {
     "velocity": [999999999.0],
@@ -18,7 +18,7 @@
     "control_length": 1
   },
   "process":{
-    "max_steps": 4000,
+    "max_steps": 1000,
     "vis_interval": 256,
     "output_vis_interval": 8,
     "run_period": 100,
@@ -45,7 +45,7 @@
     "coeff": 5
   },
   "nn": {
-    "n_sin_waves": 10,
+    "n_sin_waves": 100,
     "n_hidden": 64,
     "duplicate_v": 1,
     "duplicate_h": 0,

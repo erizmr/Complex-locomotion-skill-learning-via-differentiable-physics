@@ -235,7 +235,7 @@ class DiffPhyTrainer(BaseTrainer):
                 output_c = np.zeros(self.taichi_env.batch_size)
             self.taichi_env.initialize_validate(steps, output_v, output_h, output_c)
         elif not train and self.taichi_env.dim == 3:
-            self.taichi_env.initialize_script(steps, 0.05, 0, 0.05, 0, 0.05, 0, 0.05, 0)
+            self.taichi_env.initialize_script(steps, 0.05, 0, -0.05, 0, 0.05, 0, -0.05, 0)
         self.taichi_env.loss[None] = 0.
         for l in self.taichi_env.losses:
             l[None] = 0.
@@ -377,7 +377,7 @@ class DiffPhyTrainer(BaseTrainer):
                 s_base += f"_{name}_{element[i]}"
             suffix.append(s_base)
 
-        for model_path in model_paths:
+        for model_path in model_paths[::10]:
             current_iter = int(model_path.split('.pkl')[0].split('iter')[1])
             sub_video_paths = []
             for k in range(self.taichi_env.batch_size):

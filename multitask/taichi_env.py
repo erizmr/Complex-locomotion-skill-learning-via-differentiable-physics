@@ -159,7 +159,7 @@ class TaichiEnv:
                     self.input_state[t, k, j * self.dim * 2 + self.n_sin_waves + d] = vec_x[d] / 0.2
                     self.input_state[t, k, j * self.dim * 2 + self.n_sin_waves + self.dim + d] = 0
                 else:
-                    self.input_state[t, k, j * self.dim * 2 + self.n_sin_waves + d] = vec_x[d] * 0.04
+                    self.input_state[t, k, j * self.dim * 2 + self.n_sin_waves + d] = vec_x[d] / 0.2
                     self.input_state[t, k, j * self.dim * 2 + self.n_sin_waves + self.dim + d] = 0
 
         if ti.static(self.duplicate_v > 0):
@@ -170,9 +170,9 @@ class TaichiEnv:
             else:
                 for k, j in ti.ndrange(self.batch_size, self.duplicate_v):
                     self.input_state[t, k, self.n_objects * self.dim * 2 + self.n_sin_waves + j * (self.dim - 1)] = \
-                    self.target_v[t, k][0] * 0.15
+                    self.target_v[t, k][0] / 0.05
                     self.input_state[t, k, self.n_objects * self.dim * 2 + self.n_sin_waves + j * (self.dim - 1) + 1] = \
-                    self.target_v[t, k][2] * 0.15
+                    self.target_v[t, k][2] / 0.05
         if ti.static(self.duplicate_h > 0):
             for k, j in ti.ndrange(self.batch_size, self.duplicate_h):
                 self.input_state[t, k, self.n_objects * self.dim * 2 + self.n_sin_waves + self.duplicate_v * (
@@ -195,9 +195,9 @@ class TaichiEnv:
                     self.loss_velocity_batch[k] += loss_x * self.batch_size
                 else:
                     loss_x = (self.center[t, k](0) - self.center[t - self.run_period, k](0) - self.target_v[
-                        t - self.run_period, k](0)) ** 2 / self.batch_size
+                        t - self.run_period, k](0)) ** 2 / self.batch_size / steps * 100
                     loss_y = (self.center[t, k](2) - self.center[t - self.run_period, k](2) - self.target_v[
-                        t - self.run_period, k](2)) ** 2 / self.batch_size
+                        t - self.run_period, k](2)) ** 2 / self.batch_size / steps * 100
 
                     self.loss_velocity[None] += loss_x + loss_y
                     self.loss_velocity_batch[k] += (loss_x + loss_y) * self.batch_size
@@ -229,9 +229,10 @@ class TaichiEnv:
     @ti.kernel
     def compute_loss_rotation(self, steps: ti.template()):
         for t, k in ti.ndrange((1, steps + 1), self.batch_size):
-            loss_r = self.rotation[t, k] ** 2 / self.batch_size / 5
-            self.loss_rotation[None] += loss_r
-            self.loss_rotation_batch[k] += loss_r * self.batch_size
+            if t % self.run_period == 0:
+                loss_r = self.rotation[t, k] ** 2 / self.batch_size / 500
+                self.loss_rotation[None] += loss_r
+                self.loss_rotation_batch[k] += loss_r * self.batch_size
 
     @ti.kernel
     def compute_loss_actuation(self, steps: ti.template()):
@@ -362,6 +363,7 @@ class TaichiEnv:
                 angle = self.pool[q + 2] * 2 * 3.1415926
                 r = 1.
                 angle = 0.
+                r = self.pool[q + 1] * 2. - 1.
                 self.target_v[t, k][0] = r * ti.cos(angle) * 0.05
                 self.target_v[t, k][2] = r * ti.sin(angle) * 0.05
                 self.target_h[t, k] = 0.1
