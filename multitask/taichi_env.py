@@ -263,6 +263,13 @@ class TaichiEnv:
             self.loss_batch[k] += l[k]
 
     def get_loss(self, steps, loss_enable, *args, **kwargs):
+        for t in range(self.run_period, steps + 1):
+            if t % self.run_period == 0:  # and target_h[t - run_period, k] < 0.1 + 1e-4:
+                x0 = self.center[t, 0](0) - self.center[t - self.run_period, 0](0)
+                x1 = self.target_v[t - self.run_period, 0](0)
+                z0 = self.center[t, 0](2) - self.center[t - self.run_period, 0](2)
+                z1 = self.target_v[t - self.run_period, 0](2)
+                print("  ", x0, x1, z0, z1)
         if "velocity" in loss_enable:
             self.compute_loss_velocity(steps)
         if "height" in loss_enable:
