@@ -164,8 +164,8 @@ class Model:
     def dump_weights(self, name = "save.pkl"):
         w_val = []
         for w in self.weights:
-            w = w[self.default_model_id]
-            w_val.append(w.to_numpy())
+            w = w.to_numpy()
+            w_val.append(w[self.default_model_id])
         pkl.dump(w_val, open(name, "wb"))
     
     @ti.kernel
