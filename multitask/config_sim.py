@@ -4,8 +4,6 @@ import time
 from datetime import datetime
 from pathlib import Path
 
-from multitask.robot_config import robots
-from multitask.robot3d_config import robots3d
 from multitask.robot_mpm import robots_mpm, n_grid, dx
 from multitask.robot_design import RobotDesignBase, RobotDesignMassSpring, RobotDesignMassSpring3D, RobotDesignMPM
 
