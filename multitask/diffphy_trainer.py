@@ -1,5 +1,5 @@
 import sys
-
+import pickle as pkl
 import pandas as pd
 import taichi as ti
 import math
@@ -25,6 +25,7 @@ from multitask.solver_mass_spring import SolverMassSpring
 from multitask.solver_mpm import SolverMPM
 from multitask.taichi_env import TaichiEnv
 from multitask.base_trainer import BaseTrainer
+
 debug = Debug(False)
 
 
@@ -302,7 +303,7 @@ class DiffPhyTrainer(BaseTrainer):
         self.metric_writer.train_metrics.update('TNS', self.total_norm_sqr)
         self.metric_writer.train_metrics.update('current_max_height', self.taichi_env.current_max_height[None])
 
-    def evaluate(self, load_path, custom_loss_enable=None, output_video=False, write_to_tensorboard=False):
+    def evaluate(self, load_path, custom_loss_enable=None, output_video=False, write_to_tensorboard=False, evaluate_from_value=False):
 
         load_paths = glob.glob(os.path.join(load_path, "*"))
         load_paths = sorted(load_paths, key=os.path.getmtime)
@@ -317,9 +318,10 @@ class DiffPhyTrainer(BaseTrainer):
             self._evaluate(load_path=lp,
                            custom_loss_enable=custom_loss_enable,
                            output_video=output_video,
-                           write_to_tensorboard=write_to_tensorboard)
+                           write_to_tensorboard=write_to_tensorboard,
+                           evaluate_from_value=evaluate_from_value)
 
-    def _evaluate(self, load_path, custom_loss_enable=None, output_video=False, write_to_tensorboard=False):
+    def _evaluate(self, load_path, custom_loss_enable=None, output_video=False, write_to_tensorboard=False, evaluate_from_value=False):
         gui = ti.GUI(background_color=0xFFFFFF, show_gui=False)
 
         def visualizer(t, batch_rank, folder, output_video):
@@ -357,12 +359,6 @@ class DiffPhyTrainer(BaseTrainer):
             loss_enable = set(self.task)
         else:
             loss_enable = custom_loss_enable
-        model_paths = glob.glob(os.path.join(load_path, "models/iter*.pkl"))
-        a = [(int(x.split('/')[-1][4:-4]), x) for x in model_paths]
-        model_paths = [y for x, y in sorted(a)]
-        # model_paths = sorted(model_paths,  key=os.path.getmtime)
-        self.logger.info("{} models {}".format(len(model_paths), [m.split('/')[-1] for m in model_paths]))
-        video_path = os.path.join(load_path, "video")
 
         targets_values = []
         targets_keys = []
@@ -384,25 +380,48 @@ class DiffPhyTrainer(BaseTrainer):
                 s_base += f"_{name}_{element[i]}"
             suffix.append(s_base)
 
-        model_nums = len(model_paths)
+        video_path = os.path.join(load_path, "video")
+        if not evaluate_from_value:
+            # Get all model paths
+            model_paths = glob.glob(os.path.join(load_path, "models/iter*.pkl"))
+            a = [(int(x.split('/')[-1][4:-4]), x) for x in model_paths]
+            model_paths = [y for x, y in sorted(a)]
+            # model_paths = sorted(model_paths,  key=os.path.getmtime)
+            self.logger.info("{} models {}".format(len(model_paths), [m.split('/')[-1] for m in model_paths]))
+            model_nums = len(model_paths)
+        else:
+            model_paths = glob.glob(os.path.join(load_path, "models/*.pkl"))
+            model_data = pkl.load(open(model_paths[-1], 'rb'))
+            model_nums = len(model_data)
+        print(f"Model nums: {model_nums}")
+
+        checkponiter_cnt = 0
         model_load_num = self.taichi_env.config["nn"]["n_models"]
         tensorboard_buffer = {}
         for current_model_index in range(0, model_nums, model_load_num):
             current_iters = []
-            sub_model_paths = model_paths[current_model_index:current_model_index+10]
+            if not evaluate_from_value:
+                sub_model_paths = model_paths[current_model_index:current_model_index+10]
+            else:
+                sub_model_paths = [x for x in range(current_model_index, min(current_model_index+model_load_num, model_nums))]
 
             sub_video_paths = []
+
             for model_id, model_path in enumerate(sub_model_paths):
-                current_iter = int(model_path.split('.pkl')[0].split('iter')[1])
+                current_iter = int(model_path.split('.pkl')[0].split('iter')[1]) if not evaluate_from_value else current_model_index+model_id
                 current_iters.append(current_iter)
-                self.nn.load_weights(model_path, model_id=model_id)
+                if not evaluate_from_value:
+                    self.nn.load_weights(model_path, model_id=model_id)
+                else:
+                    self.nn.load_weights_from_value(model_data[current_model_index+model_id], model_id=model_id)
                 self.logger.info("Current iter {}, load from {}".format(current_iter, model_path))
 
-                for k in range(self.taichi_env.batch_size):
-                    # Make sub folder for each validation case
-                    sub_video_path = os.path.join(video_path, suffix[k][1:], str(current_iter))
-                    os.makedirs(sub_video_path, exist_ok=True)
-                    sub_video_paths.append(sub_video_path)
+                if not evaluate_from_value:
+                    for k in range(self.taichi_env.batch_size):
+                        # Make sub folder for each validation case
+                        sub_video_path = os.path.join(video_path, suffix[k][1:], str(current_iter))
+                        os.makedirs(sub_video_path, exist_ok=True)
+                        sub_video_paths.append(sub_video_path)
 
             self.taichi_env.setup_robot()
 
@@ -429,12 +448,12 @@ class DiffPhyTrainer(BaseTrainer):
                           iter=0,
                           train=False,
                           loss_enable=loss_enable)
-
-            # Output videos
-            for i in range(self.taichi_env.max_steps):
-                if i % 50000 == 0:
-                    for k in range(self.taichi_env.batch_size):
-                        visualizer(i, k, sub_video_paths[k], output_video=output_video)
+            if not evaluate_from_value:
+                # Output videos
+                for i in range(self.taichi_env.max_steps):
+                    if i % 50000 == 0:
+                        for k in range(self.taichi_env.batch_size):
+                            visualizer(i, k, sub_video_paths[k], output_video=output_video)
 
             # Collect all results
             for m, current_iter in enumerate(current_iters):
@@ -446,6 +465,13 @@ class DiffPhyTrainer(BaseTrainer):
                         # print(f"{name}_loss{suffix[k]}", self.taichi_env.loss_dict_batch[f"loss_{name}"][m, k])
                         tensorboard_buffer[current_iter][f"{name}_loss{suffix[k]}"] = self.taichi_env.loss_dict_batch[f"loss_{name}"][m, k]
 
+            checkponiter_cnt += 1
+            if (checkponiter_cnt+1) % 100 == 0:
+                df_all_results = pd.DataFrame(tensorboard_buffer)
+                save_file_name = os.path.join(load_path, f"validation/summary_checkpoint_{checkponiter_cnt*model_load_num:05}.csv")
+                df_all_results.to_csv(save_file_name)
+                print(f"Save checkpoint: {save_file_name}")
+
         if write_to_tensorboard:
             # Write to tensorboard
             for current_iter, sub_dict in tensorboard_buffer.items():
@@ -455,6 +481,7 @@ class DiffPhyTrainer(BaseTrainer):
                     evaluator_writer.update(k, val)
         df_all_results = pd.DataFrame(tensorboard_buffer)
         df_all_results.to_csv(os.path.join(load_path, "validation/summary.csv"))
+
 
     # Legacy code from ljcc
     def optimize(self, iters=100000, change_iter=5000, prefix=None, root_dir="./", \

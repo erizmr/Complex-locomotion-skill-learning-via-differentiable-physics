@@ -34,5 +34,6 @@ if __name__ == "__main__":
         diffphy_trainer = DiffPhyTrainer(args, config=config)
         diffphy_trainer.evaluate(load_path=load_path,
                                  custom_loss_enable={"velocity", "height", "crawl"},
-                                 write_to_tensorboard=not args.no_tensorboard_evaluate)
+                                 write_to_tensorboard=not args.no_tensorboard_evaluate,
+                                 evaluate_from_value=args.evaluate_from_value)
         # diffphy_trainer.evaluate(load_path=load_path, custom_loss_enable={"velocity", "height"})

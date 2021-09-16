@@ -19,6 +19,10 @@ def get_args():
         action='store_true',
         help='whether evaluate model, default false')
     parser.add_argument(
+        '--evaluate-from-value',
+        action='store_true',
+        help='whether evaluate model from value, default false')
+    parser.add_argument(
         '--no-tensorboard-train',
         action='store_true',
         help='disable tensorboard for training')

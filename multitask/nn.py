@@ -164,28 +164,24 @@ class Model:
     def dump_weights(self, name = "save.pkl"):
         w_val = []
         for w in self.weights:
+            w = w[self.default_model_id]
             w_val.append(w.to_numpy())
         pkl.dump(w_val, open(name, "wb"))
     
     @ti.kernel
-    def copy_from_numpy_2d(self, dst: ti.template(), src: ti.ext_arr(), model_id: ti.i32):
-        for i, j in ti.grouped(src):
-            dst[model_id, i, j] = src[i, j]
-    
-    @ti.kernel
-    def copy_from_numpy_1d(self, dst: ti.template(), src: ti.ext_arr(), model_id: ti.i32):
-        for (i, ) in ti.grouped(src):
-            dst[model_id, i] = src[i]
+    def copy_from_numpy(self, dst: ti.template(), src: ti.ext_arr(), model_id: ti.i32):
+        for I in ti.grouped(src):
+            dst[model_id, I] = src[I]
 
     def load_weights(self, name="save.pkl", model_id=0):
         w_val = pkl.load(open(name, 'rb'))
+        self.load_weights_from_value(w_val, model_id)
+
+    def load_weights_from_value(self, w_val, model_id=0):
         for w, val in zip(self.weights, w_val):
-            if len(w.shape) == 3:
-                self.copy_from_numpy_2d(w, val, model_id)
-            elif len(w.shape) == 2:
-                self.copy_from_numpy_1d(w, val, model_id)
-            else:
-                raise NotImplementedError("Weight dim: {}".format(len(w.shape) - 1))
+            if val.shape[0] == 1:
+                val = val[0]
+            self.copy_from_numpy(w, val, model_id)
 
     def gradient_update(self, iter = 0):
         if self.method == "adam":
