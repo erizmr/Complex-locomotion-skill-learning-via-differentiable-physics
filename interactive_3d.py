@@ -12,33 +12,14 @@ import numpy as np
 import pandas as pd
 
 offset = 0
-def set_target():
-    for e in gui.get_events():
-        if '0' <= e.key <= '9':
-            set_target.target_v = (ord(e.key) - ord('0')) * 0.01
-            set_target.target_h = 0.1
-        elif 'a' <= e.key <= 'z':
-            set_target.target_v = (ord(e.key) - ord('a')) * -0.01
-            set_target.target_h = 0.1
-        elif e.key == gui.SPACE:
-            set_target.target_v = 0.
-            set_target.target_h = 0.2
-        elif e.key == 'Control_L':
-            set_target.target_c = 1.0
-        elif e.key == 'Control_R':
-            set_target.target_c = 0.0
-        elif e.key == gui.UP:
-            set_target.target_h += 0.01
-        elif e.key == gui.DOWN:
-            set_target.target_h -= 0.01
-        elif e.key == gui.LEFT:
-            set_target.target_v -= 0.01
-        elif e.key == gui.RIGHT:
+def set_target(window):
+    if window.get_event(ti.ui.PRESS):
+        e = window.event
+        if e.key == ti.ui.UP:
             set_target.target_v += 0.01
-        elif e.key == gui.BACKSPACE:
-            set_target.target_v = 0.
-            set_target.target_h = 0.1
-    # print("Model Path {} Status: v {:.4f} h {:.4f} c {:.4f}".format(model_path, set_target.target_v, set_target.target_h, set_target.target_c))
+        if e.key == ti.ui.DOWN:
+            set_target.target_v -= 0.01
+        print("!!!!!!!!!!!!!!!!!!!!!!! ", set_target.target_v)
     trainer.taichi_env.initialize_interactive(1, set_target.target_v, set_target.target_h, set_target.target_c)
 set_target.target_v = 0
 set_target.target_h = 0.1
@@ -63,8 +44,8 @@ def make_decision():
     for i in range(trainer.taichi_env.solver.n_objects):
         holder.append(round(trainer.taichi_env.solver.actuation[0, 0, i], 3))
         v_sub_holder.append(trainer.taichi_env.v[0, 0, i][0])
-    if offset % int(control_length) == 0:
-        print(f"Frame: {offset}, control signal: {holder}")
+    # if offset % int(control_length) == 0:
+    #     print(f"Frame: {offset}, control signal: {holder}")
     all_holder.append(holder)
 
     if set_target.target_c == 1.0:
@@ -89,24 +70,8 @@ def refresh_xv():
         trainer.taichi_env.x[0, 0, i] = trainer.taichi_env.x[1, 0, i]
         trainer.taichi_env.v[0, 0, i] = trainer.taichi_env.v[1, 0, i]
 
-# TODO: clean up
-gui = ti.GUI(background_color=0xFFFFFF)
-def visualizer():
-    gui.clear()
-    gui.line((0, trainer.taichi_env.ground_height), (1, trainer.taichi_env.ground_height),
-             color=0x000022,
-             radius=3)
-    gui.text(f"Robot ID: {robot_id}", (0.05, 0.9), color=0x000022, font_size=20)
-    gui.text(f"Control length: {control_length}", (0.05, 0.85), color=0x000022, font_size=20)
-    gui.text(f"Targets v: {set_target.target_v:.2f}, h: {set_target.target_h:.2f}, c: {set_target.target_c:.2f}", (0.05, 0.80), color=0x000022, font_size=20)
-    trainer.taichi_env.solver.draw_robot(gui=gui, batch_rank=1, t=1, target_v=trainer.taichi_env.target_v)
-    gui.show('video/interactive/robot_{}/{}/{:04d}.png'.format(robot_id, config_name, visualizer.frame))
-    # gui.show()
-    visualizer.frame += 1
-visualizer.frame = 0
-
 if __name__ == "__main__":
-    ti.init(arch=ti.gpu, default_fp=ti.f64, random_seed=555)
+    ti.init(arch=ti.gpu, default_fp=ti.f32, random_seed=555)
     args = get_args()
     print('args', args)
     config_file = args.config_file
@@ -116,6 +81,10 @@ if __name__ == "__main__":
     os.makedirs(f'./video/interactive/robot_{robot_id}/{config_name}', exist_ok=True)
     control_length = config.get_config()["robot"]["control_length"]
 
+    indices = ti.field(ti.i32, len(config.get_config()["robot"]["faces"]) * 3)
+    vertices = ti.Vector.field(3, ti.f32, len(config.get_config()["robot"]["objects"]))
+    indices_ground = ti.field(ti.i32, 6)
+    vertices_ground = ti.Vector.field(3, ti.f32, 4)
 
     # Enforce the batch size to 1
     config._config["nn"]["batch_size"] = 1
@@ -129,73 +98,42 @@ if __name__ == "__main__":
     trainer.nn.load_weights(os.path.join(model_path, "weight.pkl"))
     # trainer.nn.load_weights(os.path.join(model_path, "best.pkl"))
 
-    print(trainer.taichi_env.x.to_numpy()[0, :, :])
-    visualizer()
-    while gui.running:
-        for i in range(6):
-            set_target()
+    window = ti.ui.Window("Difftaichi2", (800, 800), vsync=True)
+    canvas = window.get_canvas()
+    scene = ti.ui.Scene()
+    camera = ti.ui.make_camera()
+
+    indices.from_numpy(np.array(config.get_config()["robot"]["faces"]).reshape(-1))
+    indices_ground.from_numpy(np.array([0, 1, 2, 2, 1, 3]))
+    @ti.kernel
+    def update_verts():
+        vertices_ground[0] = ti.Vector([-1, 0.1, -1])
+        vertices_ground[1] = ti.Vector([-1, 0.1, 1])
+        vertices_ground[2] = ti.Vector([1, 0.1, -1])
+        vertices_ground[3] = ti.Vector([1, 0.1, 1])
+        for i in range(trainer.taichi_env.n_objects):
+            vertices[i] = trainer.taichi_env.x[0, 0, i]
+
+    while window.running:
+        update_verts()
+        for i in range(10):
+            set_target(window)
             make_decision()
             forward_mass_spring()
             refresh_xv()
             offset += 1
-        visualizer()
-        if offset < 100:
-            set_target.target_v = 0.0
-            set_target.target_h = 0.1
-            set_target.target_c = 0.0
-        if offset > 100 and offset <= 500:
-            set_target.target_v = 0.01
-            set_target.target_h = 0.1
-            set_target.target_c = 0.0
-        if offset > 500 and offset < 2000:
-            set_target.target_v = 0.015 * (offset // 500)
-            set_target.target_h = 0.1
-            set_target.target_c = 0.0
-        if offset >= 2000 and offset < 3500:
-            set_target.target_v = -0.015 * ((offset - 1500) // 500)
-            set_target.target_h = 0.1
-            set_target.target_c = 0.0
-        if offset >= 3500 and offset < 4000:
-            set_target.target_v = 0.0
-            set_target.target_h = 0.15
-            set_target.target_c = 0.0
-        if offset >= 4000 and offset < 4500:
-            set_target.target_v = 0.0
-            set_target.target_h = 0.18
-            set_target.target_c = 0.0
-        if offset >= 4500 and offset < 6000:
-            set_target.target_v = 0.015 * ((offset - 4000) // 500)
-            set_target.target_h = 0.1
-            set_target.target_c = 1.0
-        #
-        # set_target.target_v = min(0.01 * (offset // 400), 0.06)
-        # set_target.target_h = 0.1
-        # set_target.target_c = 0.0
 
-        if offset == 6000:
-            break
+        camera.position(0.2, 1.1, 1.1)
+        camera.lookat(0.2, 0.1, 0.1)
+        camera.up(0, 1, 0)
+        camera.track_user_inputs(window, movement_speed=0.03, hold_key=ti.ui.RMB)
+        scene.set_camera(camera)
 
+        scene.point_light(pos=(0, 1, 0), color=(.7, .7, .7))
+        scene.point_light(pos=(-1, 1, 0), color=(.7, .7, .7))
+        scene.ambient_light((0.2, 0.2, 0.2))
 
-    # Draw control signal
-    # signal_num = np.array(all_holder).shape[1]
-    # for i in range(0, 1):
-    #     plt.plot([x for x in range(offset)], np.array(all_holder)[:, i], '-x', label="control signal "+str(i))
-    # plt.legend()
-    # plt.show()
-    # print(velocity_holder)
-    # print(lower_height_holder)
-    # print(upper_height_holder)
-    plt.plot([x for x in range(len(velocity_holder))], velocity_holder, label="v", color='tab:blue')
-    plt.plot([x for x in range(len(velocity_holder))], target_v_holder, label="target v", color='tab:blue', alpha=0.5)
-    # plt.plot([x for x in range(len(velocity_holder))], lower_height_holder, label="h")
-    # plt.plot([x for x in range(len(velocity_holder))], upper_height_holder, label="c")
-    # plt.legend()
-    # plt.show()
-
-    data_dict = {"v": velocity_holder, "target_v": target_v_holder}
-    data_df = pd.DataFrame(data_dict)
-    os.makedirs(f"./stats/robot_{robot_id}/{config_name}", exist_ok=True)
-    task_name = "long"
-    data_df.to_csv(f"./stats/robot_{robot_id}/{config_name}/stats_{task_name}.csv")
-
-
+        scene.mesh(vertices, indices=indices, color=(0.2, 0.6, 0.2))
+        scene.mesh(vertices_ground, indices=indices_ground, color=(0.5, 0.5, 0.5), two_sided=True)
+        canvas.scene(scene)
+        window.show()
