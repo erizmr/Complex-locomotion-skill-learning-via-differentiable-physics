@@ -1,21 +1,20 @@
 {
   "train": {
     "name": "DiffTaichi_DiffPhy",
-    "save_dir": "./saved_results",
+    "save_dir": "/home/mingrui/difftaichi/difftaichi2/saved_results",
     "output_video_in_train": false,
     "output_video_in_validation": true,
-    "task": ["velocity", "height", "crawl"]
+    "task": ["velocity", "height"]
   },
   "validation": {
-    "velocity": [-0.08, -0.06, -0.04, 0.0, -0.02, 0.02, 0.04, 0.06, 0.08],
-    "height": [0.10, 0.15, 0.20],
-    "crawl": [0.0, 1.0]
+    "velocity": [-0.08, -0.06, -0.04, -0.02, 0.0, 0.02, 0.04, 0.06, 0.08],
+    "height": [0.10, 0.15, 0.20]
   },
   "robot": {
     "dim": 2,
-    "robot_id": 2,
+    "robot_id": 5,
     "simulator": "mass_spring",
-    "design_file": "./robot_design/robot_2.json",
+    "design_file": "./robot_design/robot_5.json",
     "control_length": 1
   },
   "process":{
@@ -46,12 +45,12 @@
     "coeff": 5
   },
   "nn": {
-    "n_models": 60,
+    "n_models": 256,
     "n_sin_waves": 10,
     "n_hidden": 64,
     "duplicate_v": 30,
     "duplicate_h": 30,
-    "duplicate_c": 30,
+    "duplicate_c": 0,
     "batch_size": 32,
     "max_reset_step": 4,
     "optimizer": "adam",
