@@ -191,7 +191,7 @@ class DiffPhyTrainer(BaseTrainer):
         self.control_length = self.taichi_env.config["robot"]["control_length"]
         # self.max_steps = self.taichi_env.config["process"]["max_steps"]
         self.loss_enable = set(self.taichi_env.task)
-        self.change_iter = 5000
+        self.change_iter = self.taichi_env.config["process"]["state_feedback_iter"] if "state_feedback_iter" in self.taichi_env.config["process"] else 5000
         self.reset_step = 2
         self.total_norm_sqr = 0.
         self.losses_list = []
@@ -216,8 +216,9 @@ class DiffPhyTrainer(BaseTrainer):
 
     @ti.kernel
     def diff_copy(self, t: ti.i32):
-        for k, i in ti.ndrange(self.taichi_env.batch_size, self.nn.n_output):
-            self.taichi_env.solver.actuation[t, k, i] = self.taichi_env.solver.actuation[t-1, k, i]
+        for model_id, k, i in ti.ndrange(self.taichi_env.n_models, self.taichi_env.batch_size, self.nn.n_output):
+            self.taichi_env.solver.actuation[model_id, t, k, i] = self.taichi_env.solver.actuation[model_id, t-1, k, i]
+
     @debug
     def simulate(self, steps,
                  output_v=None,

@@ -1,4 +1,5 @@
 import os
+import pickle as pkl
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -7,7 +8,9 @@ from functools import reduce
 from collections import defaultdict
 from tensorboard.backend.event_processing.event_accumulator import EventAccumulator
 from matplotlib.backends.backend_pdf import PdfPages
+from mpl_toolkits.axes_grid1 import AxesGrid
 
+robot_names = {2:"Alpaca", 3:"Monster", 4:"HugeStool", 5:"Stool", 6:"Snake"}
 
 def tabulate_events(dpath):
     summary_iterators = [EventAccumulator(os.path.join(dpath, dname)).Reload() for dname in os.listdir(dpath)]
@@ -123,7 +126,7 @@ def draw(df_dict, robot_id, task, save=True, normlize=False, error_bar=False):
                                 axes[cnt].fill_between(iterations[:draw_len],
                                                  df[name][:draw_len] / base_loss - df[name+'_std'][:draw_len],
                                                  df[name][:draw_len] / base_loss + df[name+'_std'][:draw_len],
-                                                 color=color, alpha=0.2)
+                                                 color=color, alpha=0.1)
                             # axes[cnt].errorbar(iterations[:draw_len], df[name][:draw_len] / base_loss,
                             #                    yerr=df[name+'_std'][:draw_len], color=color, ecolor=color,
                             #                    label=tag+" "+var+" loss", alpha=0.1)
@@ -138,11 +141,12 @@ def draw(df_dict, robot_id, task, save=True, normlize=False, error_bar=False):
 
     alpha = 1.0
     for tag, df in df_dict.items():
+        # print("nnnname", tag)
         for var, color in zip(vars, colors):
             _draw(df, tag, var, color, alpha, axes, normlize=normlize, error_bar=error_bar)
         alpha *= 0.5
 
-    fig.suptitle(f'Validation Loss - Robot {robot_id}', fontsize=20)
+    fig.suptitle(f'Validation Loss - "{robot_names[robot_id]}"', fontsize=20)
     # fig.tight_layout(pad=0.0, w_pad=2.0, h_pad=5.0)
     # plt.tight_layout()
     img_save_name = f"imgs/validation_loss_robot_{robot_id}_{list(df_dict.keys())[-1]}"
@@ -174,12 +178,15 @@ def draw_single(df_dict, robot_id, task, save=True, normlize=False, error_bar=Fa
     for k, df in df_dict.items():
         draw_len = min(len(df.index.values), draw_len)
     for k, df in df_dict.items():
+        line_style = "-"
+        if k == "PPO":
+            line_style = "--"
         iterations = df.index.values
         for i, name in enumerate(vars):
             base_loss = 1.
             if normlize:
                 base_loss = df[name].values[0]
-            ax.plot(iterations[:draw_len], df[name][:draw_len] / base_loss, color=colors[i], label=k+" "+name+" loss", alpha=alpha)
+            ax.plot(iterations[:draw_len], df[name][:draw_len] / base_loss, color=colors[i], label=k+" "+name+" loss", alpha=alpha, linestyle=line_style)
             if error_bar:
                 ax.fill_between(iterations[:draw_len],
                                        df[name][:draw_len] / base_loss - df[name + '_std'][:draw_len],
@@ -187,11 +194,13 @@ def draw_single(df_dict, robot_id, task, save=True, normlize=False, error_bar=Fa
                                        color=colors[i], alpha=0.2)
         alpha *=0.5
     if normlize:
-        ax.set_ylabel("Normlized Validation Loss")
+        ax.set_ylabel("Normlized Validation Loss", fontsize=20)
     else:
-        ax.set_ylabel("Loss")
-    ax.set_xlabel("Iterations")
-    ax.set_title(f"Validation total loss robot {robot_id}")
+        ax.set_ylabel("Loss", fontsize=20)
+    ax.set_xlabel("Training Iterations", fontsize=20)
+    ax.set_title(f'Total Validation Loss - "{robot_names[robot_id]}"', fontsize=50)
+    ax.tick_params(axis='x', labelsize=16)
+    ax.tick_params(axis='y', labelsize=16)
     plt.legend()
     img_save_name = f"imgs/validation_total_loss_robot_{robot_id}"
     if save:
@@ -237,6 +246,8 @@ def merge_df_with_error_bar(df_list, std=True):
         vals = []
         for df in df_list:
             # print(df[n].values.shape)
+            if n not in df.keys():
+                continue
             vals.append(df[n].values)
         # print(np.array(vals).shape)
         df_new[n] = np.mean(np.array(vals), axis=0)
@@ -318,7 +329,8 @@ if __name__ == '__main__':
     #     assert robot_id_our == robot_id_rl
     #     print(robot_id_our, robot_id_rl)
     robot_id = robot_id_our if robot_id_our is not None else robot_id_rl
-    print(robot_id)
+    robot_id = int(robot_id.split("_")[0])
+    print('Robot id ', robot_id)
     df_dict = None
     if args.no_rl:
         df_dict = {"Ours": df_ours}
@@ -329,7 +341,9 @@ if __name__ == '__main__':
         df_dict = {"Ours": df_ours, "PPO": df_ppo}
 
     if args.draw_single:
-        df_dict_single = {"control length 5": df_ours_single, "control length 1": df_ppo_single}
+        df_dict_single = {"Ours": df_ours_single, "PPO": df_ppo_single}
+        with open(f"./df_{robot_id}.pkl", "wb") as f:
+            pkl.dump(df_dict_single, f)
         draw_single(df_dict_single,
                     robot_id,
                     args.task,

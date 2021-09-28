@@ -61,10 +61,10 @@ def make_decision():
     holder = []
     v_sub_holder = []
     for i in range(trainer.taichi_env.solver.n_objects):
-        holder.append(round(trainer.taichi_env.solver.actuation[0, 0, i], 3))
-        v_sub_holder.append(trainer.taichi_env.v[0, 0, i][0])
-    if offset % int(control_length) == 0:
-        print(f"Frame: {offset}, control signal: {holder}")
+        holder.append(round(trainer.taichi_env.solver.actuation[0, 0, 0, i], 3))
+        v_sub_holder.append(trainer.taichi_env.solver_v[0, 0, 0, i][0])
+    # if offset % int(control_length) == 0:
+    #     print(f"Frame: {offset}, control signal: {holder}")
     all_holder.append(holder)
 
     if set_target.target_c == 1.0:
@@ -73,10 +73,10 @@ def make_decision():
         target_v_holder.append(set_target.target_v)
     # velocity_holder.append(np.mean(v_sub_holder))
 
-    center_holder.append(trainer.taichi_env.center[0, 0][0])
-    velocity_holder.append(trainer.taichi_env.center[0, 0][0] - center_holder[max(offset, 100) - 100])
-    lower_height_holder.append(trainer.taichi_env.height[0, 0])
-    upper_height_holder.append(trainer.taichi_env.upper_height[0, 0])
+    center_holder.append(trainer.taichi_env.solver_center[0, 0, 0][0])
+    velocity_holder.append(trainer.taichi_env.solver_center[0, 0, 0][0] - center_holder[max(offset, 100) - 100])
+    lower_height_holder.append(trainer.taichi_env.solver_height[0, 0, 0])
+    upper_height_holder.append(trainer.taichi_env.solver_upper_height[0, 0, 0])
 
 def forward_mass_spring():
     trainer.taichi_env.solver.apply_spring_force(0)
@@ -86,12 +86,12 @@ def forward_mass_spring():
 @ti.kernel
 def refresh_xv():
     for i in range(trainer.taichi_env.n_objects):
-        trainer.taichi_env.x[0, 0, i] = trainer.taichi_env.x[1, 0, i]
-        trainer.taichi_env.v[0, 0, i] = trainer.taichi_env.v[1, 0, i]
+        trainer.taichi_env.solver_x[0, 0, 0, i] = trainer.taichi_env.solver_x[0, 1, 0, i]
+        trainer.taichi_env.solver_v[0, 0, 0, i] = trainer.taichi_env.solver_v[0, 1, 0, i]
 
 # TODO: clean up
 gui = ti.GUI(background_color=0xFFFFFF)
-def visualizer():
+def visualizer(output=False):
     gui.clear()
     gui.line((0, trainer.taichi_env.ground_height), (1, trainer.taichi_env.ground_height),
              color=0x000022,
@@ -100,8 +100,10 @@ def visualizer():
     gui.text(f"Control length: {control_length}", (0.05, 0.85), color=0x000022, font_size=20)
     gui.text(f"Targets v: {set_target.target_v:.2f}, h: {set_target.target_h:.2f}, c: {set_target.target_c:.2f}", (0.05, 0.80), color=0x000022, font_size=20)
     trainer.taichi_env.solver.draw_robot(gui=gui, batch_rank=1, t=1, target_v=trainer.taichi_env.target_v)
-    gui.show('video/interactive/robot_{}/{}/{:04d}.png'.format(robot_id, config_name, visualizer.frame))
-    # gui.show()
+    if output:
+        gui.show('video/interactive/robot_{}/{}/{:04d}.png'.format(robot_id, config_name, visualizer.frame))
+    else:
+        gui.show()
     visualizer.frame += 1
 visualizer.frame = 0
 
@@ -129,8 +131,10 @@ if __name__ == "__main__":
     trainer.nn.load_weights(os.path.join(model_path, "weight.pkl"))
     # trainer.nn.load_weights(os.path.join(model_path, "best.pkl"))
 
-    print(trainer.taichi_env.x.to_numpy()[0, :, :])
+    print(trainer.taichi_env.solver_x.to_numpy()[0, :, :])
     visualizer()
+
+    default_control_sequence = False
     while gui.running:
         for i in range(6):
             set_target()
@@ -139,41 +143,39 @@ if __name__ == "__main__":
             refresh_xv()
             offset += 1
         visualizer()
-        if offset < 100:
-            set_target.target_v = 0.0
-            set_target.target_h = 0.1
-            set_target.target_c = 0.0
-        if offset > 100 and offset <= 500:
-            set_target.target_v = 0.01
-            set_target.target_h = 0.1
-            set_target.target_c = 0.0
-        if offset > 500 and offset < 2000:
-            set_target.target_v = 0.015 * (offset // 500)
-            set_target.target_h = 0.1
-            set_target.target_c = 0.0
-        if offset >= 2000 and offset < 3500:
-            set_target.target_v = -0.015 * ((offset - 1500) // 500)
-            set_target.target_h = 0.1
-            set_target.target_c = 0.0
-        if offset >= 3500 and offset < 4000:
-            set_target.target_v = 0.0
-            set_target.target_h = 0.15
-            set_target.target_c = 0.0
-        if offset >= 4000 and offset < 4500:
-            set_target.target_v = 0.0
-            set_target.target_h = 0.18
-            set_target.target_c = 0.0
-        if offset >= 4500 and offset < 6000:
-            set_target.target_v = 0.015 * ((offset - 4000) // 500)
-            set_target.target_h = 0.1
-            set_target.target_c = 1.0
-        #
-        # set_target.target_v = min(0.01 * (offset // 400), 0.06)
-        # set_target.target_h = 0.1
-        # set_target.target_c = 0.0
 
-        if offset == 6000:
-            break
+        if default_control_sequence:
+            if offset < 100:
+                set_target.target_v = 0.0
+                set_target.target_h = 0.1
+                set_target.target_c = 0.0
+            if offset > 100 and offset <= 500:
+                set_target.target_v = 0.01
+                set_target.target_h = 0.1
+                set_target.target_c = 0.0
+            if offset > 500 and offset < 2000:
+                set_target.target_v = 0.015 * (offset // 500)
+                set_target.target_h = 0.1
+                set_target.target_c = 0.0
+            if offset >= 2000 and offset < 3500:
+                set_target.target_v = -0.015 * ((offset - 1500) // 500)
+                set_target.target_h = 0.1
+                set_target.target_c = 0.0
+            if offset >= 3500 and offset < 4000:
+                set_target.target_v = 0.0
+                set_target.target_h = 0.15
+                set_target.target_c = 0.0
+            if offset >= 4000 and offset < 4500:
+                set_target.target_v = 0.0
+                set_target.target_h = 0.18
+                set_target.target_c = 0.0
+            if offset >= 4500 and offset < 6000:
+                set_target.target_v = 0.015 * ((offset - 4000) // 500)
+                set_target.target_h = 0.1
+                set_target.target_c = 1.0
+
+            if offset == 6000:
+                break
 
 
     # Draw control signal

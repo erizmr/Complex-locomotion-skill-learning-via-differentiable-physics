@@ -25,7 +25,7 @@ def get_args():
         default='',
         help='the folder to validate')
     parser.add_argument(
-        '--no-tensorboard',
+        '--no-tensorboard-train',
         action='store_true',
         help='disable tensorboard')
     parser.add_argument(

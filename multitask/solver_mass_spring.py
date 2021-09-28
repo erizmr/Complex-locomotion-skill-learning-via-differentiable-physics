@@ -110,7 +110,7 @@ class SolverMassSpring:
 
     @ti.kernel
     def pass_actuation(self, t: ti.i32, k: ti.i32, i: ti.i32, act: real):
-            self.actuation[t, k, i] = max(min(act, 1), -1)
+            self.actuation[0, t, k, i] = max(min(act, 1), -1)
 
     @ti.kernel
     def pass_actuation_fast(self, t: ti.i32, act_spring: ti.ext_arr(), action: ti.ext_arr()):
@@ -209,9 +209,9 @@ class SolverMassSpring:
         for i in range(self.n_objects):
             color = (0.06640625, 0.06640625, 0.06640625)
             circle(self.x[self.default_model_id, t, batch_rank, i][0], self.x[self.default_model_id, t, batch_rank, i][1], color)
-        if target_v[t, batch_rank][0] > 0:
-            circle(0.5, 0.5, (1, 0, 0))
-            circle(0.6, 0.5, (1, 0, 0))
-        else:
-            circle(0.5, 0.5, (0, 0, 1))
-            circle(0.4, 0.5, (0, 0, 1))
+        # if target_v[t, batch_rank][0] > 0:
+        #     circle(0.5, 0.5, (1, 0, 0))
+        #     circle(0.6, 0.5, (1, 0, 0))
+        # else:
+        #     circle(0.5, 0.5, (0, 0, 1))
+        #     circle(0.4, 0.5, (0, 0, 1))
