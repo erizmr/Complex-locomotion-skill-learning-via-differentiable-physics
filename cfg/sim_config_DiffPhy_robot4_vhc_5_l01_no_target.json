@@ -13,10 +13,10 @@
   },
   "robot": {
     "dim": 2,
-    "robot_id": 2,
+    "robot_id": 4,
     "simulator": "mass_spring",
-    "design_file": "./robot_design/robot_2.json",
-    "control_length": 10
+    "design_file": "./robot_design/robot_4.json",
+    "control_length": 1
   },
   "process":{
     "max_steps": 1000,
@@ -49,9 +49,9 @@
     "n_models": 10,
     "n_sin_waves": 10,
     "n_hidden": 64,
-    "duplicate_v": 30,
-    "duplicate_h": 30,
-    "duplicate_c": 30,
+    "duplicate_v": 0,
+    "duplicate_h": 0,
+    "duplicate_c": 0,
     "batch_size": 32,
     "max_reset_step": 4,
     "optimizer": "adam",

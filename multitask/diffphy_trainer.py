@@ -100,6 +100,7 @@ debug = Debug(False)
 class LegacyIO(HookBase):
     def __init__(self):
         super(LegacyIO, self).__init__()
+        self.training_loss_path = ""
         self.plot_path = ""
         self.plot200_path = ""
 
@@ -121,7 +122,7 @@ class LegacyIO(HookBase):
             plot200_name = "{}_training_curve_last_200.png".format(prefix)
         self.plot_path = os.path.join(plot_dir, plot_name)
         self.plot200_path = os.path.join(plot_dir, plot200_name)
-
+        self.training_loss_path = os.path.join(plot_dir, "training_loss.txt")
         self.trainer.taichi_env.setup_robot()
 
         if self.trainer.load_path is not None and os.path.exists(self.trainer.load_path):
@@ -152,6 +153,8 @@ class LegacyIO(HookBase):
         if self.trainer.iter % 100 == 0 or self.trainer.iter % 10 == 0 and self.trainer.iter < 500:
             plot_curve(self.trainer.losses_list, self.plot_path)
             plot_curve(self.trainer.losses_list[-200:], self.plot200_path)
+            with open(self.training_loss_path, "w") as f:
+                f.write(self.trainer.losses_list)
 
         def print_logs(file=None):
             if self.trainer.iter > self.trainer.change_iter:
