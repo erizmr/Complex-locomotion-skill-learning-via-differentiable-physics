@@ -14,7 +14,7 @@ from multitask.solver_mpm import SolverMPM
 debug = Debug(False)
 # ti_random_seed = int(time.time() * 1e6) % 10000
 ti_random_seed = 930
-ti.init(arch=ti.gpu, default_fp=real, random_seed=ti_random_seed)
+ti.init(arch=ti.gpu, default_fp=real, random_seed=ti_random_seed, packed = True)
 
 
 # Manage all shared parameters and taichi fields

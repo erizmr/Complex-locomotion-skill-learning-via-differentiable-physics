@@ -1,3 +1,4 @@
+from numpy.core.shape_base import stack
 import seaborn as sns
 import pickle as pkl
 import matplotlib.pyplot as plt
@@ -36,7 +37,7 @@ def reshape_weight(weight_vec, shape_list):
 
 robot_id = 2
 # folder_path = f"./saved_results/sim_config_DiffPhy_robot{robot_id}_vha/DiffTaichi_DiffPhy/*/"
-folder_path = f"./saved_results/sim_config_DiffPhy_robot5_vh/DiffTaichi_DiffPhy/*/"
+folder_path = f"./saved_results/sim_config_DiffPhy_robot3_vh/DiffTaichi_DiffPhy/*/"
 # folder_path = f"./saved_results/sim_config_DiffPhy_robot{robot_id}_vhc_5_l01_sgd/DiffTaichi_DiffPhy/*/"
 # folder_path = f"./saved_results/sim_config_DiffPhy_robot{robot_id}_vh/DiffTaichi_DiffPhy/*/"
 # folder_path = f"./saved_results/sim_config_DiffPhy_robot{robot_id}_vhc_5_l01_batch_1/DiffTaichi_DiffPhy/*/"
@@ -67,7 +68,7 @@ stacked_weights = np.stack(flatten_weight_list, axis=0)
 start_point = stacked_weights[0]
 end_point = stacked_weights[-1]
 stacked_weights = stacked_weights.copy()
-optimal_from_start = end_point - start_point
+optimal_from_start = stacked_weights[-1] - stacked_weights[0]
 print("Optimal from start", optimal_from_start.shape)
 
 # weight_val_list = np.sum(stacked_weights, axis=1)
@@ -83,62 +84,57 @@ for i in range(stacked_weights.shape[0]):
     dx[i] = np.dot(stacked_weights[i], unit)
     stacked_weights[i] = stacked_weights[i] - np.dot(stacked_weights[i], unit) * unit
 
-assert (np.linalg.norm(stacked_weights[0] - stacked_weights[-1])) < 1e-6
+# assert (np.linalg.norm(stacked_weights[0] - stacked_weights[-1])) < 1e-6
 
-print("norm", np.linalg.norm(optimal_from_start))
-means = np.mean(stacked_weights, axis=0)
-print("mean ", means.shape)
 
-# Do normlize
-stacked_weights -= means
-pca_pipeline = make_pipeline(PCA(n_components=2))
+v2 = stacked_weights[100] - stacked_weights[0]
+print("Optimal from start", v2.shape)
 
-pca_pipeline.fit(stacked_weights)
-pca = pca_pipeline.named_steps['pca']
+unit2 = v2 / np.linalg.norm(v2)
+assert (np.linalg.norm(unit2) - 1.0) < 1e-6
 
-X = pca.transform(stacked_weights)
-weights_optimal_normlized = stacked_weights[-1]
-print("weight optimal shape", weights_optimal_normlized.shape)
+dy = np.zeros([stacked_weights.shape[0]])
 
-eigenvalues = pca.explained_variance_
-print(f"eigenvalues: {eigenvalues}, explained variance ratio: {pca.explained_variance_ratio_}")
-# vec_x, vec_y = pca.components_  # Get eigenvector
-vec_y, _ = pca.components_  # Get eigenvector
-print(pca.components_.shape)
+for i in range(stacked_weights.shape[0]):
+    dy[i] = np.dot(stacked_weights[i], unit2)
+
+
 
 one_way_sample_points = 50
 os.makedirs("validate_heatmap_weights", exist_ok=True)
 weights = []
 
 vec_x = optimal_from_start
+vec_y = v2
 
 vec_x = vec_x / np.linalg.norm(vec_x)
 vec_y = vec_y / np.linalg.norm(vec_y)
 print("Eigen vectors norm", np.linalg.norm(vec_x), np.linalg.norm(vec_y))
 
 step_x = np.linalg.norm(optimal_from_start)
-step_y = step_x# max(np.abs(X[:, 0]))
+step_y = np.linalg.norm(v2)
 
 print(f"step x : {step_x}, step y: {step_y}")
+step_x = max(step_x, step_y) * 2
+step_y = step_x
 
 minval_start, minval_end = 1e+15, 1e+15
 
 for i in range(-one_way_sample_points, one_way_sample_points + 1):
     for j in range(-one_way_sample_points, one_way_sample_points + 1):
-        new_weights_vec = end_point + (i * vec_x * step_x + j * vec_y * step_y) / one_way_sample_points
+        new_weights_vec = start_point + (i * vec_x * step_x + j * vec_y * step_y) / one_way_sample_points
         minval_end = min(minval_end, np.linalg.norm(new_weights_vec - end_point))
         if abs(np.linalg.norm(new_weights_vec - start_point)) < 1e-5:
             print("{} {}: {}".format(i, j, np.linalg.norm(new_weights_vec - start_point)))
         minval_start = min(minval_start, np.linalg.norm(new_weights_vec - start_point))
         weight = reshape_weight(new_weights_vec, shape_list)
         weights.append(weight)
+
 pkl.dump(weights, open(os.path.join("validate_heatmap_weights", "{}.pkl".format(stacked_model_name)), "wb"))
 print("minval: {} {}".format(minval_start, minval_end))
-# print(X.shape)
-x = X[:, 0]
-y = X[:, 1]
-steps = [x for x in range(X.shape[0])]
-plt.plot(dx, x, '.')
+
+steps = list(range(dx.shape[0]))
+plt.plot(dx, dy, '.')
 for i, txt in enumerate(steps):
-    plt.annotate(txt, (dx[i], x[i]))
+    plt.annotate(txt, (dx[i], dy[i]))
 plt.show()
