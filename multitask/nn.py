@@ -1,7 +1,6 @@
 import taichi as ti
 import pickle as pkl
 import math
-import random
 
 from multitask.utils import scalar, vec, mat
 # from config import learning_rate, adam_a, adam_b1, adam_b2, dim
@@ -61,11 +60,11 @@ class Model:
     def weights_init(self):
         q1 = math.sqrt(6 / self.n_input)
         for model_id, i, j in ti.ndrange(self.n_models, self.n_hidden, self.n_input):
-            self.weights1[model_id, i, j] = (random.random() * 2 - 1) * q1
+            self.weights1[model_id, i, j] = (ti.random() * 2 - 1) * q1
 
         q2 = math.sqrt(6 / self.n_hidden)
         for model_id, i, j in ti.ndrange(self.n_models, self.n_output, self.n_hidden):
-            self.weights2[model_id, i, j] = (random.random() * 2 - 1) * q2
+            self.weights2[model_id, i, j] = (ti.random() * 2 - 1) * q2
         '''
         for i, j in ti.ndrange(n_hidden, n_input):
             weights1[i, j] = np.random.randn() * math.sqrt(

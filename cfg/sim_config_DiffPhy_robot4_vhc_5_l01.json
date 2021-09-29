@@ -19,6 +19,7 @@
     "control_length": 1
   },
   "process":{
+    "n_models": 10,
     "max_steps": 1000,
     "vis_interval": 256,
     "output_vis_interval": 8,

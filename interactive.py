@@ -108,7 +108,7 @@ def visualizer(output=False):
 visualizer.frame = 0
 
 if __name__ == "__main__":
-    ti.init(arch=ti.gpu, default_fp=ti.f64, random_seed=555)
+    # ti.init(arch=ti.gpu, default_fp=ti.f64, random_seed=555)
     args = get_args()
     print('args', args)
     config_file = args.config_file
@@ -131,7 +131,7 @@ if __name__ == "__main__":
     trainer.nn.load_weights(os.path.join(model_path, "weight.pkl"))
     # trainer.nn.load_weights(os.path.join(model_path, "best.pkl"))
 
-    print(trainer.taichi_env.solver_x.to_numpy()[0, :, :])
+    # print(trainer.taichi_env.solver_x.to_numpy()[0, :, :])
     visualizer()
 
     default_control_sequence = False
