@@ -1,0 +1,63 @@
+{
+  "train": {
+    "name": "DiffTaichi_DiffPhy",
+    "save_dir": "./saved_results",
+    "output_video_in_train": false,
+    "output_video_in_validation": true,
+    "task": ["velocity", "height", "crawl"]
+  },
+  "validation": {
+    "velocity": [-0.08, -0.06, -0.04, 0.0, -0.02, 0.02, 0.04, 0.06, 0.08],
+    "height": [0.10, 0.15, 0.20],
+    "crawl": [0.0, 1.0]
+  },
+  "robot": {
+    "dim": 2,
+    "robot_id": 2,
+    "simulator": "mass_spring",
+    "design_file": "./robot_design/robot_2.json",
+    "control_length": 10
+  },
+  "process":{
+    "max_steps": 1000,
+    "vis_interval": 256,
+    "output_vis_interval": 8,
+    "run_period": 100,
+    "jump_period": 500,
+    "turn_period": 500,
+    "max_speed": 0.08,
+    "max_height": 0.1,
+    "dt": 0.004
+  },
+  "simulator": {
+    "mpm": {
+      "n_grid": 32
+    },
+    "ground_height": 0.1,
+    "gravity": -1.8,
+    "drag_damping": 0,
+    "dash_damping": 0.2,
+    "p_vol": 1,
+    "E": 40,
+    "mu": 40,
+    "la": 40,
+    "act_strength": 40,
+    "bound": 3,
+    "coeff": 5
+  },
+  "nn": {
+    "activation": "tanh",
+    "n_models": 10,
+    "n_sin_waves": 10,
+    "n_hidden": 64,
+    "duplicate_v": 30,
+    "duplicate_h": 30,
+    "duplicate_c": 30,
+    "batch_size": 32,
+    "max_reset_step": 4,
+    "optimizer": "adam",
+    "learning_rate": 3e-4,
+    "adam_b1": 0.90,
+    "adam_b2": 0.90
+  }
+}

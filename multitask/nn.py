@@ -78,12 +78,13 @@ class Model:
         '''
 
     def __init__(self, config, steps, batch_size, n_input, n_output, \
-                 input, output, n_models, n_hidden = 64, method = "adam"):
+                 input, output, n_models, n_hidden = 64, method = "adam", activation="sin"):
 
         self.adam_b1 = config.get_config()["nn"]["adam_b1"]
         self.adam_b2 = config.get_config()["nn"]["adam_b2"]
         self.learning_rate = config.get_config()["nn"]["learning_rate"]
         self.dim = config.get_config()["robot"]["dim"]
+        self.activation = config.get_config()["nn"]["activation"] if "activation" in config.get_config()["nn"] else activation
 
         self.n_models = n_models
         
@@ -148,15 +149,23 @@ class Model:
         else:
             for model_id, k, i, j in ti.ndrange(self.n_models, self.batch_size, self.n_hidden, self.n_input):
                 self.hidden[model_id, t, k, i] += self.weights1[model_id, i, j] * self.input[model_id, t, k, j]
-        for model_id, k, i in ti.ndrange(self.n_models, self.batch_size, self.n_hidden):
-            self.hidden_act[model_id, t, k, i] = ti.sin(self.hidden[model_id, t, k, i] + self.bias1[model_id, i])
+        if ti.static(self.activation == "sin"):
+            for model_id, k, i in ti.ndrange(self.n_models, self.batch_size, self.n_hidden):
+                self.hidden_act[model_id, t, k, i] = ti.sin(self.hidden[model_id, t, k, i] + self.bias1[model_id, i])
+        else:
+            for model_id, k, i in ti.ndrange(self.n_models, self.batch_size, self.n_hidden):
+                self.hidden_act[model_id, t, k, i] = ti.tanh(self.hidden[model_id, t, k, i] + self.bias1[model_id, i])
 
     @ti.kernel
     def nn2(self, t: ti.i32):
         for model_id, k, i, j in ti.ndrange(self.n_models, self.batch_size, self.n_output, self.n_hidden):
             self.output[model_id, t, k, i] += self.weights2[model_id, i, j] * self.hidden_act[model_id, t, k, j]
-        for model_id, k, i in ti.ndrange(self.n_models, self.batch_size, self.n_output):
-            self.output_act[model_id, t, k, i] = ti.sin(self.output[model_id, t, k, i] + self.bias2[model_id, i])
+        if ti.static(self.activation == "sin"):
+            for model_id, k, i in ti.ndrange(self.n_models, self.batch_size, self.n_output):
+                self.output_act[model_id, t, k, i] = ti.sin(self.output[model_id, t, k, i] + self.bias2[model_id, i])
+        else:
+            for model_id, k, i in ti.ndrange(self.n_models, self.batch_size, self.n_output):
+                self.output_act[model_id, t, k, i] = ti.tanh(self.output[model_id, t, k, i] + self.bias2[model_id, i])
 
     def forward(self, t):
         self.nn1(t)
