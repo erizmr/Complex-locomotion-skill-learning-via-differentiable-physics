@@ -11,6 +11,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
+ROBOT_NAMES = {2:"Alpaca", 3:"Monster", 4:"HugeStool", 5:"Stool"}
+
 offset = 0
 def set_target():
     for e in gui.get_events():
@@ -96,7 +98,7 @@ def visualizer(output=False):
     gui.line((0, trainer.taichi_env.ground_height), (1, trainer.taichi_env.ground_height),
              color=0x000022,
              radius=3)
-    gui.text(f"Robot ID: {robot_id}", (0.05, 0.9), color=0x000022, font_size=20)
+    gui.text(f"Agent Name: {ROBOT_NAMES[robot_id]}", (0.05, 0.9), color=0x000022, font_size=20)
     gui.text(f"Control length: {control_length}", (0.05, 0.85), color=0x000022, font_size=20)
     gui.text(f"Targets v: {set_target.target_v:.2f}, h: {set_target.target_h:.2f}, c: {set_target.target_c:.2f}", (0.05, 0.80), color=0x000022, font_size=20)
     trainer.taichi_env.solver.draw_robot(gui=gui, batch_rank=1, t=1, target_v=trainer.taichi_env.target_v)

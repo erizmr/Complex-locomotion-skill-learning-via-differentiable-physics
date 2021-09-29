@@ -5,7 +5,10 @@ import matplotlib.pyplot as plt
 import pandas as pd
 from matplotlib.backends.backend_pdf import PdfPages
 from mpl_toolkits.axes_grid1 import AxesGrid
+from scipy.ndimage.filters import gaussian_filter1d
+
 robot_names = {2:"Alpaca", 3:"Monster", 4:"HugeStool", 5:"Stool", 6:"Snake"}
+name_substitute = {"velocity":"running", "height":"jumping", "crawl":"crawling", "task":"task"}
 
 robot_data_dfs = []
 for i in range(2, 6):
@@ -50,12 +53,13 @@ for cnt, df_dict in enumerate(robot_data_dfs):
             base_loss = 1.
             if normlize:
                 base_loss = df[name].values[0]
-            axs[cnt].plot(iterations[:draw_len], df[name][:draw_len] / base_loss, color=colors[i], label=k + " " + name + " loss",
-                    alpha=alpha, linestyle=line_style)
+            ysmoothed = gaussian_filter1d(df[name][:draw_len] / base_loss, sigma=1.0)
+            axs[cnt].plot(iterations[:draw_len], ysmoothed, color=colors[i], label=k + " " + name_substitute[name] + " loss",
+                    alpha=alpha, linestyle=line_style, dashes=(5, 3) if line_style == "--" else (None, None))
             if error_bar:
                 axs[cnt].fill_between(iterations[:draw_len],
-                                df[name][:draw_len] / base_loss - df[name + '_std'][:draw_len],
-                                df[name][:draw_len] / base_loss + df[name + '_std'][:draw_len],
+                                ysmoothed - df[name + '_std'][:draw_len],
+                                ysmoothed + df[name + '_std'][:draw_len],
                                 color=colors[i], alpha=0.2)
         alpha *= 0.8
     if normlize:
