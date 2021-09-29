@@ -114,6 +114,7 @@ class RobotDesignMassSpring(RobotDesignBase):
         super(RobotDesignMassSpring, self).__init__(cfg)
         assert self.config["robot"]["solver"] == "mass_spring"
         self.robot_id = self.config["robot"]["id"]
+        self.robot_name = self.config["robot"]["name"]
         self.solver = self.config["robot"]["solver"]
         # design data holders
         self.objects = []
@@ -206,21 +207,28 @@ class RobotDesignMassSpring(RobotDesignBase):
     def draw(self):
         assert self.built
         import taichi as ti
-        gui = ti.GUI(background_color=0xFFFFFF)
+        default_res = 512
+        gui = ti.GUI(self.robot_name, background_color=0xFFFFFF)
 
+        scale = 2.0
+        write_to_png = False
+        compute_center_done = False
+        left_point = 1.0
+        right_point = 0.0
+        offset = 0.0
         def circle(x, y, color):
-            gui.circle((x, y), ti.rgb_to_hex(color), 7)
+            gui.circle((x * scale + offset, y * scale), ti.rgb_to_hex(color), 7 * scale )
         while gui.running:
             # draw segments
             for i in range(len(self.springs)):
                 def get_pt(x):
-                    return x[0], x[1]
-                r = 2
+                    return x[0] * scale + offset, x[1] * scale
+                r = 2 * scale * 0.85
                 c = 0x222222
                 # Show active spring in red
-                a = self.springs[i][4] * 1.8
+                a = self.springs[i][4] * 1.2
                 if a > 0.:
-                    r = 4
+                    r = 4 * scale * 0.85
                     c = ti.rgb_to_hex((0.5 + a, 0.5 - abs(a), 0.5 - a))
                 gui.line(get_pt(self.objects[self.springs[i][0]]),
                          get_pt(self.objects[self.springs[i][1]]),
@@ -230,7 +238,20 @@ class RobotDesignMassSpring(RobotDesignBase):
             for i in range(len(self.objects)):
                 color = (0.06640625, 0.06640625, 0.06640625)
                 circle(self.objects[i][0], self.objects[i][1], color)
-            gui.show()
+                if not compute_center_done:
+                    x_val = self.objects[i][0] * scale
+                    if x_val < left_point:
+                        left_point = x_val
+                    if x_val > right_point:
+                        right_point = x_val
+            if not compute_center_done:
+                offset = 0.5 - (left_point + right_point) / 2
+            compute_center_done = True
+            if not write_to_png:
+                gui.show(f"./robot_design_data/{self.robot_id}_{self.robot_name}.png")
+                write_to_png = True
+            else:
+                gui.show()
 
     def add_object(self, x):
         self.objects.append(x)
