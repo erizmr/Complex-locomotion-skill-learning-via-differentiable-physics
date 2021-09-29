@@ -404,7 +404,8 @@ class DiffPhyTrainer(BaseTrainer):
         print(f"Model nums: {model_nums}")
 
         checkponiter_cnt = 0
-        model_load_num = self.taichi_env.config["nn"]["n_models"]
+        model_load_num = self.taichi_env.config["nn"]["n_models"] if "n_models" in self.taichi_env.config["nn"] else 1
+        print(f"Model load num: {model_load_num}")
         tensorboard_buffer = {}
         for current_model_index in range(0, model_nums, model_load_num):
             current_iters = []
