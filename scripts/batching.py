@@ -26,7 +26,8 @@ for k, ps in path_dict.items():
         ret = ret.groupby(['Unnamed: 0']).mean()
         data_dict[k].append(ret)
 
-# print(data_dict)
+normalize = True
+
 # if normlize:
 #     base_loss = df[name][0]
 # else:
@@ -34,13 +35,14 @@ for k, ps in path_dict.items():
 
 for k, vals in data_dict.items():
     X = [int(x) for x in vals[0].columns]
-    combined = np.array([v.loc["task"] for v in vals])
+    combined = np.array([v.loc["velocity"] for v in vals])
     mean = combined.mean(axis=0)
     std = combined.std(axis=0)
-    plt.plot(X, mean, label=f"Batch size {k}")
-    plt.fill_between(X, mean-std, mean+std, alpha=0.2)
-plt.xlabel("Iteartion")
-plt.ylabel("Validation Loss")
+    base_loss = max(mean)
+    plt.plot(X, mean / base_loss, label=f"Batch size {k}")
+    plt.fill_between(X, mean / base_loss-std, mean / base_loss + std, alpha=0.2)
+plt.xlabel("Iteartions")
+plt.ylabel("Normlized Validation Loss")
 plt.title("Batch Size Ablation")
 plt.legend()
 plt.show()

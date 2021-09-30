@@ -45,6 +45,7 @@
     "coeff": 5
   },
   "nn": {
+    "n_models": 8,
     "n_sin_waves": 10,
     "n_hidden": 64,
     "duplicate_v": 30,

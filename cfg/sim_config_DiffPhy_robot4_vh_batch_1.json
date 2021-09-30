@@ -45,12 +45,13 @@
     "coeff": 5
   },
   "nn": {
+    "n_models": 1,
     "n_sin_waves": 10,
     "n_hidden": 64,
     "duplicate_v": 30,
     "duplicate_h": 30,
     "duplicate_c": 0,
-    "batch_size": 32,
+    "batch_size": 1,
     "max_reset_step": 4,
     "optimizer": "adam",
     "learning_rate": 3e-4,
