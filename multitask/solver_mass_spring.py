@@ -126,7 +126,19 @@ class SolverMassSpring:
             new_v = old_v
             if new_x[1] < self.ground_height and old_v[1] < -1e-4:
                 toi = float(-(old_x[1] - self.ground_height) / old_v[1])
+                # Inf friction
                 new_v = ti.Matrix.zero(real, self.dim, 1)
+                # Reasonable friction
+                new_v[1] = 0
+                friction = .4
+                if old_v[0] < 0:
+                    new_v[0] = ti.min(0., old_v[0] + friction * (-old_v[1]))
+                else:
+                    new_v[0] = ti.max(0., old_v[0] - friction * (-old_v[1]))
+                if old_v[2] < 0:
+                    new_v[2] = ti.min(0., old_v[2] + friction * (-old_v[1]))
+                else:
+                    new_v[2] = ti.max(0., old_v[2] - friction * (-old_v[1]))
             new_x = old_x + toi * old_v + (self.dt - toi) * new_v
 
             self.v[t, k, i] = new_v
