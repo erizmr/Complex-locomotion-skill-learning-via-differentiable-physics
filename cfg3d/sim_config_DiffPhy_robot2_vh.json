@@ -14,8 +14,15 @@
     "dim": 3,
     "robot_id": 100,
     "simulator": "mass_spring",
-    "design_file": "./robot_design/robot_100.json",
-    "control_length": 1
+    "design_file": "./cfg3d/sim_config_DiffPhy_robot2_vh.json",
+    "control_length": 1,
+
+    "name": "ljcc",
+    "id": 100,
+    "spring_stiffness": 1e4,
+    "spring_actuation": 0.25,
+    "solver": "mass_spring"
+
   },
   "process":{
     "max_steps": 1000,
