@@ -379,8 +379,15 @@ class DiffPhyTrainer(BaseTrainer):
                 s_base += f"_{name}_{element[i]}"
             suffix.append(s_base)
 
-        for model_path in model_paths[::10]:
-            current_iter = int(model_path.split('.pkl')[0].split('iter')[1])
+        best_paths = glob.glob(os.path.join(load_path, "models/best.pkl"))
+        last_paths = glob.glob(os.path.join(load_path, "models/last.pkl"))
+        for model_path in best_paths + last_paths + model_paths[::10]:
+            if model_path[-8:] == "best.pkl":
+                current_iter = -1
+            elif model_path[-8:] == "last.pkl":
+                current_iter = -2
+            else:
+                current_iter = int(model_path.split('.pkl')[0].split('iter')[1])
             sub_video_paths = []
             for k in range(self.taichi_env.batch_size):
                 # Make sub folder for each validation case
