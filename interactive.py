@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-ROBOT_NAMES = {2:"Alpaca", 3:"Monster", 4:"HugeStool", 5:"Stool"}
+ROBOT_NAMES = {2:"Alpaca", 3:"Monster", 4:"HugeStool", 5:"Stool", 7:"Stool-A"}
 
 offset = 0
 def set_target():
