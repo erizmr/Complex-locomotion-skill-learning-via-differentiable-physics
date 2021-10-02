@@ -128,11 +128,6 @@ class ConfigSim:
         self._config["simulator"]["mpm"][
             "inv_dx"] = 1 / self._config["simulator"]["mpm"]["dx"]
 
-        # NN
-        if self._config["robot"]["dim"] == 3:
-            self._config["nn"]["duplicate_v"] = 1
-            self._config["nn"]["duplicate_h"] = 0
-
         n_sin_waves = self._config["nn"]["n_sin_waves"]
         dim = self._config["robot"]["dim"]
         n_objects = self._config["robot"]["n_objects"]
