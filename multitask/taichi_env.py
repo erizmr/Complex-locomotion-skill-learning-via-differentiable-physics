@@ -176,8 +176,7 @@ class TaichiEnv:
         if ti.static(self.duplicate_h > 0):
             for k, j in ti.ndrange(self.batch_size, self.duplicate_h):
                 self.input_state[t, k, self.n_objects * self.dim * 2 + self.n_sin_waves + self.duplicate_v * (
-                            self.dim - 1) + j] = (self.target_h[
-                                                      t, k] - 0.1) / max_height * 2 - 1
+                            self.dim - 1) + j] = self.target_h[t, k]
 
         if ti.static(self.duplicate_c > 0):
             for k, j in ti.ndrange(self.batch_size, self.duplicate_c):
@@ -194,6 +193,13 @@ class TaichiEnv:
                     self.loss_velocity[None] += loss_x
                     self.loss_velocity_batch[k] += loss_x * self.batch_size
                 else:
+                    # o_x = self.target_v[t - self.run_period, k](0)
+                    # o_y = self.target_v[t - self.run_period, k](2)
+                    # target_x = ti.cos(self.rotation[t, k]) * o_x - ti.sin(self.rotation[t, k]) * o_y
+                    # target_y = ti.sin(self.rotation[t, k]) * o_x + ti.cos(self.rotation[t, k]) * o_y
+                    # loss_x = (self.center[t, k](0) - self.center[t - self.run_period, k](0) - target_x) ** 2 / self.batch_size / steps * 100
+                    # loss_y = (self.center[t, k](2) - self.center[t - self.run_period, k](2) - target_y) ** 2 / self.batch_size / steps * 100
+
                     loss_x = (self.center[t, k](0) - self.center[t - self.run_period, k](0) - self.target_v[
                         t - self.run_period, k](0)) ** 2 / self.batch_size / steps * 100
                     loss_y = (self.center[t, k](2) - self.center[t - self.run_period, k](2) - self.target_v[
@@ -228,11 +234,44 @@ class TaichiEnv:
 
     @ti.kernel
     def compute_loss_rotation(self, steps: ti.template()):
-        for t, k in ti.ndrange((1, steps + 1), self.batch_size):
-            if t % self.run_period == 0:
-                loss_r = self.rotation[t, k] ** 2 / self.batch_size / 500
+        # for t, k in ti.ndrange((1, steps + 1), self.batch_size):
+        #     if t % self.turn_period > self.run_period:  # and target_h[t - run_period, k] < 0.1 + 1e-4:
+        #         # loss_r = self.rotation[t, k] ** 2 / self.batch_size / 500
+        #         loss_r = (self.rotation[t, k] - self.rotation[t - self.run_period, k]).norm_sqr() / steps
+        #         self.loss_rotation[None] += loss_r
+        #         self.loss_rotation_batch[k] += loss_r * self.batch_size
+
+        for t, k, i in ti.ndrange((1, steps + 1), self.batch_size, self.n_objects):
+            if t % self.turn_period > self.run_period:
+                temp0 = self.x[t, k, i] - self.center[t, k]
+                temp1 = self.x[t - self.run_period, k, i] - self.center[t - self.run_period, k]
+                angle = self.target_h[t - self.run_period, k] * 72. / 180. * 3.1415926535
+                temp2 = ti.Vector([ti.cos(angle) * temp1[0] - ti.sin(angle) * temp1[2], temp1[1], ti.sin(angle) * temp1[0] + ti.cos(angle) * temp1[2]])
+                loss_r = (temp0 - temp2).norm_sqr() / steps / 40
                 self.loss_rotation[None] += loss_r
                 self.loss_rotation_batch[k] += loss_r * self.batch_size
+
+        # for t, k, i in ti.ndrange((1, steps + 1), self.batch_size, self.n_objects):
+        #     temp0 = self.x[t, k, i] - self.center[t, k]
+        #     temp1 = self.x[0, k, i] - self.center[0, k]
+        #     angle = self.target_h[t, k] * 72. / 180. * 3.1415926535 * ti.cast(t, real) / self.run_period
+        #     temp2 = ti.Vector([ti.cos(angle) * temp1[0] - ti.sin(angle) * temp1[2], temp1[1], ti.sin(angle) * temp1[0] + ti.cos(angle) * temp1[2]])
+        #     len0 = (temp0[0] * temp0[0] + temp0[2] * temp0[2]) ** 0.5
+        #     len2 = (temp2[0] * temp2[0] + temp2[2] * temp2[2]) ** 0.5
+        #     loss_r = ((temp0[0] * temp2[2] - temp0[2] * temp2[0]) / len0 / len2) ** 2 / steps / 3000
+        #     self.loss_rotation[None] += loss_r
+        #     self.loss_rotation_batch[k] += loss_r * self.batch_size
+
+        # for t, k in ti.ndrange((1, steps + 1), self.batch_size):
+        #     if t % self.turn_period > self.run_period:
+        #         a = (self.rotation[t, k] - self.rotation[t - self.run_period, k] - self.target_h[t - self.run_period, k] * 72 / 180 * 3.1415926) ** 2
+        #         b = (self.rotation[t, k] - self.rotation[t - self.run_period, k] - self.target_h[t - self.run_period, k] * 72 / 180 * 3.1415926 - 3.1415926 * 2) ** 2
+        #         c = (self.rotation[t, k] - self.rotation[t - self.run_period, k] - self.target_h[t - self.run_period, k] * 72 / 180 * 3.1415926 + 3.1415926 * 2) ** 2
+        #         d = (self.rotation[t, k] - self.rotation[t - self.run_period, k] - self.target_h[t - self.run_period, k] * 72 / 180 * 3.1415926 - 3.1415926 * 4) ** 2
+        #         e = (self.rotation[t, k] - self.rotation[t - self.run_period, k] - self.target_h[t - self.run_period, k] * 72 / 180 * 3.1415926 + 3.1415926 * 4) ** 2
+        #         loss_r = ti.min(ti.min(a, ti.min(b, c)), ti.min(d, e)) / 100000.
+        #         self.loss_rotation[None] += loss_r
+        #         self.loss_rotation_batch[k] += loss_r * self.batch_size
 
     @ti.kernel
     def compute_loss_actuation(self, steps: ti.template()):
@@ -305,16 +344,27 @@ class TaichiEnv:
             if t < 1000:
                 self.target_v[t, k][0] = x0
                 self.target_v[t, k][2] = y0
+                self.target_h[t, k] = 0.
             elif t < 2000:
                 self.target_v[t, k][0] = x1
                 self.target_v[t, k][2] = y1
+                self.target_h[t, k] = 0.
             elif t < 3000:
                 self.target_v[t, k][0] = x2
                 self.target_v[t, k][2] = y2
+                self.target_h[t, k] = 0.
             elif t < 4000:
                 self.target_v[t, k][0] = x3
                 self.target_v[t, k][2] = y3
-            self.target_h[t, k] = 0.
+                self.target_h[t, k] = 0.
+            elif t < 5000:
+                self.target_v[t, k][0] = 0.
+                self.target_v[t, k][2] = 0.
+                self.target_h[t, k] = -1.
+            else:
+                self.target_v[t, k][0] = 0.
+                self.target_v[t, k][2] = 0.
+                self.target_h[t, k] = 1.
 
     @ti.kernel
     def initialize_validate(self, steps: ti.template(), output_v: ti.ext_arr(), output_h: ti.ext_arr(), output_c: ti.ext_arr()):
@@ -366,14 +416,26 @@ class TaichiEnv:
                     self.target_h[t, k] = 0.1
                     self.target_c[t, k] = 0
             else:
-                r = ti.sqrt(self.pool[q + 1])
-                angle = self.pool[q + 2] * 2 * 3.1415926
-                r = 1.
-                angle = 0.
-                r = self.pool[q + 1] * 2. - 1.
-                self.target_v[t, k][0] = r * ti.cos(angle) * max_velocity
-                self.target_v[t, k][2] = r * ti.sin(angle) * max_velocity
-                self.target_h[t, k] = 0.1
+                if self.pool[q] < 0.25:
+                    self.target_v[t, k][0] = 0.
+                    self.target_v[t, k][1] = 0.
+                    self.target_v[t, k][2] = 0.
+                    self.target_h[t, k] = -1
+                elif self.pool[q] < 0.5:
+                    self.target_v[t, k][0] = 0.
+                    self.target_v[t, k][1] = 0.
+                    self.target_v[t, k][2] = 0.
+                    self.target_h[t, k] = 1.
+                elif self.pool[q] < 0.75:
+                    r = self.pool[q + 1] * 2. - 1.
+                    self.target_v[t, k][0] = 0.
+                    self.target_v[t, k][2] = r * max_velocity
+                    self.target_h[t, k] = 0.
+                else:
+                    r = self.pool[q + 1] * 2. - 1.
+                    self.target_v[t, k][0] = r * max_velocity
+                    self.target_v[t, k][2] = 0.
+                    self.target_h[t, k] = 0.
 
     @debug
     def visualizer(self, steps, prefix):

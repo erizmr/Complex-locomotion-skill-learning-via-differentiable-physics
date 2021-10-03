@@ -4,7 +4,7 @@
     "save_dir": "./saved_results",
     "output_video_in_train": false,
     "output_video_in_validation": true,
-    "task": ["velocity"]
+    "task": ["velocity", "rotation"]
   },
   "validation": {
     "velocity": [999999999.0],
@@ -26,7 +26,7 @@
   },
   "process":{
     "max_steps": 1000,
-    "evaluate_max_steps": 4000,
+    "evaluate_max_steps": 6000,
     "vis_interval": 256,
     "output_vis_interval": 8,
     "run_period": 100,
@@ -55,8 +55,8 @@
   "nn": {
     "n_sin_waves": 100,
     "n_hidden": 64,
-    "duplicate_v": 1,
-    "duplicate_h": 0,
+    "duplicate_v": 150,
+    "duplicate_h": 150,
     "duplicate_c": 0,
     "batch_size": 32,
     "max_reset_step": 4,

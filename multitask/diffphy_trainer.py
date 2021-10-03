@@ -237,7 +237,7 @@ class DiffPhyTrainer(BaseTrainer):
                 output_c = np.zeros(self.taichi_env.batch_size)
             self.taichi_env.initialize_validate(steps, output_v, output_h, output_c)
         elif not train and self.taichi_env.dim == 3:
-            self.taichi_env.initialize_script(steps, -max_speed, 0, max_speed, 0, -max_speed, 0, max_speed, 0)
+            self.taichi_env.initialize_script(steps, -max_speed, 0, 0, max_speed, max_speed, 0, 0, -max_speed)
         self.taichi_env.loss[None] = 0.
         for l in self.taichi_env.losses:
             l[None] = 0.
