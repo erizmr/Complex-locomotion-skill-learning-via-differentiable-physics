@@ -2,6 +2,7 @@ from util import read_json, write_json
 from multitask.config_util import dump_to_json
 
 import numpy as np
+import json
 
 
 class RobotDesignBase:
@@ -441,9 +442,49 @@ class RobotDesignMassSpring3D(RobotDesignBase):
         self.add_mesh_square(2, 1, 1, actuation=0)
         self.add_mesh_square(2, 1, 2, actuation=0)
 
+    def robotD(self):
+        with open('cfg3d/skeleton.json') as json_file:
+            data = json.load(json_file)
+        for v in data['nodes']:
+            pos = data['nodes'][v]
+            pos[0] = pos[0] * 0.05
+            pos[1] = pos[1] * 0.05 + 0.212
+            pos[2] = pos[2] * 0.05 * 0.75
+            self.objects.append(pos)
+
+        motors = {(9, 21), (36, 24), (29, 26), (14, 11),
+            (14, 26), (10, 9), (29, 11), (25, 24), (25, 26), (36, 9), (21, 24), (10, 11)}
+
+        s = set()
+        for e in data['links']:
+            a, b = e
+            s.add((a, b))
+            s.add((b, a))
+            if (a, b) in motors or (b, a) in motors:
+                self.add_mesh_spring(a, b, self.spring_stiffness, self.spring_actuation)
+            else:
+                self.add_mesh_spring(a, b, self.spring_stiffness, 0.)
+
+        for e in list(motors) + [(14, 29), (29, 36), (36, 21), (21, 14), (11, 5), (26, 5), (24, 35), (9, 20), (26, 35), (11, 20), (9, 8), (24, 8), (11, 31), (26, 16), (24, 23), (9, 38)]:
+            a, b = e
+            if (a, b) in motors or (b, a) in motors:
+                self.add_mesh_spring(a, b, self.spring_stiffness, self.spring_actuation)
+            else:
+                self.add_mesh_spring(a, b, self.spring_stiffness, 0.)
+
+        for a in range(len(self.objects)):
+            for b in range(len(self.objects)):
+                for c in range(len(self.objects)):
+                    if a < b < c and (a, b) in s and (b, c) in s and (a, c) in s:
+                        self.faces.append((a, b, c))
+        return self.objects, self.springs, self.faces
+
+
     def build(self):
         if self.robot_id == 100:
             self.robotA()
+        elif self.robot_id == 103:
+            self.robotD()
         else:
             print("Invalid robot id ", self.robot_id)
             assert False

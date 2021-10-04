@@ -365,6 +365,14 @@ class TaichiEnv:
                 self.target_v[t, k][0] = 0.
                 self.target_v[t, k][2] = 0.
                 self.target_h[t, k] = 1.
+            # if t < 3000:
+            #     self.target_v[t, k][0] = 0
+            #     self.target_v[t, k][2] = 0
+            #     self.target_h[t, k] = -1
+            # else:
+            #     self.target_v[t, k][0] = 0
+            #     self.target_v[t, k][2] = 0
+            #     self.target_h[t, k] = 1
 
     @ti.kernel
     def initialize_validate(self, steps: ti.template(), output_v: ti.ext_arr(), output_h: ti.ext_arr(), output_c: ti.ext_arr()):
@@ -436,6 +444,28 @@ class TaichiEnv:
                     self.target_v[t, k][0] = r * max_velocity
                     self.target_v[t, k][2] = 0.
                     self.target_h[t, k] = 0.
+
+                # if self.pool[q] < 0.5:
+                #     r = self.pool[q + 1] * 2. - 1.
+                #     self.target_v[t, k][0] = 0.
+                #     self.target_v[t, k][2] = r * max_velocity
+                #     self.target_h[t, k] = 0.
+                # else:
+                #     r = self.pool[q + 1] * 2. - 1.
+                #     self.target_v[t, k][0] = r * max_velocity
+                #     self.target_v[t, k][2] = 0.
+                #     self.target_h[t, k] = 0.
+
+                # if self.pool[q] < 0.5:
+                #     self.target_v[t, k][0] = 0.
+                #     self.target_v[t, k][1] = 0.
+                #     self.target_v[t, k][2] = 0.
+                #     self.target_h[t, k] = -1
+                # else:
+                #     self.target_v[t, k][0] = 0.
+                #     self.target_v[t, k][1] = 0.
+                #     self.target_v[t, k][2] = 0.
+                #     self.target_h[t, k] = 1
 
     @debug
     def visualizer(self, steps, prefix):
