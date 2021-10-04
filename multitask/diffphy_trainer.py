@@ -334,7 +334,7 @@ class DiffPhyTrainer(BaseTrainer):
                 x_ = self.taichi_env.x.to_numpy()[::10, 0:1, :, :]
 
                 def another_output_mesh(x_, fn):
-                    for t in range(1, x_.shape[0]):
+                    for t in range(0, x_.shape[0]):
                         f = open(fn + f'/{t:06d}.obj', 'w')
                         for i in range(x_.shape[2]):
                             f.write('v %.6f %.6f %.6f\n' % (x_[t, 0, i, 0], x_[t, 0, i, 1], x_[t, 0, i, 2]))

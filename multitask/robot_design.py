@@ -442,6 +442,31 @@ class RobotDesignMassSpring3D(RobotDesignBase):
         self.add_mesh_square(2, 1, 1, actuation=0)
         self.add_mesh_square(2, 1, 2, actuation=0)
 
+    def robotB(self):
+        self.add_mesh_square(0, 0, 1, actuation=self.spring_actuation)
+        self.add_mesh_square(1, 0, 0, actuation=self.spring_actuation)
+        self.add_mesh_square(1, 0, 2, actuation=self.spring_actuation)
+        self.add_mesh_square(2, 0, 1, actuation=self.spring_actuation)
+
+        self.add_mesh_square(0, 1, 1, actuation=0)
+        self.add_mesh_square(1, 1, 0, actuation=0)
+        self.add_mesh_square(1, 1, 2, actuation=0)
+        self.add_mesh_square(2, 1, 1, actuation=0)
+        self.add_mesh_square(1, 1, 1, actuation=0)
+        self.add_mesh_square(1, 2, 1, actuation=0)
+
+    def robotC(self):
+        self.add_mesh_square(0, 0, 0, actuation=self.spring_actuation)
+        self.add_mesh_square(2, 0, 0, actuation=self.spring_actuation)
+        self.add_mesh_square(1, 0, 2, actuation=self.spring_actuation)
+
+        self.add_mesh_square(0, 1, 0, actuation=0)
+        self.add_mesh_square(2, 1, 0, actuation=0)
+        self.add_mesh_square(1, 1, 2, actuation=0)
+        self.add_mesh_square(0, 1, 1, actuation=0)
+        self.add_mesh_square(1, 1, 1, actuation=0)
+        self.add_mesh_square(2, 1, 1, actuation=0)
+
     def robotD(self):
         with open('cfg3d/skeleton.json') as json_file:
             data = json.load(json_file)
@@ -483,6 +508,10 @@ class RobotDesignMassSpring3D(RobotDesignBase):
     def build(self):
         if self.robot_id == 100:
             self.robotA()
+        elif self.robot_id == 101:
+            self.robotB()
+        elif self.robot_id == 102:
+            self.robotC()
         elif self.robot_id == 103:
             self.robotD()
         else:
