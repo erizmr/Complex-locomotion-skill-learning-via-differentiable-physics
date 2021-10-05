@@ -504,6 +504,70 @@ class RobotDesignMassSpring3D(RobotDesignBase):
                         self.faces.append((a, b, c))
         return self.objects, self.springs, self.faces
 
+    def add_mesh_lying(self, i, j, k, actuation=0.0):
+        a = self.add_mesh_point(i, j, k)
+        b = self.add_mesh_point(i, j + 1, k)
+        c = self.add_mesh_point(i + 1, j, k)
+        d = self.add_mesh_point(i + 1, j + 1, k)
+        e = self.add_mesh_point(i, j, k + 1)
+        f = self.add_mesh_point(i, j + 1, k + 1)
+        g = self.add_mesh_point(i + 1, j, k + 1)
+        h = self.add_mesh_point(i + 1, j + 1, k + 1)
+
+        # b d
+        # a c
+        self.add_mesh_spring(a, b, self.spring_stiffness, 0)
+        self.add_mesh_spring(c, d, self.spring_stiffness, 0)
+        self.add_mesh_spring(e, f, self.spring_stiffness, 0)
+        self.add_mesh_spring(g, h, self.spring_stiffness, 0)
+
+        self.add_mesh_spring(b, d, self.spring_stiffness, 0)
+        self.add_mesh_spring(a, c, self.spring_stiffness, 0)
+        self.add_mesh_spring(f, h, self.spring_stiffness, 0)
+        self.add_mesh_spring(e, g, self.spring_stiffness, 0)
+
+        self.add_mesh_spring(b, f, self.spring_stiffness, actuation)
+        self.add_mesh_spring(d, h, self.spring_stiffness, actuation)
+        self.add_mesh_spring(a, e, self.spring_stiffness, actuation)
+        self.add_mesh_spring(c, g, self.spring_stiffness, actuation)
+
+        self.add_mesh_spring(b, g, self.spring_stiffness, actuation)
+        self.add_mesh_spring(d, e, self.spring_stiffness, actuation)
+        self.add_mesh_spring(f, c, self.spring_stiffness, actuation)
+        self.add_mesh_spring(h, a, self.spring_stiffness, actuation)
+
+        self.add_mesh_spring(e, c, self.spring_stiffness, actuation)
+        self.add_mesh_spring(a, g, self.spring_stiffness, actuation)
+        self.add_mesh_spring(h, b, self.spring_stiffness, actuation)
+        self.add_mesh_spring(d, f, self.spring_stiffness, actuation)
+
+        self.add_mesh_spring(e, b, self.spring_stiffness, actuation)
+        self.add_mesh_spring(a, f, self.spring_stiffness, actuation)
+        self.add_mesh_spring(h, c, self.spring_stiffness, actuation)
+        self.add_mesh_spring(d, g, self.spring_stiffness, actuation)
+
+        self.add_mesh_spring(f, g, self.spring_stiffness, 0)
+        self.add_mesh_spring(e, h, self.spring_stiffness, 0)
+        self.add_mesh_spring(a, d, self.spring_stiffness, 0)
+        self.add_mesh_spring(c, b, self.spring_stiffness, 0)
+
+        def append_square_face(a, b, c, d):
+            self.faces.append((a, b, c))
+            self.faces.append((d, a, c))
+        append_square_face(a, b, d, c)
+        append_square_face(b, f, h, d)
+        append_square_face(f, e, g, h)
+        append_square_face(e, a, c, g)
+        append_square_face(h, g, c, d)
+        append_square_face(b, a, e, f)
+
+    def robotE(self):
+        self.add_mesh_lying(0, 0, 0, actuation=self.spring_actuation)
+        self.add_mesh_lying(0, 0, 1, actuation=self.spring_actuation)
+        self.add_mesh_lying(0, 0, 2, actuation=self.spring_actuation)
+        self.add_mesh_lying(0, 0, 3, actuation=self.spring_actuation)
+        self.add_mesh_lying(0, 0, 4, actuation=self.spring_actuation)
+        self.add_mesh_lying(0, 0, 5, actuation=self.spring_actuation)
 
     def build(self):
         if self.robot_id == 100:
@@ -514,6 +578,8 @@ class RobotDesignMassSpring3D(RobotDesignBase):
             self.robotC()
         elif self.robot_id == 103:
             self.robotD()
+        elif self.robot_id == 104:
+            self.robotE()
         else:
             print("Invalid robot id ", self.robot_id)
             assert False
