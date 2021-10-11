@@ -55,15 +55,16 @@ def to_dataframe(dpath):
     print("current data path", dpath, len(df_collection))
     df_base = reduce(lambda x, y: pd.concat([x, y], axis=1, join="outer"), df_collection)
     # print(df_base)
-    df_base.to_csv(os.path.join(dpath, 'summary.csv'))
+    # df_base.to_csv(os.path.join(dpath, 'summary_old.csv'))
     return df_base
 
+fff = False
 
 def draw(df_dict, robot_id, task, save=True, normlize=False, error_bar=False):
 
-    target_v = [-0.08, -0.06, -0.04, -0.02, 0.00, 0.02, 0.04, 0.06, 0.08]
+    target_v = [-0.08, -0.06, -0.04, -0.02, 0.02, 0.04, 0.06, 0.08]
     target_h = [0.10, 0.15, 0.20]
-    target_c = [0.0, 1.0]
+    target_c = [0.0]
     h_num = len(target_h)
     w_num = len(target_v)
 
@@ -89,8 +90,8 @@ def draw(df_dict, robot_id, task, save=True, normlize=False, error_bar=False):
     iterations = None
     for k, v in df_dict.items():
         iterations = v.index
-    # fig, axes = plt.subplots(h_num, w_num, figsize=(h_num*5, w_num*5),  constrained_layout=True)
-    fig, axes = plt.subplots(h_num, w_num, figsize=(w_num * 5, h_num * 5))
+    fig, axes = plt.subplots(h_num, w_num, figsize=(w_num*2, h_num*2),  constrained_layout=True)
+    # fig, axes = plt.subplots(h_num, w_num, figsize=(w_num * 5, h_num * 5))
     axes = axes.flatten()
 
     def _draw(df, tag, var, color, alpha, axes, normlize=False, error_bar=False):
@@ -109,7 +110,18 @@ def draw(df_dict, robot_id, task, save=True, normlize=False, error_bar=False):
                             continue
                         if h > 0 and str(-h) in name:
                             continue
-                        if str(v) in name and str(h) in name and str(c) in name and var in name.split("_loss")[0]:
+                        prefix = name.split("/")[0]
+                        arr = prefix.split("_")
+                        try:
+                            assert arr[1] == "loss"
+                        except:
+                            from IPython import embed
+                            embed()
+                        value = {"crawl": 0, "height": 0.1, "velocity": 0.00}
+                        for i in range(2, len(arr), 2):
+                            assert arr[i] in ["velocity", "height", "crawl"]
+                            value[arr[i]] = float(arr[i + 1])
+                        if v == value["velocity"] and h == value["height"] and c == value["crawl"] and var in name.split("_loss")[0]:
                             # print(var + "_" + str(c))
                             if var == 'crawl' and var + "_" + str(c) not in name:
                                 continue
@@ -130,14 +142,19 @@ def draw(df_dict, robot_id, task, save=True, normlize=False, error_bar=False):
                             # axes[cnt].errorbar(iterations[:draw_len], df[name][:draw_len] / base_loss,
                             #                    yerr=df[name+'_std'][:draw_len], color=color, ecolor=color,
                             #                    label=tag+" "+var+" loss", alpha=0.1)
-                            axes[cnt].set_title(name.split('/')[0].split('loss_')[1], fontsize=12)
+                            axes[cnt].set_title("v={:.2f}, h={:.1f}".format(value["velocity"], value["height"]), fontsize=12)
                             axes[cnt].set_aspect('auto')
                             # if normlize:
                             #     axes[cnt].set_ylim([0.0, 1.2])
                             cnt += 1
                             break
         handles, labels = axes[0].get_legend_handles_labels()
-        fig.legend(handles, labels, fontsize=16)
+        labels = [label.replace("velocity", "running") for label in labels]
+        labels = [label.replace("height", "jumping") for label in labels]
+        global fff
+        if len(labels) == 3 and not fff:
+            fig.legend(handles, labels, fontsize=16)
+            fff = True
 
     alpha = 1.0
     for tag, df in df_dict.items():

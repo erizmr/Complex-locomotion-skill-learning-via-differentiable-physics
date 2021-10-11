@@ -12,7 +12,7 @@ def load_weights(name="save.pkl"):
         print(val, val.shape)
         weight_list.append(val)
 
-robot_id = 4
+robot_id = 2
 # model_path = glob.glob(f"./saved_results/sim_config_DiffPhy_robot{robot_id}_vhc_5_l05/DiffTaichi_DiffPhy/*/models/weight.pkl")[-1]
 # model_path = "./saved_results/sim_config_DiffPhy_robot4_vhc_5_l05/DiffTaichi_DiffPhy/*/models/weight.pkl"
 # model_path = glob.glob(f"./saved_results/sim_config_DiffPhy_robot{robot_id}_vha/DiffTaichi_DiffPhy/*/models/weight.pkl")[-1]
@@ -39,7 +39,7 @@ for i in range(sn):
         vis_first_k[i, j] = pow(0.8, vis_first_k[i, j])
 
 import os
-os.makedirs("robot_{}".format(robot_id), exist_ok = True)
+os.makedirs("imgs", exist_ok = True)
 
 def visualize(w, name):
     if name == "abs_raw":
@@ -48,16 +48,16 @@ def visualize(w, name):
         name = "Top N Values of Rows"
     ax = sns.heatmap(w, square=True, cbar=True, linewidths=.01, cmap="YlGnBu", cbar_kws={"shrink": .48})
     # ax.set_title(f"{robot_names[robot_id]} (A) - {name}", fontsize=32)
-    ax.set_title(f"{robot_names[robot_id]} - {name}", fontsize=32)
-    ax.set_xlabel("Input Layer Channel", fontsize=20)
-    ax.set_ylabel("Hidden Layer Channel", fontsize=20)
+    ax.set_title(f"{robot_names[robot_id]} - {name}", fontsize=11)
+    ax.set_xlabel("Input Layer Channel", fontsize=10)
+    ax.set_ylabel("Hidden Layer Channel", fontsize=10)
     ax.set_yticks(np.array(range(0, 64, 9)) + 0.5)
-    ax.set_yticklabels(range(0, 64, 9), fontsize=18)
-    ax.set_xticklabels(range(0, 202, 8), fontsize=18)
+    ax.set_yticklabels(range(0, 64, 9), fontsize=9)
+    #ax.set_xticklabels(range(0, 202, 8), fontsize=9)
     cax = plt.gcf().axes[-1]
-    cax.tick_params(labelsize=20)
-    plt.savefig(f"robot_{robot_id}/{name}.png", dpi = 1000)
-    plt.show()
+    cax.tick_params(labelsize=10)
+    plt.savefig(f"imgs/robot_{robot_id}_weights_{name}.pdf", dpi = 1000, bbox_inches='tight')
+    # plt.show()
     plt.clf()
     # exit(0)
 

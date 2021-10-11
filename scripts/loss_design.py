@@ -7,17 +7,18 @@ from matplotlib.backends.backend_pdf import PdfPages
 from mpl_toolkits.axes_grid1 import AxesGrid
 from scipy.ndimage.filters import gaussian_filter1d
 
-all_batching_folders = glob.glob("./saved_results/sim_config_DiffPhy_robot2_vhc_5_l10_batch_*/DiffTaichi_DiffPhy")
+all_batching_folders = glob.glob("./saved_results/sim_config_DiffPhy_robot*_vhc_5_l01_naive_loss/DiffTaichi_DiffPhy")
+all_batching_folders = glob.glob("./saved_results/sim_config_DiffPhy_robot*_vhc_5_l01/DiffTaichi_DiffPhy")
 print(all_batching_folders)
 plt.figure(figsize=(7, 6))
 path_dict = {}
+# naive loss
 for path in all_batching_folders:
     print(path)
-    bs = int(path.split('/')[-2].split('_')[-1])
+    bs = int(path.split('robot')[-1].split('_')[0])
     print(bs)
     path_dict[bs] = glob.glob(os.path.join(path, "*"))
     print(path_dict)
-path_dict.pop(16)
 data_dict = {}
 for k, ps in path_dict.items():
     data_dict[k] = []
@@ -38,16 +39,16 @@ save = True
 
 for k, vals in data_dict.items():
     X = [int(x) for x in vals[0].columns]
-    combined = np.array([v.loc["task"] - v.loc["crawl"] for v in vals])
+    combined = np.array([v.loc["velocity"] for v in vals])
     mean = combined.mean(axis=0)
     std = combined.std(axis=0)
     base_loss = max(mean)
     ysmoothed = gaussian_filter1d(mean / base_loss, sigma=0.9)
-    plt.plot(X, ysmoothed, label=f"Batch size {k}")
+    plt.plot(X, ysmoothed, label=f"Agent {k}")
     plt.fill_between(X, ysmoothed - std, ysmoothed + std, alpha=0.2)
 plt.xlabel("Iteartions", fontsize=20)
-plt.ylabel("Normlized Validation Task Loss", fontsize=20)
-plt.title("Batch Size Ablation", fontsize=20)
+plt.ylabel("Normlized Validation Loss", fontsize=20)
+plt.title("Loss Design Ablation", fontsize=20)
 plt.tick_params(axis='x', labelsize=16)
 plt.tick_params(axis='y', labelsize=16)
 # plt.tight_layout(rect=(0, 0.04, 1.0, 1.0))
@@ -75,9 +76,12 @@ plt.legend( handles, labels, fontsize=14, loc="upper right")
 # )
 
 fig = plt.gcf()
-img_save_name = f"imgs/batching"
+img_save_name = f"imgs/loss_design"
 if save:
     with PdfPages(img_save_name + ".pdf") as pdf:
         pdf.savefig(fig)
 
 plt.show()
+
+
+
