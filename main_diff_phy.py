@@ -12,6 +12,12 @@ if __name__ == "__main__":
     args = get_args()
     print('args', args)
     config_file = args.config_file
+
+    # Init taichi
+    # ti_random_seed = int(time.time() * 1e6) % 10000
+    ti_random_seed = 930
+    ti.init(arch=ti.gpu, default_fp=real, random_seed=ti_random_seed, packed=args.packed, device_memory_GB=args.memory)
+
     if args.train:
         config = ConfigSim.from_file(config_file)
         print(config)

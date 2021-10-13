@@ -1,8 +1,8 @@
 import argparse
 
 
-def get_args():
-    parser = argparse.ArgumentParser(description='RL')
+def construct_args():
+    parser = argparse.ArgumentParser(description='Differentiable Physics')
     parser.add_argument('--config_file',
                         default='',
                         help='experiment config file')
@@ -18,6 +18,15 @@ def get_args():
         '--evaluate',
         action='store_true',
         help='whether evaluate model, default false')
+    parser.add_argument(
+        '--memory',
+        type=float,
+        default=2.0,
+        help='pre allocated memory for taichi')
+    parser.add_argument(
+        '--packed',
+        action='store_true',
+        help='whether turn packed mode on to save memory but degrade performance')
     parser.add_argument(
         '--evaluate-from-value',
         action='store_true',
@@ -75,12 +84,19 @@ def get_args():
         help='number of environment steps to train (default: 10e6)')
     parser.add_argument(
         '--env-name',
-        default='PongNoFrameskip-v4',
-        help='environment to train on (default: PongNoFrameskip-v4)')
+        default='Taichi Env',
+        help='environment to train on (default: Taichi Env)')
     parser.add_argument(
         '--no-cuda',
         action='store_true',
         default=False,
         help='disables CUDA training')
+    return parser
+
+def get_args():
+    parser = construct_args()
     args = parser.parse_args()
     return args
+
+def get_args_parser():
+    return construct_args()

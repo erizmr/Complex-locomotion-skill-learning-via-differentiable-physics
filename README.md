@@ -18,7 +18,7 @@
 `python3 main_diff_phy.py --config_file cfg/sim_config_DiffPhy_robot2_vh.json --evaluate --no-tensorboard-train --evaluate_path saved_results/sim_config_DiffPhy_robot2_vh/DiffTaichi_DiffPhy`
 
 ###  Interactive
-`python3 interactive.py --config_file cfg/sim_config_DiffPhy_robot2_vh.json --no-tensorboard-train`
+`python3 interactive.py --config_file cfg/sim_config_DiffPhy_robot2_vh.json --memory 1.0`
 
 
 ## Output plots

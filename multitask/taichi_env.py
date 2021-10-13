@@ -12,11 +12,6 @@ from multitask.solver_mpm import SolverMPM
 
 
 debug = Debug(False)
-# ti_random_seed = int(time.time() * 1e6) % 10000
-ti_random_seed = 930
-ti.init(arch=ti.gpu, default_fp=real, random_seed=ti_random_seed, packed = True, device_memory_GB=4)
-
-
 # Manage all shared parameters and taichi fields
 @ti.data_oriented
 class TaichiEnv:
@@ -362,8 +357,6 @@ class TaichiEnv:
                     # print("f&b")
                     # Move backward or forward
                     self.target_v[t, k][0] = (self.pool[q + 1] * 2 - 1) * max_velocity
-                    # if self.robot_id == 6:
-                    #     self.target_v[t, k][0] = 0.04
                     self.target_h[t, k] = 0.1
                     self.target_c[t, k] = 0
                 elif target_id == 2:

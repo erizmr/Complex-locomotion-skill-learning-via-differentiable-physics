@@ -1,13 +1,9 @@
 import time
 import sys
-import os
 
 import matplotlib.pyplot as plt
 from scipy.ndimage.filters import gaussian_filter
-
 import taichi as ti
-
-# from multitask.config import *
 
 real = ti.f64
 scalar = lambda: ti.field(dtype=real)
