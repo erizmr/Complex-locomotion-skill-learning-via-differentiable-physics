@@ -54,6 +54,13 @@ if __name__ == "__main__":
     parser.add_argument('--cq',
                         action='store_true',
                         help='cq')
+    parser.add_argument('--slip',
+                        action='store_true',
+                        help='slip')
+    parser.add_argument('--friction',
+                        type=float,
+                        default=-1.0,
+                        help='friction coefficient')
     args = parser.parse_args()
 
     script_file = open(args.output_name, "w")
@@ -66,6 +73,13 @@ if __name__ == "__main__":
         prefix_original = prefix
         full_json = json_load(full_path)
         json_dump(full_json, prefix_original, script_file)
+
+    if args.slip and args.friction > 0:
+        # slip boundary
+        prefix_slip = prefix + "_slip" + f"_{args.friction}"
+        full_json = json_load(full_path)
+        full_json["simulator"]["friction"] = args.friction
+        json_dump(full_json, prefix_slip, script_file)
 
     if args.op:
         # OP

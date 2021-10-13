@@ -29,74 +29,6 @@ from multitask.base_trainer import BaseTrainer
 debug = Debug(False)
 
 
-# @ti.data_oriented
-# class BaseTrainer:
-#     def __init__(self, args, config):
-#         self.logger = config.get_logger(name=config.get_config()["train"]["name"])
-#         self.random_seed = config.get_config()["train"]["random_seed"]
-#         self.num_processes = args.num_processes
-#         self.training = True
-#         self.iter = 0
-#         self.max_iter = 10000  # Default training iterations, can be overwrote by args
-#         self.writer = TensorboardWriter(config.log_dir,
-#                                         self.logger,
-#                                         enabled=(not args.no_tensorboard_train))
-#         self._hooks = []
-#
-#     def before_train(self):
-#         for h in self._hooks:
-#             h.before_train()
-#
-#     def before_step(self):
-#         for h in self._hooks:
-#             h.before_step()
-#
-#     def after_step(self):
-#         for h in self._hooks:
-#             h.after_step()
-#
-#     def after_train(self):
-#         for h in self._hooks:
-#             h.after_train()
-#
-#     def run_step(self):
-#         raise NotImplementedError
-#
-#     def train(self, start_iter, max_iter):
-#
-#         self.iter = self.start_iter = start_iter
-#         self.max_iter = max_iter // self.num_processes
-#         self.logger.info(f"Starting training from iteration {start_iter}, Number of Processes: {self.num_processes}, "
-#                          f"Max iterations: {self.max_iter}")
-#
-#         try:
-#             self.before_train()
-#             for self.iter in range(start_iter, self.max_iter):
-#                 self.before_step()
-#                 self.run_step()
-#                 self.after_step()
-#             # self.iter == max_iter can be used by `after_train` to
-#             # tell whether the training successfully finished or failed
-#             # due to exceptions.
-#             self.iter += 1
-#         except Exception:
-#             self.logger.exception("Exception during training:")
-#             raise
-#         finally:
-#             self.after_train()
-#
-#     def register_hooks(self, hooks):
-#         hooks = [h for h in hooks if h is not None]
-#         for h in hooks:
-#             assert isinstance(h, HookBase)
-#             # To avoid circular reference, hooks and trainer cannot own each other.
-#             # This normally does not matter, but will cause memory leak if the
-#             # involved objects contain __del__:
-#             # See http://engineering.hearsaysocial.com/2013/06/16/circular-references-in-python/
-#             h.trainer = weakref.proxy(self)
-#         self._hooks.extend(hooks)
-
-
 class LegacyIO(HookBase):
     def __init__(self):
         super(LegacyIO, self).__init__()
@@ -410,7 +342,7 @@ class DiffPhyTrainer(BaseTrainer):
         for current_model_index in range(0, model_nums, model_load_num):
             current_iters = []
             if not evaluate_from_value:
-                sub_model_paths = model_paths[current_model_index:current_model_index+10]
+                sub_model_paths = model_paths[current_model_index:current_model_index+model_load_num]
             else:
                 sub_model_paths = [x for x in range(current_model_index, min(current_model_index+model_load_num, model_nums))]
 
@@ -429,7 +361,7 @@ class DiffPhyTrainer(BaseTrainer):
                     for k in range(self.taichi_env.batch_size):
                         # Make sub folder for each validation case
                         sub_video_path = os.path.join(video_path, suffix[k][1:], str(current_iter))
-                        os.makedirs(sub_video_path, exist_ok=True)
+                        # os.makedirs(sub_video_path, exist_ok=True)
                         sub_video_paths.append(sub_video_path)
 
             self.taichi_env.setup_robot()
@@ -490,145 +422,3 @@ class DiffPhyTrainer(BaseTrainer):
                     evaluator_writer.update(k, val)
         df_all_results = pd.DataFrame(tensorboard_buffer)
         df_all_results.to_csv(os.path.join(load_path, "validation/summary.csv"))
-
-
-    # Legacy code from ljcc
-    def optimize(self, iters=100000, change_iter=5000, prefix=None, root_dir="./", \
-                 load_path=None, *args, **kwargs):
-        log_dir = os.path.join(root_dir, "logs")
-        plot_dir = os.path.join(root_dir, "plots")
-        weights_dir = os.path.join(root_dir, "weights")
-
-        # log_dir = self._config.log_dir
-        # plot_dir = self._config.monitor_dir
-        # weights_dir = self._config.model_dir
-
-        if prefix is not None:
-            weights_dir = os.path.join(weights_dir, prefix)
-
-        os.makedirs(plot_dir, exist_ok=True)
-        os.makedirs(weights_dir, exist_ok=True)
-        os.makedirs(log_dir, exist_ok=True)
-
-        log_name = "training.log"
-        if prefix is not None:
-            log_name = "{}_training.log".format(prefix)
-        log_path = os.path.join(log_dir, log_name)
-
-        log_file = open(log_path, 'w')
-        log_file.close()
-
-        plot_name = "training_curve.png"
-        plot200_name = "training_curve_last_200.png"
-        if prefix is not None:
-            plot_name = "{}_training_curve.png".format(prefix)
-            plot200_name = "{}_training_curve_last_200.png".format(prefix)
-        plot_path = os.path.join(plot_dir, plot_name)
-        plot200_path = os.path.join(plot_dir, plot200_name)
-
-        weight_out = lambda x: os.path.join(weights_dir, x)
-
-        self.setup_robot()
-
-        if load_path is not None and os.path.exists(load_path):
-            print("load from {}".format(load_path))
-            self.nn.load_weights(load_path)
-        else:
-            self.nn.weights_init()
-
-        self.nn.clear_adam()
-
-        losses = []
-        best = 1e+15
-        best_finetune = 1e+15
-        train_steps = 1000
-        if self.dim == 3 and sys.argv[0] == "validate.py":
-            train_steps = 4000
-
-        reset_step = 2
-
-        for iter in range(iters):
-            if iter > change_iter:
-                if iter % 500 == 0 and reset_step < self.max_reset_step:
-                    reset_step += 1
-                self.rounded_train(train_steps, iter, reset_step=reset_step)
-
-            print("-------------------- {}iter #{} --------------------" \
-                  .format("" if prefix is None else "{}, ".format(prefix), iter))
-
-            self.simulate(train_steps, iter=iter, *args, **kwargs)
-
-            if iter <= change_iter and self.loss[None] < best:
-                best = self.loss[None]
-                self.nn.dump_weights(weight_out("best.pkl"))
-
-            if iter > change_iter + self.max_reset_step and self.loss[None] < best_finetune:
-                best_finetune = self.loss[None]
-                self.nn.dump_weights(weight_out("best_finetune.pkl"))
-
-            self.nn.dump_weights(weight_out("last.pkl"))
-            self.nn.dump_weights(os.path.join(root_dir, "weight.pkl"))
-
-            if iter % 50 == 0:
-                self.nn.dump_weights(weight_out("iter{}.pkl".format(iter)))
-
-            total_norm_sqr = self.nn.get_TNS()
-
-            def print_logs(file=None):
-                if iter > change_iter:
-                    print('Iter=', iter, 'Loss=', self.loss[None], 'Best_FT=', best_finetune, file=file)
-                else:
-                    print('Iter=', iter, 'Loss=', self.loss[None], 'Best=', best, file=file)
-                print("TNS= ", total_norm_sqr, file=file)
-                for name, l in self.loss_dict.items():
-                    print("{}={}".format(name, l[None]), file=file)
-
-            print_logs()
-            log_file = open(log_path, "a")
-            print_logs(log_file)
-            log_file.close()
-
-            self.nn.gradient_update(iter)
-            losses.append(self.loss[None])
-
-            # Write to tensorboard
-            # self.metric_writer.writer.set_step(step=self.iter - 1)
-            # for name, l in self.loss_dict.items():
-            #     self.metric_writer.train_metrics.update(name, l)
-
-            if iter % 100 == 0 or iter % 10 == 0 and iter < 500:
-                plot_curve(losses, plot_path)
-                plot_curve(losses[-200:], plot200_path)
-
-        return losses
-
-
-# if __name__ == '__main__':
-#     diff_phy_trainer = DiffPhyTrainer()
-#     random_seed = diff_phy_trainer.random_seed
-#     ti.init(arch=ti.gpu, default_fp=real, random_seed=random_seed)
-#
-#     root_dir = "robot_{}".format(robot_id)
-#     load_path = os.path.join(root_dir, "weight")
-#     if dim == 3:
-#         loss_enable = ["rotation", "velocity"]
-#         diff_phy_trainer.train(root_dir=root_dir, loss_enable=loss_enable)
-#     else:
-#         if os.path.exists(root_dir):
-#             print()
-#             s = load_string("{} exists, continue?(Y/N)".format(root_dir), ["Y", "N"])
-#             if s == "N":
-#                 exit(0)
-#             os.system('rm "{}" -r'.format(root_dir))
-#         # optimize(500, 250, "stage1", root_dir, loss_enable = {"height", "pose"}, max_height = 0.01)
-#         # #optimize(2000, 1000, "stage2", root_dir, load_path = load_path, loss_enable = {"height", "pose"}, max_height = 0.05)
-#         # optimize(2000, 1000, "stage2", root_dir, load_path = load_path, loss_enable = {"height", "pose"})
-#         # #optimize(2000, 1000, "stage4", root_dir, load_path = load_path, loss_enable = {"velocity", "actuation"}, max_speed = 0.08)
-#         # optimize(100000, 5000, "final", root_dir, load_path = load_path, loss_enable = {"velocity", "height", "actuation"})
-#
-#         # Pre train stage-1
-#         diff_phy_trainer.train(500, 250, "stage1", root_dir, loss_enable={"height", "pose"}, max_height=0.01)
-#         # Pre train stage-2
-#         diff_phy_trainer.train(2000, 1000, "stage2", root_dir, load_path = load_path, loss_enable = {"height", "pose"})
-#         # Train
-#         diff_phy_trainer.train(100000, 5000, "final", root_dir, load_path = load_path, loss_enable = {"velocity", "height", "actuation"})

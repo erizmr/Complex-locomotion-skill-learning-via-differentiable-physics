@@ -226,10 +226,11 @@ class RobotDesignMassSpring(RobotDesignBase):
                 r = 2 * scale * 0.85
                 c = 0x222222
                 # Show active spring in red
-                a = self.springs[i][4] * 1.2
+                a = self.springs[i][4] * 0.35
                 if a > 0.:
                     r = 4 * scale * 0.85
-                    c = ti.rgb_to_hex((0.5 + a, 0.5 - abs(a), 0.5 - a))
+                    # c = ti.rgb_to_hex((0.5 + a, 0.5 - abs(a), 0.5 - a))
+                    c = ti.rgb_to_hex((0.5 - a, 0.5 - abs(a), 0.5 + a))
                 gui.line(get_pt(self.objects[self.springs[i][0]]),
                          get_pt(self.objects[self.springs[i][1]]),
                          color=c,

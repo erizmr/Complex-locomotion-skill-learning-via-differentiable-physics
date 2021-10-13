@@ -11,7 +11,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-ROBOT_NAMES = {2:"Alpaca", 3:"Monster", 4:"HugeStool", 5:"Stool", 7:"Stool-A"}
+ROBOT_NAMES = {2:"Alpaca", 3:"Monster", 4:"HugeStool", 5:"Stool", 6:"Snake", 7:"Snake-A"}
+
+save = False
 
 offset = 0
 def set_target():
@@ -123,6 +125,7 @@ if __name__ == "__main__":
 
     # Enforce the batch size to 1
     config._config["nn"]["batch_size"] = 1
+    config._config["nn"]["n_models"] = 1
     trainer = DiffPhyTrainer(args, config=config)
 
     trainer.taichi_env.setup_robot()
@@ -134,7 +137,7 @@ if __name__ == "__main__":
     # trainer.nn.load_weights(os.path.join(model_path, "best.pkl"))
 
     # print(trainer.taichi_env.solver_x.to_numpy()[0, :, :])
-    visualizer()
+    visualizer(output=save)
 
     default_control_sequence = False
     while gui.running:
@@ -144,7 +147,7 @@ if __name__ == "__main__":
             forward_mass_spring()
             refresh_xv()
             offset += 1
-        visualizer()
+        visualizer(output=save)
 
         if default_control_sequence:
             if offset < 100:
@@ -152,15 +155,15 @@ if __name__ == "__main__":
                 set_target.target_h = 0.1
                 set_target.target_c = 0.0
             if offset > 100 and offset <= 500:
-                set_target.target_v = 0.01
+                set_target.target_v = 0.06
                 set_target.target_h = 0.1
                 set_target.target_c = 0.0
             if offset > 500 and offset < 2000:
-                set_target.target_v = 0.015 * (offset // 500)
+                set_target.target_v = 0.06
                 set_target.target_h = 0.1
                 set_target.target_c = 0.0
             if offset >= 2000 and offset < 3500:
-                set_target.target_v = -0.015 * ((offset - 1500) // 500)
+                set_target.target_v = -0.06
                 set_target.target_h = 0.1
                 set_target.target_c = 0.0
             if offset >= 3500 and offset < 4000:
@@ -172,7 +175,7 @@ if __name__ == "__main__":
                 set_target.target_h = 0.18
                 set_target.target_c = 0.0
             if offset >= 4500 and offset < 6000:
-                set_target.target_v = 0.015 * ((offset - 4000) // 500)
+                set_target.target_v = 0.06
                 set_target.target_h = 0.1
                 set_target.target_c = 1.0
 

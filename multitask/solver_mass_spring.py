@@ -21,13 +21,17 @@ class SolverMassSpring:
         self.dim = config.get_config()["robot"]["dim"]
         self.jump_period = config.get_config()["process"]["jump_period"]
 
+        # Sticky boundary if friction coefficient is -1.0
+        self.friction_coefficient = -1.0
+        if "friction" in config.get_config()["simulator"]:
+            self.friction_coefficient = config.get_config()["simulator"]["friction"]
+
         if "n_models" in config.get_config()["nn"].keys():
             self.n_models = config.get_config()["nn"]["n_models"]
         else:
             self.n_models = 1
         
         self.default_model_id = 0
-
 
         self.x = vec(self.dim)
         self.v = vec(self.dim)
@@ -132,6 +136,15 @@ class SolverMassSpring:
             if new_x[1] < self.ground_height and old_v[1] < -1e-4:
                 toi = float(-(old_x[1] - self.ground_height) / old_v[1])
                 new_v = ti.Matrix.zero(real, self.dim, 1)
+
+                if self.friction_coefficient > 0:
+                    # Sticky boundary if friction is -1.0, otherwise slip
+                    friction = self.friction_coefficient
+                    if old_v[0] < 0:
+                        new_v[0] = ti.min(0., old_v[0] + friction * (-old_v[1]))
+                    else:
+                        new_v[0] = ti.max(0., old_v[0] - friction * (-old_v[1]))
+
             new_x = old_x + toi * old_v + (self.dt - toi) * new_v
 
             self.v[model_id, t, k, i] = new_v
