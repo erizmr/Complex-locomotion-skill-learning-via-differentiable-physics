@@ -97,8 +97,10 @@ class SolverMPM:
     @ti.kernel
     def p2g(self, f: ti.i32):
         for model_id, k, p in ti.ndrange(self.n_models, self.batch_size, self.n_particles):
-            base = ti.cast(self.x[model_id, f, k, p]* self.inv_dx - 0.5, ti.i32)
-            fx = self.x[model_id, f, k, p] * self.inv_dx - ti.cast(base, ti.i32)
+            anchor = ti.Matrix.zero(real, self.dim, 1)
+            anchor[0] = (ti.cast(self.x[model_id, f, k, 0](0) * self.inv_dx - 0.5, ti.i32) - 5) * self.dx
+            base = ti.cast((self.x[model_id, f, k, p] - anchor) * self.inv_dx - 0.5, ti.i32)
+            fx = (self.x[model_id, f, k, p] - anchor) * self.inv_dx - ti.cast(base, ti.i32)
             w = [0.5 * (1.5 - fx)**2, 0.75 - (fx - 1)**2, 0.5 * (fx - 0.5)**2]
             new_F = (ti.Matrix.diag(dim=2, val=1) + self.dt * self.C[model_id, f, k, p]) @ self.F[model_id, f, k, p]
             J = (new_F).determinant()
@@ -160,8 +162,10 @@ class SolverMPM:
     @ti.kernel
     def g2p(self, f: ti.i32):
         for model_id, k, p in ti.ndrange(self.n_models, self.batch_size, self.n_particles):
-            base = ti.cast(self.x[model_id, f, k, p] * self.inv_dx - 0.5, ti.i32)
-            fx = self.x[model_id, f, k, p] * self.inv_dx - ti.cast(base, real)
+            anchor = ti.Matrix.zero(real, self.dim, 1)
+            anchor[0] = (ti.cast(self.x[model_id, f, k, 0](0) * self.inv_dx - 0.5, ti.i32) - 5) * self.dx
+            base = ti.cast((self.x[model_id, f, k, p] - anchor) * self.inv_dx - 0.5, ti.i32)
+            fx = (self.x[model_id, f, k, p] - anchor) * self.inv_dx - ti.cast(base, ti.i32)
             w = [0.5 * (1.5 - fx)**2, 0.75 - (fx - 1.0)**2, 0.5 * (fx - 0.5)**2]
             new_v = ti.Vector([0.0, 0.0])
             new_C = ti.Matrix([[0.0, 0.0], [0.0, 0.0]])
