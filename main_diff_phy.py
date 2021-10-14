@@ -7,8 +7,6 @@ from multitask.diffphy_trainer import DiffPhyTrainer
 
 
 if __name__ == "__main__":
-    # random_seed = int(time.time() * 1e6) % 10000
-    # ti.init(arch=ti.gpu, default_fp=real, random_seed=random_seed)
     args = get_args()
     print('args', args)
     config_file = args.config_file

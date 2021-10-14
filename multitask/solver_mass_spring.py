@@ -26,11 +26,8 @@ class SolverMassSpring:
         if "friction" in config.get_config()["simulator"]:
             self.friction_coefficient = config.get_config()["simulator"]["friction"]
 
-        if "n_models" in config.get_config()["nn"].keys():
-            self.n_models = config.get_config()["nn"]["n_models"]
-        else:
-            self.n_models = 1
-        
+        self.n_models = config.get_config()["nn"]["n_models_used"]
+        print(f"n models Mass-Spring: {self.n_models}")
         self.default_model_id = 0
 
         self.x = vec(self.dim)
@@ -39,9 +36,9 @@ class SolverMassSpring:
         self.actuation = scalar()
         self.act_list = []
         batch_node = ti.root.dense(ti.ijk, (self.n_models, self.max_steps, self.batch_size))
-        batch_node.dense(ti.l, (self.n_objects)).place(self.x, self.v)
+        batch_node.dense(ti.l, self.n_objects).place(self.x, self.v)
         batch_node.place(self.center)
-        batch_node.dense(ti.l, (self.n_springs)).place(self.actuation)
+        batch_node.dense(ti.l, self.n_springs).place(self.actuation)
 
         # height here is the lower height i.e., the lowest point of the robot
         self.height = scalar()
@@ -64,7 +61,7 @@ class SolverMassSpring:
         ti.root.dense(ti.i, self.n_springs).place(self.spring_anchor_a, self.spring_anchor_b,
                                              self.spring_length, self.spring_stiffness,
                                              self.spring_actuation)
-        batch_node.dense(ti.l, (self.n_objects)).place(self.v_inc)
+        batch_node.dense(ti.l, self.n_objects).place(self.v_inc)
 
     def initialize_robot(self):
         for i in range(self.n_springs):

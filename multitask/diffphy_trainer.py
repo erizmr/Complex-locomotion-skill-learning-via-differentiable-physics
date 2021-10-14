@@ -108,7 +108,6 @@ class LegacyIO(HookBase):
     #             f.write(item + "\n")
 
 
-
 class DiffPhyTrainer(BaseTrainer):
     def __init__(self, args, config):
         super(DiffPhyTrainer, self).__init__(args, config)

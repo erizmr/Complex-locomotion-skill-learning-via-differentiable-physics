@@ -1,22 +1,16 @@
 import os
 import json
 import time
-from datetime import datetime
-from pathlib import Path
-
-from multitask.robot_config import robots
-from multitask.robot3d_config import robots3d
-from multitask.robot_mpm import robots_mpm, n_grid, dx
-from multitask.robot_design import RobotDesignBase, RobotDesignMassSpring, RobotDesignMassSpring3D, RobotDesignMPM
-
-# from robot_config import robots
-# from robot3d_config import robots3d
-# from robot_mpm import robots_mpm, n_grid, dx
-
-from util import read_json, write_json
-import sys
 import math
 import logging
+
+from datetime import datetime
+from pathlib import Path
+from multitask.robot_config import robots
+from multitask.robot3d_config import robots3d
+from multitask.robot_mpm import robots_mpm, n_grid, dx, n_squ
+from multitask.robot_design import RobotDesignBase, RobotDesignMassSpring, RobotDesignMassSpring3D, RobotDesignMPM
+from util import read_json, write_json
 from logger import setup_logging
 
 
@@ -109,6 +103,10 @@ class ConfigSim:
         self._config["robot"]["faces"] = faces
         self._config["robot"]["n_objects"] = n_objects
         self._config["robot"]["n_springs"] = n_springs
+
+        if solver_type == "mpm":
+            self._config["robot"]["n_squ"] = n_squ
+            self._config["robot"]["n_squares"] = n_objects // (n_squ ** 2)
 
         # Process
         self._config["process"]["dt"] = 0.004 if self._config["robot"][

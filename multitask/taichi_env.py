@@ -53,6 +53,7 @@ class TaichiEnv:
         else:
             self.n_models = 1
         print(f"n models: {self.n_models}")
+        config.get_config()["nn"]["n_models_used"] = self.n_models
         
         self.default_model_id = 0
 
@@ -146,7 +147,7 @@ class TaichiEnv:
         ti.root.place(self.current_max_height)
 
         # Initialize a simulator
-        self.solver = SolverMPM() if self.simulator == "mpm" else SolverMassSpring(config)
+        self.solver = SolverMPM(config) if self.simulator == "mpm" else SolverMassSpring(config)
         # self.sovler = solver
         self.solver_x = self.solver.x
         self.solver_v = self.solver.v
@@ -160,7 +161,7 @@ class TaichiEnv:
         self.gui = ti.GUI(show_gui=False, background_color=0xFFFFFF)
 
     @ti.kernel
-    def nn_input(self, t: ti.i32, offset: ti.i32, max_speed: ti.f64, max_height: ti.f64):
+    def nn_input_mass_spring(self, t: ti.i32, offset: ti.i32, max_velocity: ti.f64, max_height: ti.f64):
         if ti.static(self.n_sin_waves > 0):
             for model_id, k, j in ti.ndrange(self.n_models, self.batch_size, self.n_sin_waves):
                 self.input_state[model_id, t, k, j] = ti.sin(
@@ -181,7 +182,7 @@ class TaichiEnv:
             if ti.static(self.dim == 2):
                 for model_id, k, j in ti.ndrange(self.n_models, self.batch_size, self.duplicate_v):
                     self.input_state[model_id, t, k, self.has_state_vector * self.n_objects * self.dim * 2 + self.n_sin_waves + j * (self.dim - 1)] = \
-                    self.target_v[t, k][0] / max_speed
+                    self.target_v[t, k][0] / max_velocity
             else:
                 for model_id, k, j in ti.ndrange(self.n_models, self.batch_size, self.duplicate_v):
                     self.input_state[model_id, t, k, self.has_state_vector * self.n_objects * self.dim * 2 + self.n_sin_waves + j * (self.dim - 1)] = \
@@ -198,6 +199,39 @@ class TaichiEnv:
         if ti.static(self.duplicate_c > 0):
             for model_id, k, j in ti.ndrange(self.n_models, self.batch_size, self.duplicate_c):
                 self.input_state[model_id, t, k, self.has_state_vector * self.n_objects * self.dim * 2 + self.n_sin_waves + self.duplicate_v * (self.dim - 1) + self.duplicate_h + j] = self.target_c[t, k]
+
+    @ti.kernel
+    def nn_input_mpm(self, t: ti.i32, offset: ti.i32, max_velocity: real, max_height: real):
+        if ti.static(self.n_sin_waves > 0):
+            for model_id, k, j in ti.ndrange(self.n_models, self.batch_size, self.n_sin_waves):
+                self.input_state[model_id, t, k, j] = ti.sin(self.spring_omega * (t + offset) * self.dt + 2 * math.pi / self.n_sin_waves * j)
+
+        for model_id, k, sq, d in ti.ndrange(self.n_models, self.batch_size, self.solver.n_squares, self.dim):
+            self.input_state[model_id, t, k, sq * self.dim * 2 + self.n_sin_waves + d] = 0
+            self.input_state[model_id, t, k, sq * self.dim * 2 + self.n_sin_waves + self.dim + d] = 0
+
+        for model_id, k, sq, a in ti.ndrange(self.n_models, self.batch_size, self.solver.n_squares, self.solver.n_squ * self.solver.n_squ):
+            j = sq * self.solver.n_squ * self.solver.n_squ + a
+            vec_x = self.solver_x[model_id, t, k, j] - self.solver_center[model_id, t, k]
+            for d in ti.static(range(self.dim)):
+                self.input_state[model_id, t, k, sq * self.dim * 2 + self.n_sin_waves + d] += vec_x[d] / 0.05 / (self.solver.n_squ ** 2)
+                self.input_state[model_id, t, k, sq * self.dim * 2 + self.n_sin_waves + self.dim + d] += self.solver_v[model_id, t, k, j][d] / (self.solver.n_squ ** 2)
+
+        if ti.static(self.duplicate_v > 0):
+            for model_id, k, j in ti.ndrange(self.n_models, self.batch_size, self.duplicate_v):
+                self.input_state[model_id, t, k, self.n_objects * self.dim * 2 + self.n_sin_waves + j * (self.dim - 1)] = self.target_v[t, k][0] / max_velocity
+        if ti.static(self.duplicate_h > 0):
+            for model_id, k, j in ti.ndrange(self.n_models, self.batch_size, self.duplicate_h):
+                self.input_state[model_id, t, k, self.n_objects * self.dim * 2 + self.n_sin_waves + self.duplicate_v * (self.dim - 1) + j] = (self.target_h[
+                                                                                                          t, k] - 0.1) / max_height * 2 - 1
+
+    def nn_input(self, *args, **kwargs):
+        if self.simulator == "mpm":
+            self.nn_input_mpm(*args, **kwargs)
+        elif self.simulator == "mass_spring":
+            self.nn_input_mass_spring(*args, **kwargs)
+        else:
+            raise NotImplementedError(f"Simulator {self.simulator} not implemented.")
 
     @ti.kernel
     def compute_loss_velocity(self, steps: ti.template()):
@@ -411,6 +445,10 @@ class TaichiEnv:
     def reset_robot(self, start: ti.template(), step: ti.template(), times: ti.template()):
         for model_id, k, i in ti.ndrange(self.n_models, times, self.n_objects):
             self.solver_x[model_id, 0, k * step + start, i] = self.initial_objects[i]
+            if ti.static(self.simulator == "mpm"):
+                self.solver_v[model_id, 0, k * step + start, i] = ti.Matrix.zero(real, self.dim, 1)
+                self.solver.C[model_id, 0, k, i] = ti.Matrix.zero(real, self.dim, self.dim)
+                self.solver.F[model_id, 0, k, i] = [[1., 0.], [0., 1.]]
 
     @ti.kernel
     def get_center(self):
@@ -431,6 +469,9 @@ class TaichiEnv:
         for model_id, k, i in ti.ndrange(self.n_models, self.batch_size, self.n_objects):
             self.solver_x[model_id, 0, k, i] = self.solver_x[model_id, steps, k, i]
             self.solver_v[model_id, 0, k, i] = self.solver_v[model_id, steps, k, i]
+            if ti.static(self.simulator == "mpm"):
+                self.solver.C[model_id, 0, k, i] = self.C[model_id, steps, k, i]
+                self.solver.F[model_id, 0, k, i] = self.F[model_id, steps, k, i]
 
     @ti.kernel
     def refresh_xv(self):

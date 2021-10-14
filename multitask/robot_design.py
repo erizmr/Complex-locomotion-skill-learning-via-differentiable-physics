@@ -85,7 +85,8 @@ class RobotDesignMPM(RobotDesignBase):
 
     def get_objects(self):
         assert self.built
-        return self.pos, self.actuator_id, self.actuator_num
+
+        return [list(x) for x in self.pos], self.actuator_id, self.actuator_num
 
     def build(self):
         positions = self.config["design"]["anchor"]
@@ -107,6 +108,25 @@ class RobotDesignMPM(RobotDesignBase):
         self.n_particles = 0
         self.n_solid_particles = 0
         self.built = False
+
+    def draw(self):
+        assert self.built
+        import taichi as ti
+        default_res = 512
+        gui = ti.GUI(self.robot_name, background_color=0xFFFFFF)
+
+        def circle(x, y, color):
+            gui.circle((x, y + 0.1), ti.rgb_to_hex(color), 2)
+        aid = self.actuator_id
+        while gui.running:
+            for i in range(self.n_particles):
+                color = (0.06640625, 0.06640625, 0.06640625)
+                if aid[i] != -1:
+                    # act_applied = self.actuation[t - 1, 0, aid[i]]
+                    act_applied = 0.1
+                    color = (0.5 - act_applied, 0.5 - abs(act_applied), 0.5 + act_applied)
+                circle(self.pos[i][0], self.pos[i][1], color)
+            gui.show()
 
 
 class RobotDesignMassSpring(RobotDesignBase):
@@ -336,6 +356,7 @@ class RobotDesignMassSpring(RobotDesignBase):
     #                          stiffness=stiffness,
     #                          actuation=actuation,
     #                          active_spring=active_spring)
+
 
 class RobotDesignMassSpring3D(RobotDesignBase):
     def __init__(self, cfg):
