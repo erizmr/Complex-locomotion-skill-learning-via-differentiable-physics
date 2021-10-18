@@ -137,13 +137,14 @@ if __name__ == "__main__":
     print('args', args)
 
     # Init taichi
-    # ti_random_seed = int(time.time() * 1e6) % 10000
-    ti_random_seed = 930
-    ti.init(arch=ti.gpu, default_fp=real, random_seed=ti_random_seed, packed=args.packed, device_memory_GB=args.memory)
+    # Init taichi
+    if args.random:
+        args.seed = int(time.time() * 1e6) % 10000
+    ti.init(arch=ti.gpu, default_fp=real, random_seed=args.seed, packed=args.packed, device_memory_GB=args.memory)
 
 
     config_file = args.config_file
-    config = ConfigSim.from_file(config_file, if_mkdir=False)
+    config = ConfigSim.from_args_and_file(args, config_file, if_mkdir=False)
     config_name = config_file.split('/')[-1].split('.')[0]
     robot_id = config.get_config()["robot"]["robot_id"]
     os.makedirs(f'./video/interactive/robot_{robot_id}/{config_name}', exist_ok=True)

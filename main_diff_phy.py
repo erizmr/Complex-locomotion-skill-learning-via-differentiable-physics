@@ -12,12 +12,13 @@ if __name__ == "__main__":
     config_file = args.config_file
 
     # Init taichi
-    # ti_random_seed = int(time.time() * 1e6) % 10000
-    ti_random_seed = 930
-    ti.init(arch=ti.gpu, default_fp=real, random_seed=ti_random_seed, packed=args.packed, device_memory_GB=args.memory)
+    if args.random:
+        args.seed = int(time.time() * 1e6) % 10000
+    print(f"Random seed: {args.seed}")
+    ti.init(arch=ti.gpu, default_fp=real, random_seed=args.seed, packed=args.packed, device_memory_GB=args.memory)
 
     if args.train:
-        config = ConfigSim.from_file(config_file)
+        config = ConfigSim.from_args_and_file(args, config_file)
         print(config)
         diffphy_trainer = DiffPhyTrainer(args, config=config)
         ti.root.lazy_grad()
@@ -26,7 +27,7 @@ if __name__ == "__main__":
         # diffphy_trainer.optimize(iters=35000, loss_enable={"velocity", "height", "actuation"}, root_dir="/home/mingrui/difftaichi/difftaichi2/saved_results")
     if args.evaluate:
         load_path = args.evaluate_path
-        config = ConfigSim.from_file(config_file, if_mkdir=False)
+        config = ConfigSim.from_args_and_file(args, config_file, if_mkdir=False)
         print(config)
         batch_required = 1
         for k, v in config.get_config()["validation"].items():

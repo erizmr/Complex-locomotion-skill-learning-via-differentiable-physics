@@ -74,8 +74,9 @@ class ConfigSim:
             self.robot_builder = RobotDesignMassSpring3D.from_file(file_name=robot_design_file)
             objects, springs, faces = self.robot_builder.build()
         elif solver_type == "mpm":
-            self.robot_builder = RobotDesignMPM.from_file(file_name=robot_design_file)
-            objects, springs, n_springs = self.robot_builder.build()
+            # self.robot_builder = RobotDesignMPM.from_file(file_name=robot_design_file)
+            # objects, springs, n_springs = self.robot_builder.build()
+            objects, springs, n_springs = robots_mpm[0]()
         else:
             raise NotImplementedError(f"{solver_type} not implemented.")
 
@@ -140,15 +141,20 @@ class ConfigSim:
         duplicate_v = self._config["nn"]["duplicate_v"]
         duplicate_c = self._config["nn"]["duplicate_c"]
 
-        self._config["nn"][
-            "n_input_states"] = n_sin_waves + dim * 2 * n_objects + duplicate_v * (
-                dim - 1) + duplicate_h + duplicate_c
+        if solver_type == "mass_spring":
+            self._config["nn"][
+                "n_input_states"] = n_sin_waves + dim * 2 * n_objects + duplicate_v * (
+                    dim - 1) + duplicate_h + duplicate_c
+        elif solver_type == "mpm":
+            n_squares = self._config["robot"]["n_squares"]
+            self._config["nn"]["n_input_states"] = n_sin_waves + dim * 2 * n_squares + duplicate_v * (dim - 1) + duplicate_h + duplicate_c
+        else:
+            raise NotImplementedError(f"Solver {solver_type} not implemented.")
 
         self._config["nn"]["adam_a"] = self._config["nn"]["learning_rate"]
 
-        self._config["train"]["random_seed"] = int(time.time() * 1e6) % 10000
-
         if self._args:
+            self._config["train"]["random_seed"] = self._args.seed
             self._config["train"]["num_processes"] = self._args.num_processes
 
     @classmethod
