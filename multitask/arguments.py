@@ -40,13 +40,23 @@ def construct_args():
         action='store_true',
         help='disable tensorboard for evaluating')
     parser.add_argument(
+        '--visual-train',
+        action='store_true',
+        help='whether output visual output when training')
+    parser.add_argument(
+        '--debug',
+        action='store_true',
+        help='whether enable debug mode for taichi (debug mode is less efficient but more powerful on catching bugs)')
+    parser.add_argument(
         '--evaluate_path',
         default='',
         help='the folder to validate')
     parser.add_argument(
         '--lr', type=float, default=2.5e-4, help='learning rate (default: 7e-4)')
     parser.add_argument(
-        '--seed', type=int, default=1, help='random seed (default: 1)')
+        '--seed', type=int, default=1, help='set a fixed random seed (default: 1)')
+    parser.add_argument(
+        '--random', action='store_true', help='generate a random seed')
     parser.add_argument(
         '--cuda-deterministic',
         action='store_true',

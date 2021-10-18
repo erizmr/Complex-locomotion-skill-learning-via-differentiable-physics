@@ -219,11 +219,17 @@ class TaichiEnv:
 
         if ti.static(self.duplicate_v > 0):
             for model_id, k, j in ti.ndrange(self.n_models, self.batch_size, self.duplicate_v):
-                self.input_state[model_id, t, k, self.n_objects * self.dim * 2 + self.n_sin_waves + j * (self.dim - 1)] = self.target_v[t, k][0] / max_velocity
+                # self.input_state[model_id, t, k, self.n_objects * self.dim * 2 + self.n_sin_waves + j * (self.dim - 1)] = self.target_v[t, k][0] / max_velocity
+                self.input_state[
+                    model_id, t, k, self.solver.n_squares * self.dim * 2 + self.n_sin_waves + j * (self.dim - 1)] = \
+                self.target_v[t, k][0] / max_velocity
         if ti.static(self.duplicate_h > 0):
             for model_id, k, j in ti.ndrange(self.n_models, self.batch_size, self.duplicate_h):
-                self.input_state[model_id, t, k, self.n_objects * self.dim * 2 + self.n_sin_waves + self.duplicate_v * (self.dim - 1) + j] = (self.target_h[
-                                                                                                          t, k] - 0.1) / max_height * 2 - 1
+                # self.input_state[model_id, t, k, self.n_objects * self.dim * 2 + self.n_sin_waves + self.duplicate_v * (self.dim - 1) + j] = (self.target_h[
+                #                                                                                           t, k] - 0.1) / max_height * 2 - 1
+                self.input_state[model_id, t, k, self.solver.n_squares * self.dim * 2 + self.n_sin_waves + self.duplicate_v * (
+                            self.dim - 1) + j] = (self.target_h[
+                                                      t, k] - 0.1) / max_height * 2 - 1
 
     def nn_input(self, *args, **kwargs):
         if self.simulator == "mpm":
@@ -470,8 +476,8 @@ class TaichiEnv:
             self.solver_x[model_id, 0, k, i] = self.solver_x[model_id, steps, k, i]
             self.solver_v[model_id, 0, k, i] = self.solver_v[model_id, steps, k, i]
             if ti.static(self.simulator == "mpm"):
-                self.solver.C[model_id, 0, k, i] = self.C[model_id, steps, k, i]
-                self.solver.F[model_id, 0, k, i] = self.F[model_id, steps, k, i]
+                self.solver.C[model_id, 0, k, i] = self.solver.C[model_id, steps, k, i]
+                self.solver.F[model_id, 0, k, i] = self.solver.F[model_id, steps, k, i]
 
     @ti.kernel
     def refresh_xv(self):

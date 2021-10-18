@@ -130,6 +130,7 @@ class DiffPhyTrainer(BaseTrainer):
         # self.max_steps = self.taichi_env.config["process"]["max_steps"]
         self.loss_enable = set(self.taichi_env.task)
         self.change_iter = self.taichi_env.config["process"]["state_feedback_iter"] if "state_feedback_iter" in self.taichi_env.config["process"] else 5000
+        self.visual_train = args.visual_train
         self.reset_step = 2
         self.total_norm_sqr = 0.
         self.losses_list = []
@@ -151,6 +152,14 @@ class DiffPhyTrainer(BaseTrainer):
         self.legacy_io = LegacyIO()
         self.metric_writer = MetricWriter()
         self.register_hooks([self.legacy_io, self.metric_writer])
+
+    def visual_probe(self, t, batch_rank=0):
+        self.taichi_env.gui.clear()
+        self.taichi_env.gui.line((0, self.taichi_env.ground_height), (1, self.taichi_env.ground_height),
+                      color=0x000022,
+                      radius=3)
+        self.taichi_env.solver.draw_robot(self.taichi_env.gui, t, batch_rank, self.taichi_env.target_v)
+        self.taichi_env.gui.show(os.path.join(self.taichi_env.config_.monitor_dir, f"{self.iter:04}_{t:04}.png"))
 
     @ti.kernel
     def diff_copy(self, t: ti.i32):
@@ -186,7 +195,7 @@ class DiffPhyTrainer(BaseTrainer):
         # start simulation
         if train:
             with ti.Tape(self.taichi_env.loss):
-                for t in range(steps + 1):
+                for t in range(steps-1):
                     self.taichi_env.solver.pre_advance(t)
                     self.taichi_env.nn_input(t, 0, max_speed, max_height)
                     if t % self.control_length == 0:
@@ -195,8 +204,13 @@ class DiffPhyTrainer(BaseTrainer):
                         self.diff_copy(t)
                     self.taichi_env.solver.advance(t)
                 self.taichi_env.get_loss(steps, *args, **kwargs)
+
+            if self.visual_train:
+                for i in range(1, steps):
+                    if i % 200 == 0:
+                        self.visual_probe(i)
         else:
-            for t in range(steps + 1):
+            for t in range(steps-1):
                 self.taichi_env.solver.pre_advance(t)
                 self.taichi_env.nn_input(t, 0, max_speed, max_height)
                 # self.nn.forward(t)
@@ -217,6 +231,7 @@ class DiffPhyTrainer(BaseTrainer):
 
     def run_step(self, *args, **kwargs):
         if self.iter > self.change_iter:
+            print("State feedback starts to be enabled.")
             if self.iter % 500 == 0 and self.reset_step < self.max_reset_step:
                 self.reset_step += 1
             self.rounded_train(self.taichi_env.max_steps, self.iter, reset_step=self.reset_step)

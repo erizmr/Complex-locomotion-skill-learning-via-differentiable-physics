@@ -1,5 +1,6 @@
 import os
 import glob
+import time
 import taichi as ti
 from multitask.arguments import get_args, get_args_parser
 from multitask.config_sim import ConfigSim
@@ -10,7 +11,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 from multitask.utils import real
 
-ROBOT_NAMES = {2:"Alpaca", 3:"Monster", 4:"HugeStool", 5:"Stool", 6:"Snake", 7:"Snake-A"}
+ROBOT_NAMES = {2:"Alpaca", 3:"Monster", 4:"HugeStool", 5:"Stool", 6:"Snake", 7:"Snake-A", 21: "MPM-Stool"}
 
 def set_target():
     for e in gui.get_events():
@@ -89,15 +90,26 @@ def forward_mass_spring():
     trainer.taichi_env.solver.clear_states(1)
 
 
+def forward_mpm():
+    trainer.taichi_env.solver.p2g(0)
+    trainer.taichi_env.solver.grid_op()
+    trainer.taichi_env.solver.g2p(0)
+    trainer.taichi_env.solver.clear_grid_interactive()
+
+
 @ti.kernel
 def refresh_xv():
     for i in range(trainer.taichi_env.n_objects):
         trainer.taichi_env.solver_x[0, 0, 0, i] = trainer.taichi_env.solver_x[0, 1, 0, i]
         trainer.taichi_env.solver_v[0, 0, 0, i] = trainer.taichi_env.solver_v[0, 1, 0, i]
+        if solver_type == "mpm":
+            trainer.taichi_env.solver.C[0, 0, 0, i] = trainer.taichi_env.solver.C[0, 1, 0, i]
+            trainer.taichi_env.solver.F[0, 0, 0, i] = trainer.taichi_env.solver.F[0, 1, 0, i]
 
 
 # TODO: clean up
 gui = ti.GUI(background_color=0xFFFFFF)
+
 
 def visualizer(output=False):
     gui.clear()
@@ -107,7 +119,7 @@ def visualizer(output=False):
     gui.text(f"Agent Name: {ROBOT_NAMES[robot_id]}", (0.05, 0.9), color=0x000022, font_size=20)
     gui.text(f"Control length: {control_length}", (0.05, 0.85), color=0x000022, font_size=20)
     gui.text(f"Targets v: {set_target.target_v:.2f}, h: {set_target.target_h:.2f}, c: {set_target.target_c:.2f}", (0.05, 0.80), color=0x000022, font_size=20)
-    trainer.taichi_env.solver.draw_robot(gui=gui, batch_rank=1, t=1, target_v=trainer.taichi_env.target_v)
+    trainer.taichi_env.solver.draw_robot(gui=gui, t=1, batch_rank=1, target_v=trainer.taichi_env.target_v)
     if output:
         gui.show('video/interactive/robot_{}/{}/{:04d}.png'.format(robot_id, config_name, visualizer.frame))
     else:
@@ -140,8 +152,8 @@ if __name__ == "__main__":
     # Init taichi
     if args.random:
         args.seed = int(time.time() * 1e6) % 10000
-    ti.init(arch=ti.gpu, default_fp=real, random_seed=args.seed, packed=args.packed, device_memory_GB=args.memory)
-
+    ti.init(arch=ti.gpu, default_fp=real, random_seed=args.seed, packed=args.packed, device_memory_GB=args.memory,
+            debug=args.debug)
 
     config_file = args.config_file
     config = ConfigSim.from_args_and_file(args, config_file, if_mkdir=False)
@@ -149,6 +161,7 @@ if __name__ == "__main__":
     robot_id = config.get_config()["robot"]["robot_id"]
     os.makedirs(f'./video/interactive/robot_{robot_id}/{config_name}', exist_ok=True)
     control_length = config.get_config()["robot"]["control_length"]
+    solver_type = config.get_config()["robot"]["simulator"]
 
     # Enforce the batch size to 1
     config._config["nn"]["batch_size"] = 1
@@ -172,7 +185,12 @@ if __name__ == "__main__":
         for i in range(6):
             set_target()
             make_decision()
-            forward_mass_spring()
+            if solver_type == "mass_spring":
+                forward_mass_spring()
+            elif solver_type == "mpm":
+                forward_mpm()
+            else:
+                raise NotImplementedError(f"Solver {solver_type} not implemented.")
             refresh_xv()
             offset += 1
         visualizer(output=args.save)

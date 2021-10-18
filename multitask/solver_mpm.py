@@ -2,6 +2,7 @@ import taichi as ti
 from multitask.utils import vec, scalar, mat, real
 from multitask.config_sim import ConfigSim
 
+
 @ti.data_oriented
 class SolverMPM:
     def __init__(self, config: ConfigSim):
@@ -90,17 +91,25 @@ class SolverMPM:
             self.grid_v_in[model_id, k, i, j] = ti.Matrix.zero(real, self.dim, 1)
             self.grid_m_in[model_id, k, i, j] = 0
             self.grid_v_out[model_id, k, i, j] = ti.Matrix.zero(real, self.dim, 1)
+
             self.grid_v_in.grad[model_id, k, i, j] = ti.Matrix.zero(real, self.dim, 1)
             self.grid_m_in.grad[model_id, k, i, j] = 0
             self.grid_v_out.grad[model_id, k, i, j] = ti.Matrix.zero(real, self.dim, 1)
 
     @ti.kernel
+    def clear_grid_interactive(self):
+        for model_id, k, i, j in ti.ndrange(self.n_models, self.batch_size, self.n_grid, self.n_grid):
+            self.grid_v_in[model_id, k, i, j] = ti.Matrix.zero(real, self.dim, 1)
+            self.grid_m_in[model_id, k, i, j] = 0
+            self.grid_v_out[model_id, k, i, j] = ti.Matrix.zero(real, self.dim, 1)
+
+    @ti.kernel
     def p2g(self, f: ti.i32):
         for model_id, k, p in ti.ndrange(self.n_models, self.batch_size, self.n_particles):
             anchor = ti.Matrix.zero(real, self.dim, 1)
-            anchor[0] = (ti.cast(self.x[model_id, f, k, 0](0) * self.inv_dx - 0.5, ti.i32) - 5) * self.dx
+            anchor[0] = ti.cast(ti.cast(self.x[model_id, f, k, 0](0) * self.inv_dx - 0.5, ti.i32) - 5, real) * self.dx
             base = ti.cast((self.x[model_id, f, k, p] - anchor) * self.inv_dx - 0.5, ti.i32)
-            fx = (self.x[model_id, f, k, p] - anchor) * self.inv_dx - ti.cast(base, ti.i32)
+            fx = (self.x[model_id, f, k, p] - anchor) * self.inv_dx - ti.cast(base, real)
             w = [0.5 * (1.5 - fx)**2, 0.75 - (fx - 1)**2, 0.5 * (fx - 0.5)**2]
             new_F = (ti.Matrix.diag(dim=2, val=1) + self.dt * self.C[model_id, f, k, p]) @ self.F[model_id, f, k, p]
             J = (new_F).determinant()
@@ -151,10 +160,10 @@ class SolverMPM:
             if i > self.n_grid - self.bound:
                 v_out[0] = 0
                 v_out[1] = 0
-            if j < self.bound:
+            if j < self.bound and v_out[1] < 0:
                 v_out[0] = 0
                 v_out[1] = 0
-            if j > self.n_grid - self.bound:
+            if j > self.n_grid - self.bound and v_out[1] > 0:
                 v_out[0] = 0
                 v_out[1] = 0
             self.grid_v_out[model_id, k, i, j] = v_out
@@ -163,9 +172,9 @@ class SolverMPM:
     def g2p(self, f: ti.i32):
         for model_id, k, p in ti.ndrange(self.n_models, self.batch_size, self.n_particles):
             anchor = ti.Matrix.zero(real, self.dim, 1)
-            anchor[0] = (ti.cast(self.x[model_id, f, k, 0](0) * self.inv_dx - 0.5, ti.i32) - 5) * self.dx
+            anchor[0] = ti.cast(ti.cast(self.x[model_id, f, k, 0](0) * self.inv_dx - 0.5, ti.i32) - 5, real) * self.dx
             base = ti.cast((self.x[model_id, f, k, p] - anchor) * self.inv_dx - 0.5, ti.i32)
-            fx = (self.x[model_id, f, k, p] - anchor) * self.inv_dx - ti.cast(base, ti.i32)
+            fx = (self.x[model_id, f, k, p] - anchor) * self.inv_dx - ti.cast(base, real)
             w = [0.5 * (1.5 - fx)**2, 0.75 - (fx - 1.0)**2, 0.5 * (fx - 0.5)**2]
             new_v = ti.Vector([0.0, 0.0])
             new_C = ti.Matrix([[0.0, 0.0], [0.0, 0.0]])
@@ -213,19 +222,13 @@ class SolverMPM:
     def advance(self, s):
         self.advance_core(s)
 
-    def draw_robot(self, gui, t, target_v):
+    def draw_robot(self, gui, t, batch_rank, target_v):
         def circle(x, y, color):
             gui.circle((x, y + 0.1 - self.dx * self.bound), ti.rgb_to_hex(color), 2)
         aid = self.actuator_id.to_numpy()
         for i in range(self.n_objects):
             color = (0.06640625, 0.06640625, 0.06640625)
             if self.simulator == "mpm" and aid[0, i] != -1:
-                act_applied = self.actuation[t - 1, 0, aid[0, i]]
+                act_applied = self.actuation[0, t - 1, batch_rank, aid[0, i]]
                 color = (0.5 - act_applied, 0.5 - abs(act_applied), 0.5 + act_applied)
-            circle(self.x[t, 0, i][0], self.x[t, 0, i][1], color)
-        # if target_v[t, 0][0] > 0:
-        #     circle(0.5, 0.5, (1, 0, 0))
-        #     circle(0.6, 0.5, (1, 0, 0))
-        # else:
-        #     circle(0.5, 0.5, (0, 0, 1))
-        #     circle(0.4, 0.5, (0, 0, 1))
+            circle(self.x[0, t, batch_rank, i][0], self.x[0, t, batch_rank, i][1], color)

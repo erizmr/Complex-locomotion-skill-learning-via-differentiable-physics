@@ -15,7 +15,8 @@ if __name__ == "__main__":
     if args.random:
         args.seed = int(time.time() * 1e6) % 10000
     print(f"Random seed: {args.seed}")
-    ti.init(arch=ti.gpu, default_fp=real, random_seed=args.seed, packed=args.packed, device_memory_GB=args.memory)
+    ti.init(arch=ti.gpu, default_fp=real,
+            random_seed=args.seed, packed=args.packed, device_memory_GB=args.memory, debug=args.debug)
 
     if args.train:
         config = ConfigSim.from_args_and_file(args, config_file)

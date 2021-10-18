@@ -77,10 +77,10 @@ class SolverMassSpring:
     @ti.kernel
     def clear_states(self, steps: ti.template()):
         for model_id, t, k, i in ti.ndrange(self.n_models, steps, self.batch_size, self.n_objects):
-            #self.x.grad[t, k, i] = ti.Matrix.zero(real, dim, 1)
-            #self.v.grad[t, k, i] = ti.Matrix.zero(real, dim, 1)
+            # self.x.grad[model_id, t, k, i] = ti.Matrix.zero(real, self.dim, 1)
+            # self.v.grad[model_id, t, k, i] = ti.Matrix.zero(real, self.dim, 1)
             self.v_inc[model_id, t, k, i] = ti.Matrix.zero(real, self.dim, 1)
-            #self.v_inc.grad[t, k, i] = ti.Matrix.zero(real, dim, 1)
+            # self.v_inc.grad[model_id, t, k, i] = ti.Matrix.zero(real, self.dim, 1)
         for model_id, t, k in ti.ndrange(self.n_models, steps, self.batch_size):
             self.head_center[model_id, t, k] = ti.Matrix.zero(real, self.dim, 1)
             self.head_counter[model_id, t, k] = 0.
@@ -196,13 +196,13 @@ class SolverMassSpring:
         self.apply_spring_force(t)
         self.advance_toi(t + 1)
 
-    def draw_robot(self, gui, batch_rank, t, target_v):
+    def draw_robot(self, gui, t, batch_rank, target_v):
         def circle(x, y, color):
             gui.circle((x, y), ti.rgb_to_hex(color), 7)
         # draw segments
         for i in range(self.n_springs):
             def get_pt(x):
-                return (x[0], x[1])
+                return x[0], x[1]
             a = self.actuation[self.default_model_id, t - 1, batch_rank, i] * 0.5
             r = 2
             if self.spring_actuation[i] == 0:
@@ -219,9 +219,3 @@ class SolverMassSpring:
         for i in range(self.n_objects):
             color = (0.06640625, 0.06640625, 0.06640625)
             circle(self.x[self.default_model_id, t, batch_rank, i][0], self.x[self.default_model_id, t, batch_rank, i][1], color)
-        # if target_v[t, batch_rank][0] > 0:
-        #     circle(0.5, 0.5, (1, 0, 0))
-        #     circle(0.6, 0.5, (1, 0, 0))
-        # else:
-        #     circle(0.5, 0.5, (0, 0, 1))
-        #     circle(0.4, 0.5, (0, 0, 1))
