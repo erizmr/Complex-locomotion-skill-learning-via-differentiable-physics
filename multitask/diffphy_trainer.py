@@ -234,7 +234,7 @@ class DiffPhyTrainer(BaseTrainer):
             print("State feedback starts to be enabled.")
             if self.iter % 500 == 0 and self.reset_step < self.max_reset_step:
                 self.reset_step += 1
-            self.rounded_train(self.taichi_env.max_steps, self.iter, reset_step=self.reset_step)
+            self.rounded_train(self.taichi_env.max_steps-1, self.iter, reset_step=self.reset_step)
         print("-------------------- {}iter #{} --------------------" \
               .format("" if self.prefix is None else "{}, ".format(self.prefix), self.iter))
 
