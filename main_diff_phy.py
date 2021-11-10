@@ -1,3 +1,4 @@
+import os
 from multitask.utils import real
 import taichi as ti
 import time
@@ -10,6 +11,7 @@ if __name__ == "__main__":
     args = get_args()
     print('args', args)
     config_file = args.config_file
+    os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu_id
 
     # Init taichi
     if args.random:

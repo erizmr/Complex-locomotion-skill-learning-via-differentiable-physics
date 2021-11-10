@@ -101,6 +101,10 @@ def construct_args():
         action='store_true',
         default=False,
         help='disables CUDA training')
+    parser.add_argument(
+        '--gpu-id',
+        default="1",
+        help='select gpu id')
     return parser
 
 def get_args():
