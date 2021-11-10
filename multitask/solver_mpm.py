@@ -11,6 +11,7 @@ class SolverMPM:
         # General parameters
         self.max_steps = config.get_config()["process"]["max_steps"]
         self.dt = config.get_config()["process"]["dt"]
+        self.jump_period = config.get_config()["process"]["jump_period"]
         self.ground_height = config.get_config()["simulator"]["ground_height"]
         self.gravity = config.get_config()["simulator"]["gravity"]
         self.drag_damping = config.get_config()["simulator"]["drag_damping"]
@@ -34,6 +35,7 @@ class SolverMPM:
         self.mu = config.get_config()["simulator"]["mu"]
         self.la = config.get_config()["simulator"]["la"]
         self.bound = config.get_config()["simulator"]["bound"]
+        self.coeff = config.get_config()["simulator"]["coeff"]
 
         self.n_models = config.get_config()["nn"]["n_models_used"]
         print(f"n models MPM: {self.n_models}")
@@ -154,15 +156,31 @@ class SolverMPM:
             inv_m = 1 / (self.grid_m_in[model_id, k, i, j] + 1e-10)
             v_out = inv_m * self.grid_v_in[model_id, k, i, j]
             v_out[1] += self.dt * self.gravity
-            if i < self.bound:
+            if i < self.bound and v_out[0] < 0:
                 v_out[0] = 0
                 v_out[1] = 0
-            if i > self.n_grid - self.bound:
+            if i > self.n_grid - self.bound and v_out[0] > 0:
                 v_out[0] = 0
                 v_out[1] = 0
             if j < self.bound and v_out[1] < 0:
                 v_out[0] = 0
                 v_out[1] = 0
+                normal = ti.Vector([0.0, 1.0])
+                lsq = (normal ** 2).sum()
+                if lsq > 0.5:
+                    if ti.static(self.coeff < 0):
+                        v_out[0] = 0
+                        v_out[1] = 0
+                    else:
+                        lin = (v_out.transpose() @ normal)(0)
+                        if lin < 0:
+                            vit = v_out - lin * normal
+                            lit = vit.norm() + 1e-10
+                            if lit + self.coeff * lin <= 0:
+                                v_out[0] = 0
+                                v_out[1] = 0
+                            else:
+                                v_out = (1 + self.coeff * lin / lit) * vit
             if j > self.n_grid - self.bound and v_out[1] > 0:
                 v_out[0] = 0
                 v_out[1] = 0
@@ -199,6 +217,24 @@ class SolverMPM:
         for model_id, k, i in ti.ndrange(self.n_models, self.batch_size, n):
             self.center[model_id, t, k] += self.x[model_id, t, k, i] / n
 
+    @ti.kernel
+    def compute_height(self, t: ti.i32):
+        for model_id, k in ti.ndrange(self.n_models, self.batch_size):
+            h = 10.
+            for i in ti.static(range(self.n_objects)):
+                h = float(ti.min(h, self.x[model_id, t, k, i](1)))
+            # self.height[t, k] = h
+            if t % self.jump_period == 0:
+                self.height[model_id, t, k] = h
+            else:
+                self.height[model_id, t, k] = ti.max(self.height[model_id, t - 1, k], h)
+
+        # for model_id, k in ti.ndrange(self.n_models, self.batch_size):
+        #     h = -10.
+        #     for i in ti.static(range(self.n_objects)):
+        #         h = ti.max(h, self.x[model_id, t, k, i](1))
+        #     self.upper_height[model_id, t, k] = h
+
     @ti.ad.grad_replaced
     def advance_core(self, t: ti.i32):
         self.clear_grid()
@@ -218,6 +254,7 @@ class SolverMPM:
 
     def pre_advance(self, s):
         self.compute_center(s)
+        self.compute_height(s)
 
     def advance(self, s):
         self.advance_core(s)
