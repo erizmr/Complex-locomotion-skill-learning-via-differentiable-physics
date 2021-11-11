@@ -6,13 +6,13 @@ def json_load(prefix):
     return json.load(open("cfg/{}.json".format(prefix), "r"))
 
 
-def json_dump(obj, prefix, script_file):
+def json_dump(obj, prefix, script_file, args):
     print("for i in 1 2 3;", file=script_file)
-    print("""do
-python3 main_diff_phy.py --config_file cfg/{}.json --train
-python3 main_diff_phy.py --config_file cfg/{}.json --evaluate --no-tensorboard-train --evaluate_path saved_results/{}/DiffTaichi_DiffPhy
+    print(f"""do
+python3 main_diff_phy.py --config_file cfg/{prefix}.json --train --gpu-id {args.gpu_id} --memory {args.memory_train}
+python3 main_diff_phy.py --config_file cfg/{prefix}.json --evaluate --memory {args.memory_validation} --no-tensorboard-train --evaluate_path saved_results/{prefix}/DiffTaichi_DiffPhy
 done
-""".format(prefix, prefix, prefix), file = script_file)
+""", file=script_file)
 
     return json.dump(obj, open("cfg/{}.json".format(prefix), "w"), indent=4)
 
@@ -72,6 +72,20 @@ if __name__ == "__main__":
                         nargs='+',
                         # default=0.90,
                         help="adam b2")
+    parser.add_argument(
+                        '--gpu-id',
+                        default="1",
+                        help='select gpu id')
+    parser.add_argument(
+                        '--memory-train',
+                        type=float,
+                        default=2.0,
+                        help='pre allocated memory for taichi when training')
+    parser.add_argument(
+                        '--memory-validation',
+                        type=float,
+                        default=2.0,
+                        help='pre allocated memory for taichi when evaluating')
     args = parser.parse_args()
 
     script_file = open(args.output_name, "w")
@@ -85,14 +99,14 @@ if __name__ == "__main__":
             # FULL
             prefix_original = prefix
             full_json = json_load(full_path)
-            json_dump(full_json, prefix_original, script_file)
+            json_dump(full_json, prefix_original, script_file, args)
 
         if args.slip and args.friction > 0:
             # slip boundary
             prefix_slip = prefix + "_slip" + f"_{args.friction}".replace('.', "")
             full_json = json_load(full_path)
             full_json["simulator"]["friction"] = args.friction
-            json_dump(full_json, prefix_slip, script_file)
+            json_dump(full_json, prefix_slip, script_file, args)
 
         if args.op:
             # OP
@@ -100,35 +114,35 @@ if __name__ == "__main__":
             full_json = json_load(full_path)
             full_json["nn"]["optimizer"] = "sgd"
             full_json["nn"]["learning_rate"] = 1e-2
-            json_dump(full_json, prefix_sgd, script_file)
+            json_dump(full_json, prefix_sgd, script_file, args)
 
         if args.af:
             # AF
             prefix_tanh = prefix + "_tanh"
             full_json = json_load(full_path)
             full_json["nn"]["activation"] = "tanh"
-            json_dump(full_json, prefix_tanh, script_file)
+            json_dump(full_json, prefix_tanh, script_file, args)
 
         if args.bs:
             # BS
             prefix_bs = prefix + "_batch_1"
             full_json = json_load(full_path)
             full_json["nn"]["batch_size"] = 1
-            json_dump(full_json, prefix_bs, script_file)
+            json_dump(full_json, prefix_bs, script_file, args)
 
         if args.ps:
             # PS
             prefix_no_periodic = prefix + "_no_periodic"
             full_json = json_load(full_path)
             full_json["nn"]["n_sin_waves"] = 0
-            json_dump(full_json, prefix_no_periodic, script_file)
+            json_dump(full_json, prefix_no_periodic, script_file, args)
 
         if args.sv:
             # SV
             prefix_no_state_vector = prefix + "_no_state_vector"
             full_json = json_load(full_path)
             full_json["nn"]["has_state_vector"] = 0
-            json_dump(full_json, prefix_no_state_vector, script_file)
+            json_dump(full_json, prefix_no_state_vector, script_file, args)
 
         if args.tg:
             # TG
@@ -137,14 +151,14 @@ if __name__ == "__main__":
             full_json["nn"]["duplicate_v"] = 0
             full_json["nn"]["duplicate_h"] = 0
             full_json["nn"]["duplicate_c"] = 0
-            json_dump(full_json, prefix_no_targets, script_file)
+            json_dump(full_json, prefix_no_targets, script_file, args)
 
         if args.ld:
             # LD
             prefix_no_targets = prefix + "_naive_loss"
             full_json = json_load(full_path)
             full_json["process"]["naive_loss"] = True
-            json_dump(full_json, prefix_no_targets, script_file)
+            json_dump(full_json, prefix_no_targets, script_file, args)
 
         if args.cq:
             # LD
@@ -153,14 +167,14 @@ if __name__ == "__main__":
             full_json["nn"]["batch_size"] = 1
             full_json["nn"]["optimizer"] = "sgd"
             full_json["nn"]["learning_rate"] = 1e-2
-            json_dump(full_json, prefix_hu2019, script_file)
+            json_dump(full_json, prefix_hu2019, script_file, args)
 
         if args.adam_grid_search:
             full_json = json_load(full_path)
             for b_2 in args.adam_b2:
                 prefix_adam_grid_search = prefix + "_adam_grid_search_" + b_2.replace(".","_")
                 full_json["nn"]["adam_b2"] = float(b_2)
-                json_dump(full_json, prefix_adam_grid_search, script_file)
+                json_dump(full_json, prefix_adam_grid_search, script_file, args)
 
 
 # OP: Optimizer, AF: Activation Function, BS: Batch Size, PS: Periodic Signal, SV: StateVector, TV: Targets, LD: naive_loss
