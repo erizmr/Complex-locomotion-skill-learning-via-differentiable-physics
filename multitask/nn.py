@@ -25,6 +25,19 @@ def compute_TNS(w: ti.template(), s: ti.template()):
 #         w[I] -= w.grad[I] * learning_rate
 
 
+@ti.func
+def relu(x):
+    return ti.max(x, 0.0)
+
+@ti.func
+def sigmoid(x):
+    return 1 / (1 + ti.exp(-x))
+
+@ti.func
+def gelu(x):
+    return 0.5 * x * (1 + ti.tanh(ti.sqrt(2 / math.pi) * (x + 0.044715 * x ** 3)))
+
+
 @ti.data_oriented
 class Model:
 
@@ -162,9 +175,19 @@ class Model:
         if ti.static(self.activation == "sin"):
             for model_id, k, i in ti.ndrange(self.n_models, self.batch_size, self.n_output):
                 self.output_act[model_id, t, k, i] = ti.sin(self.output[model_id, t, k, i] + self.bias2[model_id, i])
-        else:
+        elif ti.static(self.activation == "tanh"):
             for model_id, k, i in ti.ndrange(self.n_models, self.batch_size, self.n_output):
                 self.output_act[model_id, t, k, i] = ti.tanh(self.output[model_id, t, k, i] + self.bias2[model_id, i])
+        elif ti.static(self.activation == "relu"):
+            for model_id, k, i in ti.ndrange(self.n_models, self.batch_size, self.n_output):
+                self.output_act[model_id, t, k, i] = relu(self.output[model_id, t, k, i] + self.bias2[model_id, i])
+        elif ti.static(self.activation == "sigmoid"):
+            for model_id, k, i in ti.ndrange(self.n_models, self.batch_size, self.n_output):
+                self.output_act[model_id, t, k, i] = sigmoid(self.output[model_id, t, k, i] + self.bias2[model_id, i])
+        elif ti.static(self.activation == "gelu"):
+            for model_id, k, i in ti.ndrange(self.n_models, self.batch_size, self.n_output):
+                self.output_act[model_id, t, k, i] = gelu(self.output[model_id, t, k, i] + self.bias2[model_id, i])
+
 
     def forward(self, t):
         self.nn1(t)

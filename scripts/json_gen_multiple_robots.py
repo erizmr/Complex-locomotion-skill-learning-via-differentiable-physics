@@ -65,6 +65,12 @@ if __name__ == "__main__":
                         type=float,
                         default=-1.0,
                         help='friction coefficient')
+    parser.add_argument('--activation-compare',
+                        action='store_true',
+                        help='do activation comparing')
+    parser.add_argument('--activation-functions',
+                        nargs='+',
+                        help="all activation functions")
     parser.add_argument('--adam-grid-search',
                         action='store_true',
                         help='do adam momentum grid search')
@@ -175,6 +181,14 @@ if __name__ == "__main__":
                 prefix_adam_grid_search = prefix + "_adam_grid_search_" + b_2.replace(".","_")
                 full_json["nn"]["adam_b2"] = float(b_2)
                 json_dump(full_json, prefix_adam_grid_search, script_file, args)
+
+        if args.activation_compare:
+            full_json = json_load(full_path)
+            for af in args.activation_functions:
+                prefix_activation = prefix + "_activation_compare_" + af
+                full_json["nn"]["activation"] = af
+                json_dump(full_json, prefix_activation, script_file, args)
+
 
 
 # OP: Optimizer, AF: Activation Function, BS: Batch Size, PS: Periodic Signal, SV: StateVector, TV: Targets, LD: naive_loss
