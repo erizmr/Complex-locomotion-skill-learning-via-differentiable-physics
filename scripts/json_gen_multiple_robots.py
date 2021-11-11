@@ -65,6 +65,13 @@ if __name__ == "__main__":
                         type=float,
                         default=-1.0,
                         help='friction coefficient')
+    parser.add_argument('--adam-grid-search',
+                        action='store_true',
+                        help='do adam momentum grid search')
+    parser.add_argument('--adam-b2',
+                        nargs='+',
+                        # default=0.90,
+                        help="adam b2")
     args = parser.parse_args()
 
     script_file = open(args.output_name, "w")
@@ -143,10 +150,17 @@ if __name__ == "__main__":
             # LD
             prefix_hu2019 = prefix + "_hu2019"
             full_json = json_load(full_path)
-            full_json["nn"]["batch_size"] =1
+            full_json["nn"]["batch_size"] = 1
             full_json["nn"]["optimizer"] = "sgd"
             full_json["nn"]["learning_rate"] = 1e-2
             json_dump(full_json, prefix_hu2019, script_file)
+
+        if args.adam_grid_search:
+            full_json = json_load(full_path)
+            for b_2 in args.adam_b2:
+                prefix_adam_grid_search = prefix + "_adam_grid_search_" + b_2
+                full_json["nn"]["adam_b2"] = b_2
+                json_dump(full_json, prefix_adam_grid_search, script_file)
 
 
 # OP: Optimizer, AF: Activation Function, BS: Batch Size, PS: Periodic Signal, SV: StateVector, TV: Targets, LD: naive_loss
