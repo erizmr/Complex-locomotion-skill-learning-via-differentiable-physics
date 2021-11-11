@@ -159,7 +159,7 @@ if __name__ == "__main__":
             full_json = json_load(full_path)
             for b_2 in args.adam_b2:
                 prefix_adam_grid_search = prefix + "_adam_grid_search_" + b_2
-                full_json["nn"]["adam_b2"] = b_2
+                full_json["nn"]["adam_b2"] = float(b_2)
                 json_dump(full_json, prefix_adam_grid_search, script_file)
 
 
