@@ -272,7 +272,8 @@ class TaichiEnv:
     @ti.kernel
     def compute_loss_height(self, steps: ti.template()):
         for model_id, t, k in ti.ndrange(self.n_models, (1, steps + 1), self.batch_size):
-            if t % self.jump_period == self.jump_period - 1 and self.target_h[t, k] > 0.1 + 1e-6:
+            # TODO: currently we compute the height at the last but 2 step, because the step update discrepency between mass-spring and mpm
+            if t % self.jump_period == self.jump_period - 2 and self.target_h[t, k] > 0.1 + 1e-6:
                 loss_h = (self.solver_height[model_id, t, k] - self.target_h[t, k]) ** 2 / self.batch_size / (
                             steps // self.jump_period) * 100
                 self.loss_height[None] += loss_h
