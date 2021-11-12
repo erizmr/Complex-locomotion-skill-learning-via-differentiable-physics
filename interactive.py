@@ -102,7 +102,7 @@ def refresh_xv():
     for i in range(trainer.taichi_env.n_objects):
         trainer.taichi_env.solver_x[0, 0, 0, i] = trainer.taichi_env.solver_x[0, 1, 0, i]
         trainer.taichi_env.solver_v[0, 0, 0, i] = trainer.taichi_env.solver_v[0, 1, 0, i]
-        if solver_type == "mpm":
+        if ti.static(is_mpm):
             trainer.taichi_env.solver.C[0, 0, 0, i] = trainer.taichi_env.solver.C[0, 1, 0, i]
             trainer.taichi_env.solver.F[0, 0, 0, i] = trainer.taichi_env.solver.F[0, 1, 0, i]
 
@@ -162,6 +162,8 @@ if __name__ == "__main__":
     os.makedirs(f'./video/interactive/robot_{robot_id}/{config_name}', exist_ok=True)
     control_length = config.get_config()["robot"]["control_length"]
     solver_type = config.get_config()["robot"]["simulator"]
+    if solver_type == "mpm":
+        is_mpm = True
 
     # Enforce the batch size to 1
     config._config["nn"]["batch_size"] = 1
@@ -179,7 +181,7 @@ if __name__ == "__main__":
         trainer.nn.load_weights(os.path.join(model_path, "weight.pkl"))
 
     visualizer(output=args.save)
-
+    is_mpm = False
     default_control_sequence = args.control_seq
     while gui.running:
         for i in range(6):
