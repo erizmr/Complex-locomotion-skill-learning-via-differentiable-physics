@@ -9,7 +9,7 @@ def json_load(prefix):
 def json_dump(obj, prefix, script_file, args):
     print("for i in 1 2 3;", file=script_file)
     print(f"""do
-python3 main_diff_phy.py --config_file cfg/{prefix}.json --train --gpu-id {args.gpu_id} --memory {args.memory_train}
+python3 main_diff_phy.py --config_file cfg/{prefix}.json --train --gpu-id {args.gpu_id} --memory {args.memory_train} --random
 python3 main_diff_phy.py --config_file cfg/{prefix}.json --evaluate --memory {args.memory_validation} --no-tensorboard-train --evaluate_path saved_results/{prefix}/DiffTaichi_DiffPhy
 done
 """, file=script_file)
