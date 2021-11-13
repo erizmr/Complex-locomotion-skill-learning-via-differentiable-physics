@@ -43,3 +43,8 @@
 ## 3D
 python3 main_diff_phy.py --config_file cfg3d/sim_config_DiffPhy_robot2_vh.json --train
 python3 main_diff_phy.py --config_file cfg3d/sim_config_DiffPhy_robot2_vh.json --evaluate --no-tensorboard-train --evaluate_path saved_results/sim_config_DiffPhy_robot2_vh/DiffTaichi_DiffPhy
+
+
+## Generate scripts
+#### Adam grid search
+python3 scripts/json_gen_multiple_robots.py --robots 2 --output-name run_scripts_adam_grid_search_b1_b2_0_9_0_999.sh --adam-grid-search --adam-b1 0.82 0.68 0.43 --adam-b2 0.9 0.999 --gpu-id 0

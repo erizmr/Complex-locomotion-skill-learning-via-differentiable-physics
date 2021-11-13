@@ -97,7 +97,7 @@ if __name__ == "__main__":
     parser.add_argument(
                         '--memory-validation',
                         type=float,
-                        default=2.0,
+                        default=8.0,
                         help='pre allocated memory for taichi when evaluating')
     args = parser.parse_args()
 
@@ -184,14 +184,33 @@ if __name__ == "__main__":
 
         if args.adam_grid_search:
             full_json = json_load(full_path)
-            for b_2 in args.adam_b2:
-                prefix_adam_grid_search = prefix + "_adam_grid_search_" + b_2.replace(".","_")
-                full_json["nn"]["adam_b2"] = float(b_2)
-                json_dump(full_json, prefix_adam_grid_search, script_file, args)
-            for b_1 in args.adam_b1:
-                prefix_adam_grid_search = prefix + "_adam_grid_search_" + b_1.replace(".","_")
+            adam_b1 = []
+            adam_b2 = []
+            if args.adam_b1 is not None:
+                adam_b1 = args.adam_b1
+            if args.adam_b2 is not None:
+                adam_b2 = args.adam_b2
+
+            for b_1 in adam_b1:
+                prefix_adam_grid_search = prefix + "_adam_grid_search_b1_" + b_1.replace(".", "_")
                 full_json["nn"]["adam_b1"] = float(b_1)
-                json_dump(full_json, prefix_adam_grid_search, script_file, args)
+                for b_2 in adam_b2:
+                    prefix_adam_grid_search_b2 = prefix_adam_grid_search + "_b2_" + b_2.replace(".","_")
+                    full_json["nn"]["adam_b2"] = float(b_2)
+                    json_dump(full_json, prefix_adam_grid_search_b2, script_file, args)
+                if len(adam_b2) == 0:
+                    json_dump(full_json, prefix_adam_grid_search, script_file, args)
+
+            # if args.adam_b1 is not None:
+            #     for b_1 in args.adam_b1:
+            #         prefix_adam_grid_search = prefix + "_adam_grid_search_b1_" + b_1.replace(".","_")
+            #         full_json["nn"]["adam_b1"] = float(b_1)
+            #         json_dump(full_json, prefix_adam_grid_search, script_file, args)
+            # if args.adam_b2 is not None:
+            #     for b_2 in args.adam_b2:
+            #         prefix_adam_grid_search = prefix + "_adam_grid_search_b2_" + b_2.replace(".","_")
+            #         full_json["nn"]["adam_b2"] = float(b_2)
+            #         json_dump(full_json, prefix_adam_grid_search, script_file, args)
 
         if args.activation_compare:
             full_json = json_load(full_path)
