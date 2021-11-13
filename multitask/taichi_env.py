@@ -21,6 +21,7 @@ class TaichiEnv:
         self.logger = config.get_logger(name=__name__)
         self.dim = self.config["robot"]["dim"]
         self.max_steps = self.config["process"]["max_steps"]  # max steps for a simulation
+        self.validation_max_steps = self.config["process"]["validation_max_steps"] if "validation_max_steps" in self.config["process"] else self.max_steps
         self.batch_size = self.config["nn"]["batch_size"]
         self.n_hidden = self.config["nn"]["n_hidden"]
         self.robot_id = self.config["robot"]["robot_id"]

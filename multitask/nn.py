@@ -164,9 +164,18 @@ class Model:
         if ti.static(self.activation == "sin"):
             for model_id, k, i in ti.ndrange(self.n_models, self.batch_size, self.n_hidden):
                 self.hidden_act[model_id, t, k, i] = ti.sin(self.hidden[model_id, t, k, i] + self.bias1[model_id, i])
-        else:
+        elif ti.static(self.activation == "tanh"):
             for model_id, k, i in ti.ndrange(self.n_models, self.batch_size, self.n_hidden):
                 self.hidden_act[model_id, t, k, i] = ti.tanh(self.hidden[model_id, t, k, i] + self.bias1[model_id, i])
+        elif ti.static(self.activation == "relu"):
+            for model_id, k, i in ti.ndrange(self.n_models, self.batch_size, self.n_hidden):
+                self.hidden_act[model_id, t, k, i] = relu(self.hidden[model_id, t, k, i] + self.bias1[model_id, i])
+        elif ti.static(self.activation == "sigmoid"):
+            for model_id, k, i in ti.ndrange(self.n_models, self.batch_size, self.n_hidden):
+                self.hidden_act[model_id, t, k, i] = sigmoid(self.hidden[model_id, t, k, i] + self.bias1[model_id, i])
+        elif ti.static(self.activation == "gelu"):
+            for model_id, k, i in ti.ndrange(self.n_models, self.batch_size, self.n_hidden):
+                self.hidden_act[model_id, t, k, i] = gelu(self.hidden[model_id, t, k, i] + self.bias1[model_id, i])
 
     @ti.kernel
     def nn2(self, t: ti.i32):
@@ -188,12 +197,11 @@ class Model:
             for model_id, k, i in ti.ndrange(self.n_models, self.batch_size, self.n_output):
                 self.output_act[model_id, t, k, i] = gelu(self.output[model_id, t, k, i] + self.bias2[model_id, i])
 
-
     def forward(self, t):
         self.nn1(t)
         self.nn2(t)
 
-    def dump_weights(self, name = "save.pkl"):
+    def dump_weights(self, name="save.pkl"):
         w_val = []
         for w in self.weights:
             w = w.to_numpy()
