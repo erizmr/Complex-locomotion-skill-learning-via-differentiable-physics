@@ -71,6 +71,9 @@ if __name__ == "__main__":
     parser.add_argument('--activation-keep-second-layer-sin',
                         action='store_true',
                         help='keep second layer sin')
+    parser.add_argument('--activation-keep-second-layer-empty',
+                        action='store_true',
+                        help='keep second layer empty')
     parser.add_argument('--activation-functions',
                         nargs='+',
                         help="all activation functions")
@@ -221,6 +224,9 @@ if __name__ == "__main__":
                 if args.activation_keep_second_layer_sin:
                     full_json["nn"]["activation_keep_output_sin"] = True
                     prefix_activation = prefix_activation + "_keep_second_layer_sin"
+                elif args.activation_keep_second_layer_empty:
+                    full_json["nn"]["activation_keep_output_empty"] = True
+                    prefix_activation = prefix_activation + "_keep_second_layer_empty"
                 json_dump(full_json, prefix_activation, script_file, args)
 
 
