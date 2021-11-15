@@ -97,9 +97,8 @@ class Model:
         self.learning_rate = config.get_config()["nn"]["learning_rate"]
         self.dim = config.get_config()["robot"]["dim"]
         self.activation = config.get_config()["nn"]["activation"] if "activation" in config.get_config()["nn"] else activation
-        self.activation_keep_output_sin = config.get_config()["nn"]["activation_keep_output_sin"] if "activation_keep_output_sin" in config.get_config()["nn"] else False
-        self.activation_keep_output_empty = config.get_config()["nn"][
-            "activation_keep_output_empty"] if "activation_keep_output_empty" in config.get_config()["nn"] else False
+        self.activation_output = config.get_config()["nn"]["activation_output"] if "activation_output" in config.get_config()[
+            "nn"] else activation
 
         self.n_models = n_models
         
@@ -185,28 +184,23 @@ class Model:
         for model_id, k, i, j in ti.ndrange(self.n_models, self.batch_size, self.n_output, self.n_hidden):
             self.output[model_id, t, k, i] += self.weights2[model_id, i, j] * self.hidden_act[model_id, t, k, j]
 
-        if ti.static(self.activation_keep_output_sin):
+        if ti.static(self.activation_output == "sin"):
             for model_id, k, i in ti.ndrange(self.n_models, self.batch_size, self.n_output):
                 self.output_act[model_id, t, k, i] = ti.sin(self.output[model_id, t, k, i] + self.bias2[model_id, i])
-        elif ti.static(self.activation_keep_output_empty):
+        elif ti.static(self.activation_output == "tanh"):
             for model_id, k, i in ti.ndrange(self.n_models, self.batch_size, self.n_output):
-                self.output_act[model_id, t, k, i] = self.output[model_id, t, k, i] + self.bias2[model_id, i]
-        else:
-            if ti.static(self.activation == "sin"):
-                for model_id, k, i in ti.ndrange(self.n_models, self.batch_size, self.n_output):
-                    self.output_act[model_id, t, k, i] = ti.sin(self.output[model_id, t, k, i] + self.bias2[model_id, i])
-            elif ti.static(self.activation == "tanh"):
-                for model_id, k, i in ti.ndrange(self.n_models, self.batch_size, self.n_output):
-                    self.output_act[model_id, t, k, i] = ti.tanh(self.output[model_id, t, k, i] + self.bias2[model_id, i])
-            elif ti.static(self.activation == "relu"):
-                for model_id, k, i in ti.ndrange(self.n_models, self.batch_size, self.n_output):
-                    self.output_act[model_id, t, k, i] = relu(self.output[model_id, t, k, i] + self.bias2[model_id, i])
-            elif ti.static(self.activation == "sigmoid"):
-                for model_id, k, i in ti.ndrange(self.n_models, self.batch_size, self.n_output):
-                    self.output_act[model_id, t, k, i] = sigmoid(self.output[model_id, t, k, i] + self.bias2[model_id, i])
-            elif ti.static(self.activation == "gelu"):
-                for model_id, k, i in ti.ndrange(self.n_models, self.batch_size, self.n_output):
-                    self.output_act[model_id, t, k, i] = gelu(self.output[model_id, t, k, i] + self.bias2[model_id, i])
+                self.output_act[model_id, t, k, i] = ti.tanh(self.output[model_id, t, k, i] + self.bias2[model_id, i])
+        elif ti.static(self.activation_output == "relu"):
+            for model_id, k, i in ti.ndrange(self.n_models, self.batch_size, self.n_output):
+                self.output_act[model_id, t, k, i] = relu(self.output[model_id, t, k, i] + self.bias2[model_id, i]) - 1.0
+        elif ti.static(self.activation_output == "sigmoid"):
+            for model_id, k, i in ti.ndrange(self.n_models, self.batch_size, self.n_output):
+                self.output_act[model_id, t, k, i] = sigmoid(self.output[model_id, t, k, i] + self.bias2[model_id, i]) * 2 - 1.0
+        elif ti.static(self.activation_output == "gelu"):
+            for model_id, k, i in ti.ndrange(self.n_models, self.batch_size, self.n_output):
+                self.output_act[model_id, t, k, i] = gelu(self.output[model_id, t, k, i] + self.bias2[model_id, i]) - 1.0
+
+
 
     def forward(self, t):
         self.nn1(t)

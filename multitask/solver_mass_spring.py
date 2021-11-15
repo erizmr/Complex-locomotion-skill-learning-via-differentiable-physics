@@ -88,6 +88,10 @@ class SolverMassSpring:
             self.tail_counter[model_id, t, k] = 0.
             self.rotation[model_id, t, k] = 0.
 
+    @ti.func
+    def clamp(self, x):
+        return ti.max(ti.min(x, 1.0), -1.0)
+
     @ti.kernel
     def apply_spring_force(self, t: ti.i32):
         for model_id, k, i in ti.ndrange(self.n_models, self.batch_size, self.n_springs):
@@ -97,6 +101,9 @@ class SolverMassSpring:
             pos_b = self.x[model_id, t, k, b]
             dist = pos_a - pos_b
             length = dist.norm(1e-8) + 1e-4
+
+            # Clamp the actuation to -1 to 1
+            self.actuation[model_id, t, k, i] = self.clamp(self.actuation[model_id, t, k, i])
 
             target_length = self.spring_length[i] * (1.0 + self.spring_actuation[i] * self.actuation[model_id, t, k, i])
             impulse = self.dt * (length - target_length) * self.spring_stiffness[i] / length * dist

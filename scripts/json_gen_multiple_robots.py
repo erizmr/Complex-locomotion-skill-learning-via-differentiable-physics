@@ -68,15 +68,12 @@ if __name__ == "__main__":
     parser.add_argument('--activation-compare',
                         action='store_true',
                         help='do activation comparing')
-    parser.add_argument('--activation-keep-second-layer-sin',
-                        action='store_true',
-                        help='keep second layer sin')
-    parser.add_argument('--activation-keep-second-layer-empty',
-                        action='store_true',
-                        help='keep second layer empty')
     parser.add_argument('--activation-functions',
                         nargs='+',
                         help="all activation functions")
+    parser.add_argument('--activation-functions-output',
+                        nargs='+',
+                        help="all activation functions for output layer")
     parser.add_argument('--adam-grid-search',
                         action='store_true',
                         help='do adam momentum grid search')
@@ -204,31 +201,15 @@ if __name__ == "__main__":
                 if len(adam_b2) == 0:
                     json_dump(full_json, prefix_adam_grid_search, script_file, args)
 
-            # if args.adam_b1 is not None:
-            #     for b_1 in args.adam_b1:
-            #         prefix_adam_grid_search = prefix + "_adam_grid_search_b1_" + b_1.replace(".","_")
-            #         full_json["nn"]["adam_b1"] = float(b_1)
-            #         json_dump(full_json, prefix_adam_grid_search, script_file, args)
-            # if args.adam_b2 is not None:
-            #     for b_2 in args.adam_b2:
-            #         prefix_adam_grid_search = prefix + "_adam_grid_search_b2_" + b_2.replace(".","_")
-            #         full_json["nn"]["adam_b2"] = float(b_2)
-            #         json_dump(full_json, prefix_adam_grid_search, script_file, args)
-
         if args.activation_compare:
             full_json = json_load(full_path)
-
             for af in args.activation_functions:
                 prefix_activation = prefix + "_activation_compare_" + af
                 full_json["nn"]["activation"] = af
-                if args.activation_keep_second_layer_sin:
-                    full_json["nn"]["activation_keep_output_sin"] = True
-                    prefix_activation = prefix_activation + "_keep_second_layer_sin"
-                elif args.activation_keep_second_layer_empty:
-                    full_json["nn"]["activation_keep_output_empty"] = True
-                    prefix_activation = prefix_activation + "_keep_second_layer_empty"
-                json_dump(full_json, prefix_activation, script_file, args)
-
+                for af_output in args.activation_functions_output:
+                    full_json["nn"]["activation_output"] = af_output
+                    prefix_activation = prefix_activation + "_" + af_output
+                    json_dump(full_json, prefix_activation, script_file, args)
 
 
 # OP: Optimizer, AF: Activation Function, BS: Batch Size, PS: Periodic Signal, SV: StateVector, TV: Targets, LD: naive_loss
