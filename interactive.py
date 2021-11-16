@@ -43,7 +43,7 @@ def set_target():
     trainer.taichi_env.initialize_interactive(1, set_target.target_v, set_target.target_h, set_target.target_c)
 
 offset = 0
-set_target.target_v = 0
+set_target.target_v = 0.0
 set_target.target_h = 0.1
 set_target.target_c = 0.0
 
