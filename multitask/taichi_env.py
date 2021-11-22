@@ -166,7 +166,11 @@ class TaichiEnv:
         self.solver_x = self.solver.x
         self.solver_v = self.solver.v
         self.solver_center = self.solver.center
+
+        # MPM manipulation only
         self.solver_object_center = self.solver.object_center
+        self.solver_object_min_distance = self.solver.object_min_distance
+
         self.solver_height = self.solver.height
         self.solver_upper_height = self.solver.upper_height
         self.solver_rotation = self.solver.rotation
@@ -349,6 +353,18 @@ class TaichiEnv:
             self.loss_object[None] += loss_object
             self.loss_object_batch[model_id, k] += loss_object * self.batch_size
 
+    # @ti.kernel
+    # def compute_loss_object(self, steps: ti.template()):
+    #     for model_id, t, k in ti.ndrange(self.n_models, (1, steps + 1), self.batch_size):
+    #         distance = (self.solver_object_center[model_id, t, k] - self.target_object_position[t, k]).norm()
+    #         if t == 1:
+    #             self.solver_object_min_distance[model_id, t, k] = 10.
+    #         else:
+    #             self.solver_object_min_distance[model_id, t, k] = ti.min(distance, self.solver_object_min_distance[model_id, t-1, k])
+    #         if t == steps:
+    #             self.loss_object[None] += distance / self.batch_size  # / steps
+    #             self.loss_object_batch[model_id, k] += distance * self.batch_size
+
     @ti.kernel
     def compute_loss_final(self, l: ti.template()):
         self.loss[None] += l[None]
@@ -426,12 +442,16 @@ class TaichiEnv:
         times = steps // self.turn_period + 1
         for _ in range(self.batch_size * times * 3):
             self.pool[_] = ti.random()
+        current_offset_x = ti.random()
+        current_offset_y = ti.random()
         # Define multi-tasks here
         for t, k in ti.ndrange(steps, self.batch_size):
             q = (t // self.turn_period * self.batch_size + k) * 3
             if ti.static(self.dim == 2):
-                self.target_object_position[t, k] = ti.Vector([0.6, 0.5]) + 0.1 * ti.Vector([self.pool[q + 1] * 2 - 1, self.pool[q] * 2 - 1])
-                # self.target_object_position[t, k] = ti.Vector([0.6 - 0.00025 * t, 0.5 + 0.005 * (t % 100 - 50)])
+                # self.target_object_position[t, k] = ti.Vector([0.6, 0.5]) + 0.1 * ti.Vector([self.pool[q + 1] * 2 - 1, self.pool[q] * 2 - 1])
+                self.target_object_position[t, k] = ti.Vector([0.6, 0.5]) + 0.1 * ti.Vector(
+                    [current_offset_x * 2 - 1, current_offset_y * 2 - 1])
+                # self.target_object_position[t, k] = ti.Vector([0.6 - 0.00025 * t, 0.5 ])
                 target_id = int(self.pool[q] * 4)
                 # print('Iter:', int(t), 'Step:', int(t), 'Current task:', int(target_id))
                 # if len(self.task) == 1 and self.task[0] == "height":
