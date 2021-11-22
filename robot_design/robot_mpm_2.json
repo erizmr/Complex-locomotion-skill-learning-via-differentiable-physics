@@ -10,7 +10,7 @@
         "actuator_num": 4,
         "offset":{
             "x": 0.1,
-            "y": 0.8
+            "y": 0.08
         }
     },
     "design": {
