@@ -38,6 +38,7 @@ class TaichiEnv:
         self.duplicate_v = self.config["nn"]["duplicate_v"]
         self.duplicate_h = self.config["nn"]["duplicate_h"]
         self.duplicate_c = self.config["nn"]["duplicate_c"]
+        self.duplicate_o = self.config["nn"]["duplicate_o"] if "duplicate_o" in self.config["nn"] else 0
         self.has_state_vector = self.config["nn"]["has_state_vector"] if "has_state_vector" in self.config["nn"] else 1
         self.output_vis_interval = self.config["process"]["output_vis_interval"]
         self.ground_height = self.config["simulator"]["ground_height"]
@@ -58,7 +59,7 @@ class TaichiEnv:
         
         self.default_model_id = 0
 
-        self.loss_types_collections = {"velocity", "height", "pose", "actuation", "rotation", "crawl"}
+        self.loss_types_collections = {"velocity", "height", "pose", "actuation", "rotation", "crawl", "object"}
         # Get the task, and ensure that the task loss is actually defined
         self.task = list(self.config["train"]["task"])
         for tsk in self.task:
@@ -93,13 +94,17 @@ class TaichiEnv:
         self.loss_weight = scalar()
         self.loss_act = scalar()
         self.loss_crawl = scalar()
+
+        self.loss_object = scalar()
+
         self.loss_dict = {'loss_velocity': self.loss_velocity,
                           'loss_height': self.loss_height,
                           'loss_pose': self.loss_pose,
                           'loss_rotation': self.loss_rotation,
                           'loss_weight': self.loss_weight,
                           'loss_actuation': self.loss_act,
-                          'loss_crawl': self.loss_crawl}
+                          'loss_crawl': self.loss_crawl,
+                          'loss_object': self.loss_object}
         self.losses = self.loss_dict.values()
 
         ti.root.place(self.loss)
@@ -114,13 +119,17 @@ class TaichiEnv:
         self.loss_weight_batch = scalar()
         self.loss_act_batch = scalar()
         self.loss_crawl_batch = scalar()
+
+        self.loss_object_batch = scalar()
+
         self.loss_dict_batch = {'loss_velocity': self.loss_velocity_batch,
                                 'loss_height': self.loss_height_batch,
                                 'loss_pose': self.loss_pose_batch,
                                 'loss_rotation': self.loss_rotation_batch,
                                 'loss_weight': self.loss_weight_batch,
                                 'loss_actuation': self.loss_act_batch,
-                                'loss_crawl': self.loss_crawl_batch}
+                                'loss_crawl': self.loss_crawl_batch,
+                                'loss_object_batch': self.loss_object_batch}
 
         # losses for each batch
         self.losses_batch = self.loss_dict_batch.values()
@@ -143,6 +152,10 @@ class TaichiEnv:
         self.target_v, self.target_h, self.target_c = vec(self.dim), scalar(), scalar(),
         ti.root.dense(ti.ij, (self.max_steps, self.batch_size)).place(self.target_v, self.target_h, self.target_c)
 
+        # Target object position
+        self.target_object_position = vec(self.dim)
+        ti.root.dense(ti.ij, (self.max_steps, self.batch_size)).place(self.target_object_position)
+
         # Record the current max height
         self.current_max_height = scalar()
         ti.root.place(self.current_max_height)
@@ -153,6 +166,7 @@ class TaichiEnv:
         self.solver_x = self.solver.x
         self.solver_v = self.solver.v
         self.solver_center = self.solver.center
+        self.solver_object_center = self.solver.object_center
         self.solver_height = self.solver.height
         self.solver_upper_height = self.solver.upper_height
         self.solver_rotation = self.solver.rotation
@@ -231,6 +245,15 @@ class TaichiEnv:
                 self.input_state[model_id, t, k, self.solver.n_squares * self.dim * 2 + self.n_sin_waves + self.duplicate_v * (
                             self.dim - 1) + j] = (self.target_h[
                                                       t, k] - 0.1) / max_height * 2 - 1
+        # If mainipulate objects
+        if ti.static(self.duplicate_o > 0):
+            for model_id, k, j in ti.ndrange(self.n_models, self.batch_size, self.duplicate_o):
+                for d in ti.static(range(self.dim)):
+                    self.input_state[
+                        model_id, t, k, self.solver.n_squares * self.dim * 2 + self.n_sin_waves + + self.duplicate_v * (
+                            self.dim - 1) + self.duplicate_h + j * (self.dim - 1) + d] = \
+                    self.target_object_position[t, k][d]
+
 
     def nn_input(self, *args, **kwargs):
         if self.simulator == "mpm":
@@ -320,6 +343,13 @@ class TaichiEnv:
                 self.loss_crawl_batch[model_id, k] += loss_c * self.batch_size
 
     @ti.kernel
+    def compute_loss_object(self, steps: ti.template()):
+        for model_id, t, k in ti.ndrange(self.n_models, (1, steps + 1), self.batch_size):
+            loss_object = (self.solver_object_center[model_id, t, k] - self.target_object_position[t, k]).norm() / self.batch_size  / steps
+            self.loss_object[None] += loss_object
+            self.loss_object_batch[model_id, k] += loss_object * self.batch_size
+
+    @ti.kernel
     def compute_loss_final(self, l: ti.template()):
         self.loss[None] += l[None]
 
@@ -342,6 +372,9 @@ class TaichiEnv:
         if "crawl" in loss_enable:
             self.compute_loss_crawl(steps)
 
+        if "object" in loss_enable:
+            self.compute_loss_object(steps)
+
         for l in self.losses:
             self.compute_loss_final(l)
 
@@ -350,11 +383,17 @@ class TaichiEnv:
             self.compute_loss_final_batch(l)
 
     @ti.kernel
-    def initialize_interactive(self, steps: ti.template(), output_v: ti.f64, output_h: ti.f64, output_c: ti.f64):
+    def initialize_interactive(self, steps: ti.template(),
+                               output_v: ti.f64,
+                               output_h: ti.f64,
+                               output_c: ti.f64,
+                               object_target_x: ti.f64,
+                               object_target_y: ti.f64):
         for t, k in ti.ndrange(steps, self.batch_size):
             self.target_v[t, k][0] = output_v
             self.target_h[t, k] = output_h
             self.target_c[t, k] = output_c
+            self.target_object_position[t, k] = ti.Vector([object_target_x, object_target_y])
 
     @ti.kernel
     def initialize_script(self, steps: ti.template(), x0: real, y0: real, x1: real, y1: real, x2: real, y2: real,
@@ -391,6 +430,8 @@ class TaichiEnv:
         for t, k in ti.ndrange(steps, self.batch_size):
             q = (t // self.turn_period * self.batch_size + k) * 3
             if ti.static(self.dim == 2):
+                self.target_object_position[t, k] = ti.Vector([0.6, 0.5]) + 0.1 * ti.Vector([self.pool[q + 1] * 2 - 1, self.pool[q] * 2 - 1])
+                # self.target_object_position[t, k] = ti.Vector([0.6 - 0.00025 * t, 0.5 + 0.005 * (t % 100 - 50)])
                 target_id = int(self.pool[q] * 4)
                 # print('Iter:', int(t), 'Step:', int(t), 'Current task:', int(target_id))
                 # if len(self.task) == 1 and self.task[0] == "height":

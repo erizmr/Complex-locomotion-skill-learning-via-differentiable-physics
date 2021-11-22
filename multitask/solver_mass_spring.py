@@ -203,7 +203,7 @@ class SolverMassSpring:
         self.apply_spring_force(t)
         self.advance_toi(t + 1)
 
-    def draw_robot(self, gui, t, batch_rank, target_v):
+    def draw_robot(self, gui, t, batch_rank, target_v, target_position=None):
         def circle(x, y, color):
             gui.circle((x, y), ti.rgb_to_hex(color), 7)
         # draw segments

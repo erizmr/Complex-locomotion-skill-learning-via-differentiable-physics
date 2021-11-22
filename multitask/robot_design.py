@@ -62,7 +62,7 @@ class RobotDesignMPM(RobotDesignBase):
         self.built = False
 
     def add_particle(self, pos, act_id):
-        assert act_id >= -1 and act_id < self.actuator_num
+        assert act_id >= -2 and act_id < self.actuator_num
         self.pos.append(self.offset + pos)
         self.actuator_id.append(act_id)
         self.n_particles += 1

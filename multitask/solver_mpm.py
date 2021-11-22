@@ -43,11 +43,18 @@ class SolverMPM:
         self.x = vec(self.dim)
         self.v = vec(self.dim)
         self.center = vec(self.dim)
+
+        # The center of the object to manipulate
+        self.object_center = vec(self.dim)
+        self.object_particle_num = ti.field(int, shape=())
+
         self.actuation = scalar()
         # ti.root.dense(ti.ijk, (self.max_steps, self.batch_size, self.n_objects)).place(self.x, self.v)
         batch_node = ti.root.dense(ti.ijk, (self.n_models, self.max_steps, self.batch_size))
         batch_node.dense(ti.l, self.n_objects).place(self.x, self.v)
         batch_node.place(self.center)
+        batch_node.place(self.object_center)
+
         # ti.root.dense(ti.ij, (self.max_steps, self.batch_size)).place(self.center)
         # ti.root.dense(ti.ijk, (self.max_steps, self.batch_size, self.n_springs)).place(self.actuation)
         batch_node.dense(ti.l, self.n_springs).place(self.actuation)
@@ -73,6 +80,14 @@ class SolverMPM:
             for i in range(self.n_objects):
                 self.actuator_id[k, i] = self.springs[i]
         self.particle_type.fill(1)
+
+        n = ti.static(self.n_objects)
+        # Compute the number of particles on the object to manipulate
+        for k, i in ti.ndrange(1, n):
+            act_id = self.actuator_id[k, i]
+            if act_id == -2:
+                self.object_particle_num[None] += 1
+        print("Object to manipulate particle number", self.object_particle_num[None])
 
     @ti.kernel
     def clear_states(self, steps: ti.template()):
@@ -214,8 +229,13 @@ class SolverMPM:
         n = ti.static(self.n_objects)
         for model_id, k in ti.ndrange(self.n_models, self.batch_size):
             self.center[model_id, t, k] = ti.Matrix.zero(real, self.dim, 1)
+            self.object_center[model_id, t, k] = ti.Matrix.zero(real, self.dim, 1)
         for model_id, k, i in ti.ndrange(self.n_models, self.batch_size, n):
-            self.center[model_id, t, k] += self.x[model_id, t, k, i] / n
+            act_id = self.actuator_id[k, i]
+            if act_id == -2:
+                self.object_center[model_id, t, k] += self.x[model_id, t, k, i] / self.object_particle_num[None]
+            else:
+                self.center[model_id, t, k] += self.x[model_id, t, k, i] / (n - self.object_particle_num[None])
 
     @ti.kernel
     def compute_height(self, t: ti.i32):
@@ -259,13 +279,28 @@ class SolverMPM:
     def advance(self, s):
         self.advance_core(s)
 
-    def draw_robot(self, gui, t, batch_rank, target_v):
-        def circle(x, y, color):
-            gui.circle((x, y + 0.1 - self.dx * self.bound), ti.rgb_to_hex(color), 2)
+    def draw_robot(self, gui, t, batch_rank, target_v, target_position=None):
+        def circle(x, y, color, radius=2):
+            gui.circle((x, y + 0.1 - self.dx * self.bound), ti.rgb_to_hex(color), radius)
         aid = self.actuator_id.to_numpy()
         for i in range(self.n_objects):
             color = (0.06640625, 0.06640625, 0.06640625)
             if self.simulator == "mpm" and aid[0, i] != -1:
                 act_applied = self.actuation[0, t - 1, batch_rank, aid[0, i]]
                 color = (0.5 - act_applied, 0.5 - abs(act_applied), 0.5 + act_applied)
+            if aid[0, i] == -2:
+                color = (1.0, 0.0, 1.0)
             circle(self.x[0, t, batch_rank, i][0], self.x[0, t, batch_rank, i][1], color)
+
+        # Draw the center of the object
+        circle(self.object_center[0, t, batch_rank][0], self.object_center[0, t, batch_rank][1], (0.0, 0.0, 1.0), radius=6)
+        # Draw the center of the robot
+        # circle(self.center[0, t, batch_rank][0], self.center[0, t, batch_rank][1], (1.0, 0.0, 0.0), radius=6)
+        if target_position is not None:
+            # Draw the center of the target
+            circle(target_position[t, batch_rank][0], target_position[t, batch_rank][1], (0.0, 1.0, 0.0), radius=8)
+            # circle(0.6, 0.6, (0.0, 1.0, 0.0), radius=8)
+        # print("Target position ", target_position[t, batch_rank][0], target_position[t, batch_rank][1])
+
+        # print("robot center", self.center[0, t, batch_rank][0], self.center[0, t, batch_rank][1])
+        # print("object center", self.object_center[0, t, batch_rank][0], self.object_center[0, t, batch_rank][1])

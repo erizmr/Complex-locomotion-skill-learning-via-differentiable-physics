@@ -158,7 +158,7 @@ class DiffPhyTrainer(BaseTrainer):
         self.taichi_env.gui.line((0, self.taichi_env.ground_height), (1, self.taichi_env.ground_height),
                       color=0x000022,
                       radius=3)
-        self.taichi_env.solver.draw_robot(self.taichi_env.gui, t, batch_rank, self.taichi_env.target_v)
+        self.taichi_env.solver.draw_robot(self.taichi_env.gui, t, batch_rank, self.taichi_env.target_v, self.taichi_env.target_object_position)
         self.taichi_env.gui.show(os.path.join(self.taichi_env.config_.monitor_dir, f"{self.iter:04}_{t:04}.png"))
 
     @ti.kernel
@@ -207,8 +207,12 @@ class DiffPhyTrainer(BaseTrainer):
 
             if self.visual_train:
                 for i in range(1, steps):
-                    if i % 200 == 0:
-                        self.visual_probe(i)
+                    if iter > 900:
+                        if i % 5:
+                            self.visual_probe(i)
+                    else:
+                        if i % 200 == 0:
+                            self.visual_probe(i)
         else:
             for t in range(steps-1):
                 self.taichi_env.solver.pre_advance(t)
