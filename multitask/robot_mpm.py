@@ -1,4 +1,4 @@
-n_grid = 40
+n_grid = 40 * 2
 dx = 1 / n_grid
 squ = 0.05
 n_squ = int(squ * n_grid)
