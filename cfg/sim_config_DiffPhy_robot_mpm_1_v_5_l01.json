@@ -1,0 +1,60 @@
+{
+  "train": {
+    "name": "DiffTaichi_DiffPhy",
+    "save_dir": "./saved_results",
+    "output_video_in_train": false,
+    "output_video_in_validation": true,
+    "task": ["velocity"]
+  },
+  "validation": {
+    "velocity": [-0.08, -0.06, -0.04, 0.0, -0.02, 0.02, 0.04, 0.06, 0.08]
+  },
+  "robot": {
+    "dim": 2,
+    "robot_id": 21,
+    "simulator": "mpm",
+    "design_file": "./robot_design/robot_mpm_1.json",
+    "control_length": 1
+  },
+  "process":{
+    "max_steps": 1000,
+    "vis_interval": 256,
+    "output_vis_interval": 8,
+    "run_period": 200,
+    "jump_period": 500,
+    "turn_period": 500,
+    "max_speed": 0.08,
+    "max_height": 0.1,
+    "dt": 0.001
+  },
+  "simulator": {
+    "mpm": {
+      "n_grid": 40
+    },
+    "ground_height": 0.1,
+    "gravity": -10,
+    "drag_damping": 0,
+    "dash_damping": 0.2,
+    "p_vol": 1,
+    "E": 40,
+    "mu": 40,
+    "la": 40,
+    "act_strength": 5,
+    "bound": 3,
+    "coeff": 0.5
+  },
+  "nn": {
+    "n_models": 10,
+    "n_sin_waves": 10,
+    "n_hidden": 64,
+    "duplicate_v": 30,
+    "duplicate_h": 0,
+    "duplicate_c": 0,
+    "batch_size": 32,
+    "max_reset_step": 4,
+    "optimizer": "adam",
+    "learning_rate": 1e-3,
+    "adam_b1": 0.90,
+    "adam_b2": 0.90
+  }
+}
