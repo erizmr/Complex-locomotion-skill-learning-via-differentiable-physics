@@ -1,0 +1,31 @@
+{
+  "robot": {
+    "name": "Alpaca",
+    "id": 2,
+    "solver": "mass_spring"
+  },
+  "design": {
+    "anchor": [[0, 0], [0, 1], [1, 1], [2, 0], [2, 1], [2, 2], [2, 3]],
+    "mesh_type": ["square","square","square","square","square","square","square"],
+    "active_spring_mechanism": ["vertical","vertical","vertical","vertical","vertical","vertical","vertical"],
+    "actuation_enable": [1, 0, 0, 1, 0, 0, 0],
+    "physical_parameter": {
+                          "actuation": [0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2],
+                          "stiffness": [3e4, 3e4, 3e4, 3e4, 3e4, 3e4, 3e4]
+    }
+  },
+  "active_spring_template":{
+    "square": {
+      "all": [1, 1, 1, 1, 1, 1],
+      "dummy": [0, 0, 0, 0, 0, 0],
+      "vertical": [1, 0, 0, 0, 0, 1],
+      "horizontal": [0, 1, 0, 0, 1, 0],
+      "vertical_and_horizontal": [1, 1, 0, 0, 1, 1],
+      "diagonal": [0, 0, 1, 1, 0, 0]
+    },
+    "triangle": {
+      "all":[1, 1, 1],
+      "dummy": [0, 0, 0]
+    }
+  }
+}
