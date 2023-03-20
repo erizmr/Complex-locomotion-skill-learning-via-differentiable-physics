@@ -1,0 +1,950 @@
+Iter= 0 Loss= 0.3527929069471476 Best= 0.3527929069471476
+TNS=  0.24441332046067338
+loss_velocity=0.20256970498338445
+loss_height=0.0
+loss_pose=0.0
+loss_rotation=0.15022320196376315
+loss_weight=0.0
+loss_actuation=0.0
+loss_crawl=0.0
+max height=0.0
+Iter= 1 Loss= 0.3406078640475698 Best= 0.3406078640475698
+TNS=  0.1461854127629235
+loss_velocity=0.16837190947251787
+loss_height=0.0
+loss_pose=0.0
+loss_rotation=0.17223595457505192
+loss_weight=0.0
+loss_actuation=0.0
+loss_crawl=0.0
+max height=0.0
+Iter= 2 Loss= 0.30841027017037476 Best= 0.30841027017037476
+TNS=  0.0651087680874223
+loss_velocity=0.14508300249803913
+loss_height=0.0
+loss_pose=0.0
+loss_rotation=0.16332726767233563
+loss_weight=0.0
+loss_actuation=0.0
+loss_crawl=0.0
+max height=0.0
+Iter= 3 Loss= 0.2805039642382234 Best= 0.2805039642382234
+TNS=  0.052162363066569
+loss_velocity=0.1269372397779581
+loss_height=0.0
+loss_pose=0.0
+loss_rotation=0.15356672446026529
+loss_weight=0.0
+loss_actuation=0.0
+loss_crawl=0.0
+max height=0.0
+Iter= 4 Loss= 0.2928670449926461 Best= 0.2805039642382234
+TNS=  0.055089738137563835
+loss_velocity=0.1689252570477947
+loss_height=0.0
+loss_pose=0.0
+loss_rotation=0.1239417879448514
+loss_weight=0.0
+loss_actuation=0.0
+loss_crawl=0.0
+max height=0.0
+Iter= 5 Loss= 0.30964111678374084 Best= 0.2805039642382234
+TNS=  0.06946750901654054
+loss_velocity=0.17311552462500698
+loss_height=0.0
+loss_pose=0.0
+loss_rotation=0.13652559215873383
+loss_weight=0.0
+loss_actuation=0.0
+loss_crawl=0.0
+max height=0.0
+Iter= 6 Loss= 0.295591406914235 Best= 0.2805039642382234
+TNS=  0.07405317228955711
+loss_velocity=0.18905452400821532
+loss_height=0.0
+loss_pose=0.0
+loss_rotation=0.10653688290601968
+loss_weight=0.0
+loss_actuation=0.0
+loss_crawl=0.0
+max height=0.0
+Iter= 7 Loss= 0.29919282915841977 Best= 0.2805039642382234
+TNS=  0.05029419115734792
+loss_velocity=0.15537437034182444
+loss_height=0.0
+loss_pose=0.0
+loss_rotation=0.14381845881659533
+loss_weight=0.0
+loss_actuation=0.0
+loss_crawl=0.0
+max height=0.0
+Iter= 8 Loss= 0.2762241408709778 Best= 0.2762241408709778
+TNS=  0.06201130764321907
+loss_velocity=0.13847822528359616
+loss_height=0.0
+loss_pose=0.0
+loss_rotation=0.13774591558738164
+loss_weight=0.0
+loss_actuation=0.0
+loss_crawl=0.0
+max height=0.0
+Iter= 9 Loss= 0.2579224466454473 Best= 0.2579224466454473
+TNS=  0.03866689864489815
+loss_velocity=0.12139909906919683
+loss_height=0.0
+loss_pose=0.0
+loss_rotation=0.13652334757625045
+loss_weight=0.0
+loss_actuation=0.0
+loss_crawl=0.0
+max height=0.0
+Iter= 10 Loss= 0.26719463565629087 Best= 0.2579224466454473
+TNS=  0.054174034889635216
+loss_velocity=0.13694101927588107
+loss_height=0.0
+loss_pose=0.0
+loss_rotation=0.13025361638040983
+loss_weight=0.0
+loss_actuation=0.0
+loss_crawl=0.0
+max height=0.0
+Iter= 11 Loss= 0.29832226211637997 Best= 0.2579224466454473
+TNS=  0.10173740940593266
+loss_velocity=0.17515078357376257
+loss_height=0.0
+loss_pose=0.0
+loss_rotation=0.1231714785426174
+loss_weight=0.0
+loss_actuation=0.0
+loss_crawl=0.0
+max height=0.0
+Iter= 12 Loss= 0.30394610716695847 Best= 0.2579224466454473
+TNS=  0.06438281966525128
+loss_velocity=0.1927082239024992
+loss_height=0.0
+loss_pose=0.0
+loss_rotation=0.11123788326445927
+loss_weight=0.0
+loss_actuation=0.0
+loss_crawl=0.0
+max height=0.0
+Iter= 13 Loss= 0.26195338078109803 Best= 0.2579224466454473
+TNS=  0.06425729605577747
+loss_velocity=0.1502099119770625
+loss_height=0.0
+loss_pose=0.0
+loss_rotation=0.11174346880403555
+loss_weight=0.0
+loss_actuation=0.0
+loss_crawl=0.0
+max height=0.0
+Iter= 14 Loss= 0.2669229082736775 Best= 0.2579224466454473
+TNS=  0.05867819289869935
+loss_velocity=0.15752919821793615
+loss_height=0.0
+loss_pose=0.0
+loss_rotation=0.10939371005574135
+loss_weight=0.0
+loss_actuation=0.0
+loss_crawl=0.0
+max height=0.0
+Iter= 15 Loss= 0.27381220394611233 Best= 0.2579224466454473
+TNS=  0.044025102097183307
+loss_velocity=0.14937907095882158
+loss_height=0.0
+loss_pose=0.0
+loss_rotation=0.12443313298729075
+loss_weight=0.0
+loss_actuation=0.0
+loss_crawl=0.0
+max height=0.0
+Iter= 16 Loss= 0.2633745790280193 Best= 0.2579224466454473
+TNS=  0.08715282445180754
+loss_velocity=0.13629517297064334
+loss_height=0.0
+loss_pose=0.0
+loss_rotation=0.12707940605737597
+loss_weight=0.0
+loss_actuation=0.0
+loss_crawl=0.0
+max height=0.0
+Iter= 17 Loss= 0.27278081714249264 Best= 0.2579224466454473
+TNS=  0.055875814720346674
+loss_velocity=0.15732114028533026
+loss_height=0.0
+loss_pose=0.0
+loss_rotation=0.11545967685716238
+loss_weight=0.0
+loss_actuation=0.0
+loss_crawl=0.0
+max height=0.0
+Iter= 18 Loss= 0.216984191605963 Best= 0.216984191605963
+TNS=  0.03757460007700685
+loss_velocity=0.11801668454128929
+loss_height=0.0
+loss_pose=0.0
+loss_rotation=0.09896750706467372
+loss_weight=0.0
+loss_actuation=0.0
+loss_crawl=0.0
+max height=0.0
+Iter= 19 Loss= 0.2567569610354121 Best= 0.216984191605963
+TNS=  0.07016099307912699
+loss_velocity=0.13773445014625116
+loss_height=0.0
+loss_pose=0.0
+loss_rotation=0.11902251088916094
+loss_weight=0.0
+loss_actuation=0.0
+loss_crawl=0.0
+max height=0.0
+Iter= 20 Loss= 0.21557739756955333 Best= 0.21557739756955333
+TNS=  0.05263918620001266
+loss_velocity=0.09317148898719468
+loss_height=0.0
+loss_pose=0.0
+loss_rotation=0.12240590858235864
+loss_weight=0.0
+loss_actuation=0.0
+loss_crawl=0.0
+max height=0.0
+Iter= 21 Loss= 0.2600225617571191 Best= 0.21557739756955333
+TNS=  0.08574835459796384
+loss_velocity=0.1436545753759035
+loss_height=0.0
+loss_pose=0.0
+loss_rotation=0.11636798638121558
+loss_weight=0.0
+loss_actuation=0.0
+loss_crawl=0.0
+max height=0.0
+Iter= 22 Loss= 0.2505235657261644 Best= 0.21557739756955333
+TNS=  0.036733463292133436
+loss_velocity=0.1388656421397675
+loss_height=0.0
+loss_pose=0.0
+loss_rotation=0.11165792358639694
+loss_weight=0.0
+loss_actuation=0.0
+loss_crawl=0.0
+max height=0.0
+Iter= 23 Loss= 0.2165446608454769 Best= 0.21557739756955333
+TNS=  0.029357294536588904
+loss_velocity=0.09647176790179784
+loss_height=0.0
+loss_pose=0.0
+loss_rotation=0.12007289294367905
+loss_weight=0.0
+loss_actuation=0.0
+loss_crawl=0.0
+max height=0.0
+Iter= 24 Loss= 0.2427266276854853 Best= 0.21557739756955333
+TNS=  0.03660702098774638
+loss_velocity=0.12439543696348851
+loss_height=0.0
+loss_pose=0.0
+loss_rotation=0.11833119072199681
+loss_weight=0.0
+loss_actuation=0.0
+loss_crawl=0.0
+max height=0.0
+Iter= 25 Loss= 0.2607191076239693 Best= 0.21557739756955333
+TNS=  0.0455029932037372
+loss_velocity=0.13637336137645797
+loss_height=0.0
+loss_pose=0.0
+loss_rotation=0.12434574624751135
+loss_weight=0.0
+loss_actuation=0.0
+loss_crawl=0.0
+max height=0.0
+Iter= 26 Loss= 0.2229593708834368 Best= 0.21557739756955333
+TNS=  0.05743256240055002
+loss_velocity=0.10850616618501979
+loss_height=0.0
+loss_pose=0.0
+loss_rotation=0.11445320469841704
+loss_weight=0.0
+loss_actuation=0.0
+loss_crawl=0.0
+max height=0.0
+Iter= 27 Loss= 0.24304228609207112 Best= 0.21557739756955333
+TNS=  0.04403999075787789
+loss_velocity=0.14467901747612177
+loss_height=0.0
+loss_pose=0.0
+loss_rotation=0.09836326861594936
+loss_weight=0.0
+loss_actuation=0.0
+loss_crawl=0.0
+max height=0.0
+Iter= 28 Loss= 0.23051096925024228 Best= 0.21557739756955333
+TNS=  0.028917867623505115
+loss_velocity=0.11750248212969451
+loss_height=0.0
+loss_pose=0.0
+loss_rotation=0.11300848712054778
+loss_weight=0.0
+loss_actuation=0.0
+loss_crawl=0.0
+max height=0.0
+Iter= 29 Loss= 0.20906604148476904 Best= 0.20906604148476904
+TNS=  0.04451300429966981
+loss_velocity=0.13054190623681516
+loss_height=0.0
+loss_pose=0.0
+loss_rotation=0.07852413524795387
+loss_weight=0.0
+loss_actuation=0.0
+loss_crawl=0.0
+max height=0.0
+Iter= 30 Loss= 0.19198644675931395 Best= 0.19198644675931395
+TNS=  0.02903543584243316
+loss_velocity=0.0943250549882653
+loss_height=0.0
+loss_pose=0.0
+loss_rotation=0.09766139177104866
+loss_weight=0.0
+loss_actuation=0.0
+loss_crawl=0.0
+max height=0.0
+Iter= 31 Loss= 0.2512044901709754 Best= 0.19198644675931395
+TNS=  0.11443859674522258
+loss_velocity=0.15818972078016877
+loss_height=0.0
+loss_pose=0.0
+loss_rotation=0.09301476939080663
+loss_weight=0.0
+loss_actuation=0.0
+loss_crawl=0.0
+max height=0.0
+Iter= 32 Loss= 0.18880212069744112 Best= 0.18880212069744112
+TNS=  0.0448892066924782
+loss_velocity=0.0984497478744255
+loss_height=0.0
+loss_pose=0.0
+loss_rotation=0.09035237282301561
+loss_weight=0.0
+loss_actuation=0.0
+loss_crawl=0.0
+max height=0.0
+Iter= 33 Loss= 0.180985090676752 Best= 0.180985090676752
+TNS=  0.040130224412986484
+loss_velocity=0.07368310280690399
+loss_height=0.0
+loss_pose=0.0
+loss_rotation=0.10730198786984801
+loss_weight=0.0
+loss_actuation=0.0
+loss_crawl=0.0
+max height=0.0
+Iter= 34 Loss= 0.19844645928358312 Best= 0.180985090676752
+TNS=  0.03960740403448859
+loss_velocity=0.09426093440650411
+loss_height=0.0
+loss_pose=0.0
+loss_rotation=0.10418552487707902
+loss_weight=0.0
+loss_actuation=0.0
+loss_crawl=0.0
+max height=0.0
+Iter= 35 Loss= 0.2140952583158855 Best= 0.180985090676752
+TNS=  0.04711965148872507
+loss_velocity=0.10467753618294195
+loss_height=0.0
+loss_pose=0.0
+loss_rotation=0.10941772213294355
+loss_weight=0.0
+loss_actuation=0.0
+loss_crawl=0.0
+max height=0.0
+Iter= 36 Loss= 0.24517973941851762 Best= 0.180985090676752
+TNS=  0.04176485997701359
+loss_velocity=0.14929251236008395
+loss_height=0.0
+loss_pose=0.0
+loss_rotation=0.09588722705843368
+loss_weight=0.0
+loss_actuation=0.0
+loss_crawl=0.0
+max height=0.0
+Iter= 37 Loss= 0.22624298263363413 Best= 0.180985090676752
+TNS=  0.05462339426529536
+loss_velocity=0.11473737668978129
+loss_height=0.0
+loss_pose=0.0
+loss_rotation=0.11150560594385285
+loss_weight=0.0
+loss_actuation=0.0
+loss_crawl=0.0
+max height=0.0
+Iter= 38 Loss= 0.19177195751362186 Best= 0.180985090676752
+TNS=  0.115955028459767
+loss_velocity=0.09985672010131129
+loss_height=0.0
+loss_pose=0.0
+loss_rotation=0.09191523741231059
+loss_weight=0.0
+loss_actuation=0.0
+loss_crawl=0.0
+max height=0.0
+Iter= 39 Loss= 0.21341177871285077 Best= 0.180985090676752
+TNS=  0.07203163533263765
+loss_velocity=0.12560474718171297
+loss_height=0.0
+loss_pose=0.0
+loss_rotation=0.08780703153113781
+loss_weight=0.0
+loss_actuation=0.0
+loss_crawl=0.0
+max height=0.0
+Iter= 40 Loss= 0.23155011980558832 Best= 0.180985090676752
+TNS=  0.04618070378091244
+loss_velocity=0.1359922026655846
+loss_height=0.0
+loss_pose=0.0
+loss_rotation=0.09555791714000372
+loss_weight=0.0
+loss_actuation=0.0
+loss_crawl=0.0
+max height=0.0
+Iter= 41 Loss= 0.22286511321897862 Best= 0.180985090676752
+TNS=  0.10584347702026879
+loss_velocity=0.1319005024401737
+loss_height=0.0
+loss_pose=0.0
+loss_rotation=0.09096461077880492
+loss_weight=0.0
+loss_actuation=0.0
+loss_crawl=0.0
+max height=0.0
+Iter= 42 Loss= 0.22415772894601427 Best= 0.180985090676752
+TNS=  0.04683294646451913
+loss_velocity=0.11610798877161344
+loss_height=0.0
+loss_pose=0.0
+loss_rotation=0.10804974017440082
+loss_weight=0.0
+loss_actuation=0.0
+loss_crawl=0.0
+max height=0.0
+Iter= 43 Loss= 0.18792061547544495 Best= 0.180985090676752
+TNS=  0.08885017088378948
+loss_velocity=0.1052560797799032
+loss_height=0.0
+loss_pose=0.0
+loss_rotation=0.08266453569554175
+loss_weight=0.0
+loss_actuation=0.0
+loss_crawl=0.0
+max height=0.0
+Iter= 44 Loss= 0.20649839213805565 Best= 0.180985090676752
+TNS=  0.06505498936447482
+loss_velocity=0.10734599540500911
+loss_height=0.0
+loss_pose=0.0
+loss_rotation=0.09915239673304653
+loss_weight=0.0
+loss_actuation=0.0
+loss_crawl=0.0
+max height=0.0
+Iter= 45 Loss= 0.1891987142997732 Best= 0.180985090676752
+TNS=  0.10502250581005111
+loss_velocity=0.06917391599810077
+loss_height=0.0
+loss_pose=0.0
+loss_rotation=0.12002479830167244
+loss_weight=0.0
+loss_actuation=0.0
+loss_crawl=0.0
+max height=0.0
+Iter= 46 Loss= 0.1905044506488237 Best= 0.180985090676752
+TNS=  0.02808870525318295
+loss_velocity=0.10477611682557435
+loss_height=0.0
+loss_pose=0.0
+loss_rotation=0.08572833382324935
+loss_weight=0.0
+loss_actuation=0.0
+loss_crawl=0.0
+max height=0.0
+Iter= 47 Loss= 0.17640093113703167 Best= 0.17640093113703167
+TNS=  0.026830965288511418
+loss_velocity=0.07826492200672225
+loss_height=0.0
+loss_pose=0.0
+loss_rotation=0.09813600913030943
+loss_weight=0.0
+loss_actuation=0.0
+loss_crawl=0.0
+max height=0.0
+Iter= 48 Loss= 0.1904490884770685 Best= 0.17640093113703167
+TNS=  0.03170707809288116
+loss_velocity=0.09765723019868933
+loss_height=0.0
+loss_pose=0.0
+loss_rotation=0.09279185827837919
+loss_weight=0.0
+loss_actuation=0.0
+loss_crawl=0.0
+max height=0.0
+Iter= 49 Loss= 0.18686550093698795 Best= 0.17640093113703167
+TNS=  0.06344730445679954
+loss_velocity=0.08422784586037385
+loss_height=0.0
+loss_pose=0.0
+loss_rotation=0.10263765507661408
+loss_weight=0.0
+loss_actuation=0.0
+loss_crawl=0.0
+max height=0.0
+Iter= 50 Loss= 0.19166221505774395 Best= 0.17640093113703167
+TNS=  0.0859934032195186
+loss_velocity=0.10489838773136606
+loss_height=0.0
+loss_pose=0.0
+loss_rotation=0.08676382732637788
+loss_weight=0.0
+loss_actuation=0.0
+loss_crawl=0.0
+max height=0.0
+Iter= 51 Loss= 0.1942501775138478 Best= 0.17640093113703167
+TNS=  0.1885966947918885
+loss_velocity=0.09449250096928197
+loss_height=0.0
+loss_pose=0.0
+loss_rotation=0.09975767654456583
+loss_weight=0.0
+loss_actuation=0.0
+loss_crawl=0.0
+max height=0.0
+Iter= 52 Loss= 0.182039069094079 Best= 0.17640093113703167
+TNS=  0.2052810011508415
+loss_velocity=0.10216134466790343
+loss_height=0.0
+loss_pose=0.0
+loss_rotation=0.07987772442617556
+loss_weight=0.0
+loss_actuation=0.0
+loss_crawl=0.0
+max height=0.0
+Iter= 53 Loss= 0.19885961225195276 Best= 0.17640093113703167
+TNS=  0.056601204275289634
+loss_velocity=0.11021215119675494
+loss_height=0.0
+loss_pose=0.0
+loss_rotation=0.0886474610551978
+loss_weight=0.0
+loss_actuation=0.0
+loss_crawl=0.0
+max height=0.0
+Iter= 54 Loss= 0.19768098043543994 Best= 0.17640093113703167
+TNS=  0.06131097479456097
+loss_velocity=0.09308556563703103
+loss_height=0.0
+loss_pose=0.0
+loss_rotation=0.1045954147984089
+loss_weight=0.0
+loss_actuation=0.0
+loss_crawl=0.0
+max height=0.0
+Iter= 55 Loss= 0.18240208098807403 Best= 0.17640093113703167
+TNS=  0.08505913335655213
+loss_velocity=0.08562611902094287
+loss_height=0.0
+loss_pose=0.0
+loss_rotation=0.09677596196713116
+loss_weight=0.0
+loss_actuation=0.0
+loss_crawl=0.0
+max height=0.0
+Iter= 56 Loss= 0.18128694716505794 Best= 0.17640093113703167
+TNS=  0.048893285905754334
+loss_velocity=0.09899683219917761
+loss_height=0.0
+loss_pose=0.0
+loss_rotation=0.08229011496588035
+loss_weight=0.0
+loss_actuation=0.0
+loss_crawl=0.0
+max height=0.0
+Iter= 57 Loss= 0.17766269769827409 Best= 0.17640093113703167
+TNS=  0.04148737646739512
+loss_velocity=0.07164058748735716
+loss_height=0.0
+loss_pose=0.0
+loss_rotation=0.10602211021091694
+loss_weight=0.0
+loss_actuation=0.0
+loss_crawl=0.0
+max height=0.0
+Iter= 58 Loss= 0.2062777257372539 Best= 0.17640093113703167
+TNS=  0.15685336872679845
+loss_velocity=0.09160059873714932
+loss_height=0.0
+loss_pose=0.0
+loss_rotation=0.11467712700010459
+loss_weight=0.0
+loss_actuation=0.0
+loss_crawl=0.0
+max height=0.0
+Iter= 59 Loss= 0.18595369098033906 Best= 0.17640093113703167
+TNS=  0.03947418015810953
+loss_velocity=0.1093760321557804
+loss_height=0.0
+loss_pose=0.0
+loss_rotation=0.07657765882455866
+loss_weight=0.0
+loss_actuation=0.0
+loss_crawl=0.0
+max height=0.0
+Iter= 60 Loss= 0.1815530900182733 Best= 0.17640093113703167
+TNS=  0.028200932995769513
+loss_velocity=0.08966539748303565
+loss_height=0.0
+loss_pose=0.0
+loss_rotation=0.09188769253523765
+loss_weight=0.0
+loss_actuation=0.0
+loss_crawl=0.0
+max height=0.0
+Iter= 61 Loss= 0.18132426047416805 Best= 0.17640093113703167
+TNS=  0.0313154059891809
+loss_velocity=0.09103741778159251
+loss_height=0.0
+loss_pose=0.0
+loss_rotation=0.09028684269257554
+loss_weight=0.0
+loss_actuation=0.0
+loss_crawl=0.0
+max height=0.0
+Iter= 62 Loss= 0.1705917343769393 Best= 0.1705917343769393
+TNS=  0.14442228827363324
+loss_velocity=0.09295233691424343
+loss_height=0.0
+loss_pose=0.0
+loss_rotation=0.07763939746269587
+loss_weight=0.0
+loss_actuation=0.0
+loss_crawl=0.0
+max height=0.0
+Iter= 63 Loss= 0.1964338115262485 Best= 0.1705917343769393
+TNS=  0.2403177429327131
+loss_velocity=0.10420792763399991
+loss_height=0.0
+loss_pose=0.0
+loss_rotation=0.09222588389224859
+loss_weight=0.0
+loss_actuation=0.0
+loss_crawl=0.0
+max height=0.0
+Iter= 64 Loss= 0.1903340883106031 Best= 0.1705917343769393
+TNS=  0.032411430078366145
+loss_velocity=0.09473298468928892
+loss_height=0.0
+loss_pose=0.0
+loss_rotation=0.09560110362131419
+loss_weight=0.0
+loss_actuation=0.0
+loss_crawl=0.0
+max height=0.0
+Iter= 65 Loss= 0.19842991685594497 Best= 0.1705917343769393
+TNS=  0.05065166885223151
+loss_velocity=0.08440347511027224
+loss_height=0.0
+loss_pose=0.0
+loss_rotation=0.11402644174567272
+loss_weight=0.0
+loss_actuation=0.0
+loss_crawl=0.0
+max height=0.0
+Iter= 66 Loss= 0.17697928071150099 Best= 0.1705917343769393
+TNS=  0.057217054672907545
+loss_velocity=0.06679932117984809
+loss_height=0.0
+loss_pose=0.0
+loss_rotation=0.11017995953165291
+loss_weight=0.0
+loss_actuation=0.0
+loss_crawl=0.0
+max height=0.0
+Iter= 67 Loss= 0.17883166064544243 Best= 0.1705917343769393
+TNS=  0.038354029980703336
+loss_velocity=0.07157934104017172
+loss_height=0.0
+loss_pose=0.0
+loss_rotation=0.10725231960527071
+loss_weight=0.0
+loss_actuation=0.0
+loss_crawl=0.0
+max height=0.0
+Iter= 68 Loss= 0.1900058127510484 Best= 0.1705917343769393
+TNS=  0.041227892166156875
+loss_velocity=0.09308305622110427
+loss_height=0.0
+loss_pose=0.0
+loss_rotation=0.0969227565299441
+loss_weight=0.0
+loss_actuation=0.0
+loss_crawl=0.0
+max height=0.0
+Iter= 69 Loss= 0.17341672351100496 Best= 0.1705917343769393
+TNS=  0.039726072344070086
+loss_velocity=0.08214245495607268
+loss_height=0.0
+loss_pose=0.0
+loss_rotation=0.09127426855493227
+loss_weight=0.0
+loss_actuation=0.0
+loss_crawl=0.0
+max height=0.0
+Iter= 70 Loss= 0.19164794953712727 Best= 0.1705917343769393
+TNS=  0.03506537522062836
+loss_velocity=0.100462078543409
+loss_height=0.0
+loss_pose=0.0
+loss_rotation=0.09118587099371828
+loss_weight=0.0
+loss_actuation=0.0
+loss_crawl=0.0
+max height=0.0
+Iter= 71 Loss= 0.1707892231572713 Best= 0.1705917343769393
+TNS=  0.034666547548106254
+loss_velocity=0.07424414396075438
+loss_height=0.0
+loss_pose=0.0
+loss_rotation=0.09654507919651692
+loss_weight=0.0
+loss_actuation=0.0
+loss_crawl=0.0
+max height=0.0
+Iter= 72 Loss= 0.1698385408263796 Best= 0.1698385408263796
+TNS=  0.036245661100646136
+loss_velocity=0.08468001961007843
+loss_height=0.0
+loss_pose=0.0
+loss_rotation=0.08515852121630117
+loss_weight=0.0
+loss_actuation=0.0
+loss_crawl=0.0
+max height=0.0
+Iter= 73 Loss= 0.18614282043204122 Best= 0.1698385408263796
+TNS=  0.04167390808995581
+loss_velocity=0.09937766168841926
+loss_height=0.0
+loss_pose=0.0
+loss_rotation=0.08676515874362198
+loss_weight=0.0
+loss_actuation=0.0
+loss_crawl=0.0
+max height=0.0
+Iter= 74 Loss= 0.18298017480714068 Best= 0.1698385408263796
+TNS=  0.05036042015504683
+loss_velocity=0.09737563602227191
+loss_height=0.0
+loss_pose=0.0
+loss_rotation=0.08560453878486877
+loss_weight=0.0
+loss_actuation=0.0
+loss_crawl=0.0
+max height=0.0
+Iter= 75 Loss= 0.16331813611522877 Best= 0.16331813611522877
+TNS=  0.052169377640509156
+loss_velocity=0.09136933087937238
+loss_height=0.0
+loss_pose=0.0
+loss_rotation=0.07194880523585638
+loss_weight=0.0
+loss_actuation=0.0
+loss_crawl=0.0
+max height=0.0
+Iter= 76 Loss= 0.18240794732188875 Best= 0.16331813611522877
+TNS=  0.037478001651302086
+loss_velocity=0.09774570356527582
+loss_height=0.0
+loss_pose=0.0
+loss_rotation=0.08466224375661294
+loss_weight=0.0
+loss_actuation=0.0
+loss_crawl=0.0
+max height=0.0
+Iter= 77 Loss= 0.1561088082212766 Best= 0.1561088082212766
+TNS=  0.054643073132667974
+loss_velocity=0.060941004214227115
+loss_height=0.0
+loss_pose=0.0
+loss_rotation=0.09516780400704947
+loss_weight=0.0
+loss_actuation=0.0
+loss_crawl=0.0
+max height=0.0
+Iter= 78 Loss= 0.16506127835325052 Best= 0.1561088082212766
+TNS=  0.0280798662343471
+loss_velocity=0.08673271160563935
+loss_height=0.0
+loss_pose=0.0
+loss_rotation=0.07832856674761118
+loss_weight=0.0
+loss_actuation=0.0
+loss_crawl=0.0
+max height=0.0
+Iter= 79 Loss= 0.17281638968228918 Best= 0.1561088082212766
+TNS=  0.01803761844521274
+loss_velocity=0.08103805701056038
+loss_height=0.0
+loss_pose=0.0
+loss_rotation=0.0917783326717288
+loss_weight=0.0
+loss_actuation=0.0
+loss_crawl=0.0
+max height=0.0
+Iter= 80 Loss= 0.19441221507559636 Best= 0.1561088082212766
+TNS=  0.0336955223404894
+loss_velocity=0.10692348506878371
+loss_height=0.0
+loss_pose=0.0
+loss_rotation=0.08748873000681266
+loss_weight=0.0
+loss_actuation=0.0
+loss_crawl=0.0
+max height=0.0
+Iter= 81 Loss= 0.16263551733064574 Best= 0.1561088082212766
+TNS=  0.027053389350952736
+loss_velocity=0.07956639591811901
+loss_height=0.0
+loss_pose=0.0
+loss_rotation=0.08306912141252672
+loss_weight=0.0
+loss_actuation=0.0
+loss_crawl=0.0
+max height=0.0
+Iter= 82 Loss= 0.19100765072008846 Best= 0.1561088082212766
+TNS=  0.20293624565031365
+loss_velocity=0.09892307628926089
+loss_height=0.0
+loss_pose=0.0
+loss_rotation=0.09208457443082757
+loss_weight=0.0
+loss_actuation=0.0
+loss_crawl=0.0
+max height=0.0
+Iter= 83 Loss= 0.16357199301784037 Best= 0.1561088082212766
+TNS=  0.050346024981993184
+loss_velocity=0.05926317046004201
+loss_height=0.0
+loss_pose=0.0
+loss_rotation=0.10430882255779834
+loss_weight=0.0
+loss_actuation=0.0
+loss_crawl=0.0
+max height=0.0
+Iter= 84 Loss= 0.16740810728766115 Best= 0.1561088082212766
+TNS=  0.041731723644730344
+loss_velocity=0.07013941280410566
+loss_height=0.0
+loss_pose=0.0
+loss_rotation=0.0972686944835555
+loss_weight=0.0
+loss_actuation=0.0
+loss_crawl=0.0
+max height=0.0
+Iter= 85 Loss= 0.1705623634044997 Best= 0.1561088082212766
+TNS=  0.02765871861230047
+loss_velocity=0.08318506943640148
+loss_height=0.0
+loss_pose=0.0
+loss_rotation=0.08737729396809824
+loss_weight=0.0
+loss_actuation=0.0
+loss_crawl=0.0
+max height=0.0
+Iter= 86 Loss= 0.1551684145649712 Best= 0.1551684145649712
+TNS=  0.02411112870928716
+loss_velocity=0.06457270570838007
+loss_height=0.0
+loss_pose=0.0
+loss_rotation=0.09059570885659113
+loss_weight=0.0
+loss_actuation=0.0
+loss_crawl=0.0
+max height=0.0
+Iter= 87 Loss= 0.16610807323251192 Best= 0.1551684145649712
+TNS=  0.04150642088550916
+loss_velocity=0.088392579408772
+loss_height=0.0
+loss_pose=0.0
+loss_rotation=0.07771549382373992
+loss_weight=0.0
+loss_actuation=0.0
+loss_crawl=0.0
+max height=0.0
+Iter= 88 Loss= 0.17526751178261643 Best= 0.1551684145649712
+TNS=  0.02518092508813885
+loss_velocity=0.08587303138055351
+loss_height=0.0
+loss_pose=0.0
+loss_rotation=0.08939448040206292
+loss_weight=0.0
+loss_actuation=0.0
+loss_crawl=0.0
+max height=0.0
+Iter= 89 Loss= 0.15577775328369892 Best= 0.1551684145649712
+TNS=  0.07928584318615155
+loss_velocity=0.06769378826999538
+loss_height=0.0
+loss_pose=0.0
+loss_rotation=0.08808396501370354
+loss_weight=0.0
+loss_actuation=0.0
+loss_crawl=0.0
+max height=0.0
+Iter= 90 Loss= 0.14608977185959024 Best= 0.14608977185959024
+TNS=  0.20877189633186183
+loss_velocity=0.06653561595679372
+loss_height=0.0
+loss_pose=0.0
+loss_rotation=0.07955415590279652
+loss_weight=0.0
+loss_actuation=0.0
+loss_crawl=0.0
+max height=0.0
+Iter= 91 Loss= 0.1675775595658091 Best= 0.14608977185959024
+TNS=  0.04003949218311246
+loss_velocity=0.09645408306996606
+loss_height=0.0
+loss_pose=0.0
+loss_rotation=0.07112347649584305
+loss_weight=0.0
+loss_actuation=0.0
+loss_crawl=0.0
+max height=0.0
+Iter= 92 Loss= 0.16849327961345 Best= 0.14608977185959024
+TNS=  0.030607854214152626
+loss_velocity=0.09393663029022893
+loss_height=0.0
+loss_pose=0.0
+loss_rotation=0.07455664932322109
+loss_weight=0.0
+loss_actuation=0.0
+loss_crawl=0.0
+max height=0.0
+Iter= 93 Loss= 0.17789861466338264 Best= 0.14608977185959024
+TNS=  0.031295315328164354
+loss_velocity=0.08759618256482052
+loss_height=0.0
+loss_pose=0.0
+loss_rotation=0.0903024320985621
+loss_weight=0.0
+loss_actuation=0.0
+loss_crawl=0.0
+max height=0.0
+Iter= 94 Loss= 0.174010667252065 Best= 0.14608977185959024
+TNS=  0.09991434124760572
+loss_velocity=0.07421382154135955
+loss_height=0.0
+loss_pose=0.0
+loss_rotation=0.09979684571070545
+loss_weight=0.0
+loss_actuation=0.0
+loss_crawl=0.0
+max height=0.0
