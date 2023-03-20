@@ -58,11 +58,11 @@ class Model:
 
     @ti.kernel
     def weights_init(self):
-        q1 = math.sqrt(6 / self.n_input)
+        q1 = ti.sqrt(6 / self.n_input)
         for i, j in ti.ndrange(self.n_hidden, self.n_input):
             self.weights1[i, j] = (ti.random() * 2 - 1) * q1
 
-        q2 = math.sqrt(6 / self.n_hidden)
+        q2 = ti.sqrt(6 / self.n_hidden)
         for i, j in ti.ndrange(self.n_output, self.n_hidden):
             self.weights2[i, j] = (ti.random() * 2 - 1) * q2
         '''

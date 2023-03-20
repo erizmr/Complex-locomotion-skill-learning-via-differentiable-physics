@@ -324,8 +324,8 @@ class RobotDesignMassSpring3D(RobotDesignBase):
         self.solver = self.config["robot"]["solver"]
         self.spring_stiffness = self.config["robot"]["spring_stiffness"]
         self.spring_actuation = self.config["robot"]["spring_actuation"]
-        print("??????????????????????? ", self.spring_stiffness)
-        print("??????????????????????? ", self.spring_actuation)
+        print("Spring stiffness ", self.spring_stiffness)
+        print("Spring actuation ", self.spring_actuation)
         # design data holders
         self.objects = []
         self.springs = []

@@ -5,8 +5,6 @@ import taichi as ti
 from multitask.arguments import get_args
 from multitask.config_sim import ConfigSim
 from multitask.diffphy_trainer import DiffPhyTrainer
-# from solver_mass_spring import SolverMassSpring
-# from solver_mpm import SolverMPM
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -19,7 +17,12 @@ def set_target(window):
             set_target.target_v += 0.01
         if e.key == ti.ui.DOWN:
             set_target.target_v -= 0.01
-        print("!!!!!!!!!!!!!!!!!!!!!!! ", set_target.target_v)
+        if e.key == ti.ui.LEFT:
+            set_target.target_h += 0.01
+        if e.key == ti.ui.RIGHT:
+            set_target.target_h -= 0.01
+        print("target v ", set_target.target_v)
+        print("target h ", set_target.target_h)
     trainer.taichi_env.initialize_interactive(1, set_target.target_v, set_target.target_h, set_target.target_c)
 set_target.target_v = 0
 set_target.target_h = 0.1
@@ -98,7 +101,7 @@ if __name__ == "__main__":
     trainer.nn.load_weights(os.path.join(model_path, "weight.pkl"))
     # trainer.nn.load_weights(os.path.join(model_path, "best.pkl"))
 
-    window = ti.ui.Window("Difftaichi2", (800, 800), vsync=True)
+    window = ti.ui.Window("SNMT", (800, 800), vsync=True)
     canvas = window.get_canvas()
     scene = ti.ui.Scene()
     camera = ti.ui.make_camera()
@@ -114,6 +117,10 @@ if __name__ == "__main__":
         for i in range(trainer.taichi_env.n_objects):
             vertices[i] = trainer.taichi_env.x[0, 0, i]
 
+    camera.position(0.2, 1.1, 1.1)
+    camera.lookat(0.2, 0.1, 0.1)
+    camera.up(0, 1, 0)
+
     while window.running:
         update_verts()
         for i in range(10):
@@ -123,9 +130,6 @@ if __name__ == "__main__":
             refresh_xv()
             offset += 1
 
-        camera.position(0.2, 1.1, 1.1)
-        camera.lookat(0.2, 0.1, 0.1)
-        camera.up(0, 1, 0)
         camera.track_user_inputs(window, movement_speed=0.03, hold_key=ti.ui.RMB)
         scene.set_camera(camera)
 

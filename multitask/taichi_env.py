@@ -13,7 +13,7 @@ from multitask.solver_mpm import SolverMPM
 
 debug = Debug(False)
 ti_random_seed = int(time.time() * 1e6) % 10000
-ti.init(arch=ti.gpu, default_fp=real, random_seed=ti_random_seed)
+ti.init(arch=ti.gpu, debug=False, device_memory_GB=4, default_fp=real, random_seed=ti_random_seed)
 
 
 # Manage all shared parameters and taichi fields
@@ -187,7 +187,7 @@ class TaichiEnv:
         for t, k in ti.ndrange((self.run_period, steps + 1), self.batch_size):
             if t % self.turn_period > self.run_period:  # and target_h[t - run_period, k] < 0.1 + 1e-4:
                 if ti.static(self.dim == 2):
-                    loss_x = (self.center[t, k](0) - self.center[t - self.run_period, k][0] - self.target_v[
+                    loss_x = (self.center[t, k][0] - self.center[t - self.run_period, k][0] - self.target_v[
                         t - self.run_period, k][0] / (1 + self.target_c[
                         t - self.run_period, k])) ** 2 / self.batch_size / steps * 100
                     self.loss_velocity[None] += loss_x
@@ -200,10 +200,10 @@ class TaichiEnv:
                     # loss_x = (self.center[t, k](0) - self.center[t - self.run_period, k](0) - target_x) ** 2 / self.batch_size / steps * 100
                     # loss_y = (self.center[t, k](2) - self.center[t - self.run_period, k](2) - target_y) ** 2 / self.batch_size / steps * 100
 
-                    loss_x = (self.center[t, k](0) - self.center[t - self.run_period, k](0) - self.target_v[
-                        t - self.run_period, k](0)) ** 2 / self.batch_size / steps * 100
-                    loss_y = (self.center[t, k](2) - self.center[t - self.run_period, k](2) - self.target_v[
-                        t - self.run_period, k](2)) ** 2 / self.batch_size / steps * 100
+                    loss_x = (self.center[t, k][0] - self.center[t - self.run_period, k][0] - self.target_v[
+                        t - self.run_period, k][0]) ** 2 / self.batch_size / steps * 100
+                    loss_y = (self.center[t, k][2] - self.center[t - self.run_period, k][2] - self.target_v[
+                        t - self.run_period, k][2]) ** 2 / self.batch_size / steps * 100
 
                     self.loss_velocity[None] += loss_x + loss_y
                     self.loss_velocity_batch[k] += (loss_x + loss_y) * self.batch_size
@@ -302,13 +302,14 @@ class TaichiEnv:
             self.loss_batch[k] += l[k]
 
     def get_loss(self, steps, loss_enable, *args, **kwargs):
-        for t in range(self.run_period, steps + 1):
+        # for t in range(self.run_period, steps + 1):
+        for t in range(self.run_period, steps):
             if t % self.run_period == 0:  # and target_h[t - run_period, k] < 0.1 + 1e-4:
-                x0 = self.center[t, 0](0) - self.center[t - self.run_period, 0](0)
-                x1 = self.target_v[t - self.run_period, 0](0)
-                z0 = self.center[t, 0](2) - self.center[t - self.run_period, 0](2)
-                z1 = self.target_v[t - self.run_period, 0](2)
-                print("  ", x0, x1, z0, z1)
+                x0 = self.center[t, 0][0] - self.center[t - self.run_period, 0][0]
+                x1 = self.target_v[t - self.run_period, 0][0]
+                z0 = self.center[t, 0][2] - self.center[t - self.run_period, 0][2]
+                z1 = self.target_v[t - self.run_period, 0][2]
+                # print("  ", x0, x1, z0, z1)
         if "velocity" in loss_enable:
             self.compute_loss_velocity(steps)
         if "height" in loss_enable:

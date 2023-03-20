@@ -16,6 +16,7 @@ class SolverMassSpring:
         self.batch_size = config.get_config()["nn"]["batch_size"]
         self.n_objects = config.get_config()["robot"]["n_objects"]
         self.n_springs = config.get_config()["robot"]["n_springs"]
+        self.robot_id = config.get_config()["robot"]["robot_id"]
         self.springs = config.get_config()["robot"]["springs"]
         self.dim = config.get_config()["robot"]["dim"]
         self.jump_period = config.get_config()["process"]["jump_period"]
@@ -73,12 +74,15 @@ class SolverMassSpring:
         for t, k, i in ti.ndrange(steps, self.batch_size, self.n_objects):
             #self.x.grad[t, k, i] = ti.Matrix.zero(real, dim, 1)
             #self.v.grad[t, k, i] = ti.Matrix.zero(real, dim, 1)
-            self.v_inc[t, k, i] = ti.Matrix.zero(real, self.dim, 1)
+            # self.v_inc[t, k, i] = ti.Matrix.zero(real, self.dim, 1)
+            self.v_inc[t, k, i] = ti.Matrix.zero(real, self.dim)
             #self.v_inc.grad[t, k, i] = ti.Matrix.zero(real, dim, 1)
         for t, k in ti.ndrange(steps, self.batch_size):
-            self.head_center[t, k] = ti.Matrix.zero(real, self.dim, 1)
+            # self.head_center[t, k] = ti.Matrix.zero(real, self.dim, 1)
+            self.head_center[t, k] = ti.Matrix.zero(real, self.dim)
             self.head_counter[t, k] = 0.
-            self.tail_center[t, k] = ti.Matrix.zero(real, self.dim, 1)
+            # self.tail_center[t, k] = ti.Matrix.zero(real, self.dim, 1)
+            self.tail_center[t, k] = ti.Matrix.zero(real, self.dim)
             self.tail_counter[t, k] = 0.
             self.rotation[t, k] = 0.
 
@@ -116,8 +120,9 @@ class SolverMassSpring:
     @ti.kernel
     def advance_toi(self, t: ti.i32):
         for k, i in ti.ndrange(self.batch_size, self.n_objects):
-            s = math.exp(-self.dt * self.drag_damping)
-            unitY = ti.Matrix.zero(real, self.dim, 1)
+            s = ti.exp(-self.dt * self.drag_damping)
+            # unitY = ti.Matrix.zero(real, self.dim, 1)
+            unitY = ti.Matrix.zero(real, self.dim)
             unitY[1] = 1.0
             old_v = s * self.v[t - 1, k, i] + self.dt * self.gravity * unitY + self.v_inc[t - 1, k, i]
             old_x = self.x[t - 1, k, i]
@@ -127,7 +132,8 @@ class SolverMassSpring:
             if new_x[1] < self.ground_height and old_v[1] < -1e-4:
                 toi = float(-(old_x[1] - self.ground_height) / old_v[1])
                 # Inf friction
-                new_v = ti.Matrix.zero(real, self.dim, 1)
+                # new_v = ti.Matrix.zero(real, self.dim, 1)
+                new_v = ti.Matrix.zero(real, self.dim)
                 # Reasonable friction
                 new_v[1] = 0
                 friction = .4
@@ -148,7 +154,8 @@ class SolverMassSpring:
     def compute_center(self, t: ti.i32):
         n = ti.static(self.n_objects)
         for k in range(self.batch_size):
-            self.center[t, k] = ti.Matrix.zero(real, self.dim, 1)
+            # self.center[t, k] = ti.Matrix.zero(real, self.dim, 1)
+            self.center[t, k] = ti.Matrix.zero(real, self.dim)
         for k, i in ti.ndrange(self.batch_size, n):
             self.center[t, k] += self.x[t, k, i] / n
 
@@ -157,7 +164,7 @@ class SolverMassSpring:
         for k in range(self.batch_size):
             h = 10.
             for i in ti.static(range(self.n_objects)):
-                h = float(ti.min(h, self.x[t, k, i](1)))
+                h = float(ti.min(h, self.x[t, k, i][1]))
             # self.height[t, k] = h
             if t % self.jump_period == 0:
                 self.height[t, k] = h
@@ -167,25 +174,27 @@ class SolverMassSpring:
         for k in range(self.batch_size):
             h = -10.
             for i in ti.static(range(self.n_objects)):
-                h = ti.max(h, self.x[t, k, i](1))
+                h = ti.max(h, self.x[t, k, i][1])
             self.upper_height[t, k] = h
 
     @ti.kernel
     def compute_rotation(self, t: ti.i32):
-        for k in range(self.batch_size):
-            # TODO: hard-code robot 100
-            direction = self.x[t, k, 45] + self.x[t, k, 46] - self.x[t, k, 34] - self.x[t, k, 36]
-            self.rotation[t, k] = ti.atan2(direction[2], direction[0])
-        # for k in range(self.batch_size):
-        #     for i in ti.static(range(self.n_objects)):
-        #         if self.x[0, k, i](0) < self.center[0, k](0):
-        #             self.head_center[t, k] += self.x[t, k ,i]
-        #             self.head_counter[t, k] += 1.
-        #         else:
-        #             self.tail_center[t, k] += self.x[t, k, i]
-        #             self.tail_counter[t, k] += 1.
-        #     direction = -self.head_center[t, k] * self.tail_counter[t, k] + self.tail_center[t, k] * self.head_counter[t, k]
-        #     self.rotation[t, k] = ti.atan2(direction[2], direction[0])
+        if ti.static(self.robot_id) == 100:
+            for k in range(self.batch_size):
+                # TODO: hard-code robot 100
+                direction = self.x[t, k, 45] + self.x[t, k, 46] - self.x[t, k, 34] - self.x[t, k, 36]
+                self.rotation[t, k] = ti.atan2(direction[2], direction[0])
+        else:
+            for k in range(self.batch_size):
+                for i in ti.static(range(self.n_objects)):
+                    if self.x[0, k, i][0] < self.center[0, k][0]:
+                        self.head_center[t, k] += self.x[t, k ,i]
+                        self.head_counter[t, k] += 1.
+                    else:
+                        self.tail_center[t, k] += self.x[t, k, i]
+                        self.tail_counter[t, k] += 1.
+                direction = -self.head_center[t, k] * self.tail_counter[t, k] + self.tail_center[t, k] * self.head_counter[t, k]
+                self.rotation[t, k] = ti.atan2(direction[2], direction[0])
 
     def pre_advance(self, t):
         self.compute_center(t)

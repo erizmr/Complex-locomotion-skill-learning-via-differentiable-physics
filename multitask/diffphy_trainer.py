@@ -243,8 +243,9 @@ class DiffPhyTrainer(BaseTrainer):
             l[None] = 0.
         # start simulation
         if train:
-            with ti.Tape(self.taichi_env.loss):
-                for t in range(steps + 1):
+            with ti.ad.Tape(self.taichi_env.loss):
+                # for t in range(steps + 1):
+                for t in range(steps-1):
                     self.taichi_env.solver.pre_advance(t)
                     self.taichi_env.nn_input(t, 0, max_speed, max_height)
                     if t % self.control_length == 0:

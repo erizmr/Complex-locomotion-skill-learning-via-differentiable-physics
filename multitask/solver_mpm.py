@@ -172,14 +172,14 @@ class SolverMPM:
         for k, i in ti.ndrange(self.batch_size, n):
             self.center[t, k] += self.x[t, k, i] / n
 
-    @ti.complex_kernel
+    @ti.ad.grad_replaced
     def advance_core(self, t: ti.i32):
         self.clear_grid()
         self.p2g(t)
         self.grid_op()
         self.g2p(t)
 
-    @ti.complex_kernel_grad(advance_core)
+    @ti.ad.grad_for(advance_core)
     def advance_core_grad(self, t: ti.i32):
         self.clear_grid()
         self.p2g(t)
