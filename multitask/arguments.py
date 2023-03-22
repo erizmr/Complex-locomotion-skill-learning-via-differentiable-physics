@@ -67,8 +67,8 @@ def get_args():
         help='number of environment steps to train (default: 10e6)')
     parser.add_argument(
         '--env-name',
-        default='PongNoFrameskip-v4',
-        help='environment to train on (default: PongNoFrameskip-v4)')
+        default='SNMT',
+        help='environment to train on')
     parser.add_argument(
         '--no-cuda',
         action='store_true',
