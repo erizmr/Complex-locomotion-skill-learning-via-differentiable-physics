@@ -28,9 +28,6 @@ class SolverMassSpring:
         self.actuation = scalar()
         self.act_list = []
         batch_node = ti.root.dense(ti.ij, (self.max_steps, self.batch_size))
-        # ti.root.dense(ti.ijk, (self.max_steps, self.batch_size, self.n_objects)).place(self.x, self.v)
-        # ti.root.dense(ti.ij, (self.max_steps, self.batch_size)).place(self.center)
-        # ti.root.dense(ti.ijk, (self.max_steps, self.batch_size, self.n_springs)).place(self.actuation)
         batch_node.dense(ti.k, (self.n_objects)).place(self.x, self.v)
         batch_node.place(self.center)
         batch_node.dense(ti.k, (self.n_springs)).place(self.actuation)
@@ -154,7 +151,6 @@ class SolverMassSpring:
     def compute_center(self, t: ti.i32):
         n = ti.static(self.n_objects)
         for k in range(self.batch_size):
-            # self.center[t, k] = ti.Matrix.zero(real, self.dim, 1)
             self.center[t, k] = ti.Matrix.zero(real, self.dim)
         for k, i in ti.ndrange(self.batch_size, n):
             self.center[t, k] += self.x[t, k, i] / n
@@ -165,7 +161,6 @@ class SolverMassSpring:
             h = 10.
             for i in ti.static(range(self.n_objects)):
                 h = float(ti.min(h, self.x[t, k, i][1]))
-            # self.height[t, k] = h
             if t % self.jump_period == 0:
                 self.height[t, k] = h
             else:
