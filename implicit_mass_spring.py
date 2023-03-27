@@ -19,7 +19,8 @@ class ImplictMassSpringSolver:
         print(f"Vertices {self.vertices.shape}, Springs {self.springs_data.shape}, Faces {self.faces.shape}")
         self.NF = self.faces.shape[0]  # number of faces
         self.NV = self.vertices.shape[0]  # number of vertices
-        self.NE = self.springs.shape[0]  # number of edges
+        self.NE = self.springs_data.shape[0]  # number of edges
+
         self.pos = ti.Vector.field(self.dim, ti.f32, self.NV)
         self.initPos = ti.Vector.field(self.dim, ti.f32, self.NV)
         self.vel = ti.Vector.field(self.dim, ti.f32, self.NV)
@@ -58,8 +59,7 @@ class ImplictMassSpringSolver:
         self.init_mass_sp(self.MassBuilder)
         self.M = self.MassBuilder.build()
         # self.fix_vertex = [self.N, self.NV - 1]
-        self.Jf = ti.Matrix.field(self.dim, self.dim, ti.f32, len(
-            self.fix_vertex))  # fix constraint hessian
+        # self.Jf = ti.Matrix.field(self.dim, self.dim, ti.f32, len(self.fix_vertex))  # fix constraint hessian
 
 
     def init_pos(self):
@@ -68,10 +68,10 @@ class ImplictMassSpringSolver:
         self.vel.from_numpy(np.zeros((self.NV, self.dim)))
         self.mass.from_numpy(np.ones(self.NV))
     
-
     def init_edges(self):
-        # self.spring.from
-        pass
+        self.spring.from_numpy(self.springs_data[:, :2])
+        print("spring index ", self.spring)
+        self.rest_len.from_numpy(self.springs_data[:, 2])
 
     @ti.kernel
     def init_mass_sp(self, M: ti.types.sparse_matrix_builder()):
@@ -106,10 +106,10 @@ class ImplictMassSpringSolver:
             self.force[idx1] += force
             self.force[idx2] -= force
         # fix constraint gradient
-        self.force[self.N] += self.kf * (self.initPos[self.N] -
-                                         self.pos[self.N])
-        self.force[self.NV - 1] += self.kf * (self.initPos[self.NV - 1] -
-                                              self.pos[self.NV - 1])
+        # self.force[self.N] += self.kf * (self.initPos[self.N] -
+        #                                  self.pos[self.N])
+        # self.force[self.NV - 1] += self.kf * (self.initPos[self.NV - 1] -
+        #                                       self.pos[self.NV - 1])
 
     @ti.kernel
     def compute_Jacobians(self):
@@ -132,8 +132,8 @@ class ImplictMassSpringSolver:
         # fix point constraint hessian
         # self.Jf[0] = ti.Matrix([[-self.kf, 0], [0, -self.kf]])
         # self.Jf[1] = ti.Matrix([[-self.kf, 0], [0, -self.kf]])
-        self.Jf[0] = ti.Matrix([[-self.kf, 0, 0], [0, -self.kf, 0], [0, 0, -self.kf]])
-        self.Jf[1] = ti.Matrix([[-self.kf, 0, 0], [0, -self.kf, 0], [0, 0, -self.kf]])
+        # self.Jf[0] = ti.Matrix([[-self.kf, 0, 0], [0, -self.kf, 0], [0, 0, -self.kf]])
+        # self.Jf[1] = ti.Matrix([[-self.kf, 0, 0], [0, -self.kf, 0], [0, 0, -self.kf]])
 
 
     @ti.kernel
@@ -145,9 +145,9 @@ class ImplictMassSpringSolver:
                 K[self.dim * idx1 + m, self.dim * idx2 + n] += self.Jx[i][m, n]
                 K[self.dim * idx2 + m, self.dim * idx1 + n] += self.Jx[i][m, n]
                 K[self.dim * idx2 + m, self.dim * idx2 + n] -= self.Jx[i][m, n]
-        for m, n in ti.static(ti.ndrange(self.dim, self.dim)):
-            K[self.dim * self.N + m, self.dim * self.N + n] += self.Jf[0][m, n]
-            K[self.dim * (self.NV - 1) + m, self.dim * (self.NV - 1) + n] += self.Jf[1][m, n]
+        # for m, n in ti.static(ti.ndrange(self.dim, self.dim)):
+        #     K[self.dim * self.N + m, self.dim * self.N + n] += self.Jf[0][m, n]
+        #     K[self.dim * (self.NV - 1) + m, self.dim * (self.NV - 1) + n] += self.Jf[1][m, n]
 
 
     @ti.kernel
@@ -188,25 +188,25 @@ class ImplictMassSpringSolver:
         self.assemble_D(self.DBuilder)
         D = self.DBuilder.build()
 
-        self.assemble_K(self.KBuilder)
-        K = self.KBuilder.build()
+        # self.assemble_K(self.KBuilder)
+        # K = self.KBuilder.build()
 
-        A = self.M - h * D - h**2 * K
+        # A = self.M - h * D - h**2 * K
 
-        self.copy_to(self.vel_1D, self.vel)
-        self.copy_to(self.force_1D, self.force)
+        # self.copy_to(self.vel_1D, self.vel)
+        # self.copy_to(self.force_1D, self.force)
 
-        # b = (force + h * K @ vel) * h
-        Kv = K @ self.vel_1D
-        self.compute_b(self.b, self.force_1D, Kv, h)
+        # # b = (force + h * K @ vel) * h
+        # Kv = K @ self.vel_1D
+        # self.compute_b(self.b, self.force_1D, Kv, h)
 
-        # Sparse solver
-        solver = ti.linalg.SparseSolver(solver_type="LDLT")
-        solver.analyze_pattern(A)
-        solver.factorize(A)
-        # Solve the linear system
-        dv = solver.solve(self.b)
-        self.updatePosVel(h, dv)
+        # # Sparse solver
+        # solver = ti.linalg.SparseSolver(solver_type="LDLT")
+        # solver.analyze_pattern(A)
+        # solver.factorize(A)
+        # # Solve the linear system
+        # dv = solver.solve(self.b)
+        # self.updatePosVel(h, dv)
 
 
     @ti.kernel
@@ -214,8 +214,6 @@ class ImplictMassSpringSolver:
         for i in self.spring:
             self.indices[self.dim * i + 0] = self.spring[i][0]
             self.indices[self.dim * i + 1] = self.spring[i][1]
-            self.spring_color_draw[self.dim * i + 0] = self.spring_color[i]
-            self.spring_color_draw[self.dim * i + 1] = self.spring_color[i]
 
 
 def main():
@@ -236,14 +234,7 @@ def main():
                         default='',
                         help='robot design file')
     args = parser.parse_args()
-    file_name = args.robot_design_file.split('/')[-1].split('.')[0]
-    robot_design_file = args.robot_design_file
-    robot_builder = RobotDesignMassSpring3D.from_file(robot_design_file)
-    robot_id = robot_builder.robot_id
-    vertices, springs, faces = robot_builder.build()
-    # robot_builder.draw()
-
-    args, unknowns = parser.parse_known_args()
+    # args, unknowns = parser.parse_known_args()
     arch = args.arch
     if arch in ["x64", "cpu", "arm64"]:
         ti.init(arch=ti.cpu)
@@ -251,14 +242,42 @@ def main():
         ti.init(arch=ti.cuda)
     else:
         raise ValueError('Only CPU and CUDA backends are supported for now.')
+    
+    file_name = args.robot_design_file.split('/')[-1].split('.')[0]
+    robot_design_file = args.robot_design_file
+    robot_builder = RobotDesignMassSpring3D.from_file(robot_design_file)
+    robot_id = robot_builder.robot_id
+    vertices, springs, faces = robot_builder.build()
+    # robot_builder.draw()
 
     h = 0.01
     pause = False
     ms_solver = ImplictMassSpringSolver(robot_builder)
 
-    use_ggui = args.use_ggui
-    window = ti.ui.Window('Implicit Mass Spring System', res=(500, 500), vsync=True)
-    ms_solver.spring2indices()
+    window = ti.ui.Window('Implicit Mass Spring System', res=(800, 800), vsync=True)
+    canvas = window.get_canvas()
+    scene = ti.ui.Scene()
+    camera = ti.ui.make_camera()
+    camera.position(0.2, 1.1, 1.1)
+    camera.lookat(0.2, 0.1, 0.1)
+    camera.up(0, 1, 0)
+
+    # ms_solver.spring2indices()
+
+    objects, springs, faces = robot_builder.get_objects()
+    indices = ti.field(ti.i32, len(faces) * 3)
+    vertices = ti.Vector.field(3, ti.f32, len(objects))
+    indices_ground = ti.field(ti.i32, 6)
+    vertices_ground = ti.Vector.field(3, ti.f32, 4)
+
+    vertices.from_numpy(np.array(objects))
+    vertices_ground[0] = ti.Vector([-1, 0.1, -1])
+    vertices_ground[1] = ti.Vector([-1, 0.1, 1])
+    vertices_ground[2] = ti.Vector([1, 0.1, -1])
+    vertices_ground[3] = ti.Vector([1, 0.1, 1])
+
+    indices.from_numpy(np.array(faces).reshape(-1))
+    indices_ground.from_numpy(np.array([0, 1, 2, 2, 1, 3]))
     while window.running:
         if window.get_event(ti.ui.PRESS):
             if window.event.key == ti.ui.ESCAPE:
@@ -267,44 +286,20 @@ def main():
             pause = not pause
 
         if not pause:
-            cloth.update(h)
+            ms_solver.update(h)
 
-        window = ti.ui.Window("SNMT", (800, 800), vsync=True)
-        canvas = window.get_canvas()
-        scene = ti.ui.Scene()
-        camera = ti.ui.make_camera()
-        camera.position(0.2, 1.1, 1.1)
-        camera.lookat(0.2, 0.1, 0.1)
-        camera.up(0, 1, 0)
-        objects, springs, faces = robot_builder.get_objects()
+        camera.track_user_inputs(window, movement_speed=0.03, hold_key=ti.ui.RMB)
+        scene.set_camera(camera)
 
+        scene.point_light(pos=(0, 1, 0), color=(.7, .7, .7))
+        scene.point_light(pos=(-1, 1, 0), color=(.7, .7, .7))
+        scene.ambient_light((0.2, 0.2, 0.2))
 
-        indices = ti.field(ti.i32, len(faces) * 3)
-        vertices = ti.Vector.field(3, ti.f32, len(objects))
-        indices_ground = ti.field(ti.i32, 6)
-        vertices_ground = ti.Vector.field(3, ti.f32, 4)
-
-        vertices.from_numpy(np.array(objects))
-        vertices_ground[0] = ti.Vector([-1, 0.1, -1])
-        vertices_ground[1] = ti.Vector([-1, 0.1, 1])
-        vertices_ground[2] = ti.Vector([1, 0.1, -1])
-        vertices_ground[3] = ti.Vector([1, 0.1, 1])
-
-        indices.from_numpy(np.array(faces).reshape(-1))
-        indices_ground.from_numpy(np.array([0, 1, 2, 2, 1, 3]))
-        while window.running:
-            camera.track_user_inputs(window, movement_speed=0.03, hold_key=ti.ui.RMB)
-            scene.set_camera(camera)
-
-            scene.point_light(pos=(0, 1, 0), color=(.7, .7, .7))
-            scene.point_light(pos=(-1, 1, 0), color=(.7, .7, .7))
-            scene.ambient_light((0.2, 0.2, 0.2))
-
-            # scene.lines(vertices, width=0.005, indices=indices, color=(0.8, 0.6, 0.2))
-            scene.mesh(vertices, indices=indices, color=(0.8, 0.6, 0.2))
-            # scene.mesh(vertices_ground, indices=indices_ground, color=(0.5, 0.5, 0.5), two_sided=True)
-            canvas.scene(scene)
-            window.show()
+        # scene.lines(vertices, width=0.005, indices=indices, color=(0.8, 0.6, 0.2))
+        scene.mesh(vertices, indices=indices, color=(0.8, 0.6, 0.2))
+        # scene.mesh(vertices_ground, indices=indices_ground, color=(0.5, 0.5, 0.5), two_sided=True)
+        canvas.scene(scene)
+        window.show()
 
 if __name__ == '__main__':
     main()
