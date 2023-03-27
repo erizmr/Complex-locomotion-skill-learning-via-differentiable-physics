@@ -589,4 +589,44 @@ class RobotDesignMassSpring3D(RobotDesignBase):
     def get_objects(self):
         assert self.built
         return self.objects, self.springs, self.faces
+    
+    def draw(self):
+        import taichi as ti
+        ti.init()
+        window = ti.ui.Window("SNMT", (800, 800), vsync=True)
+        canvas = window.get_canvas()
+        scene = ti.ui.Scene()
+        camera = ti.ui.make_camera()
+        camera.position(0.2, 1.1, 1.1)
+        camera.lookat(0.2, 0.1, 0.1)
+        camera.up(0, 1, 0)
+        objects, springs, faces = self.get_objects()
 
+
+        indices = ti.field(ti.i32, len(faces) * 3)
+        vertices = ti.Vector.field(3, ti.f32, len(objects))
+        indices_ground = ti.field(ti.i32, 6)
+        vertices_ground = ti.Vector.field(3, ti.f32, 4)
+
+        vertices.from_numpy(np.array(objects))
+        vertices_ground[0] = ti.Vector([-1, 0.1, -1])
+        vertices_ground[1] = ti.Vector([-1, 0.1, 1])
+        vertices_ground[2] = ti.Vector([1, 0.1, -1])
+        vertices_ground[3] = ti.Vector([1, 0.1, 1])
+
+        indices.from_numpy(np.array(faces).reshape(-1))
+        indices_ground.from_numpy(np.array([0, 1, 2, 2, 1, 3]))
+        while window.running:
+            camera.track_user_inputs(window, movement_speed=0.03, hold_key=ti.ui.RMB)
+            scene.set_camera(camera)
+
+            scene.point_light(pos=(0, 1, 0), color=(.7, .7, .7))
+            scene.point_light(pos=(-1, 1, 0), color=(.7, .7, .7))
+            scene.ambient_light((0.2, 0.2, 0.2))
+
+
+            # scene.lines(vertices, width=0.005, indices=indices, color=(0.8, 0.6, 0.2))
+            scene.mesh(vertices, indices=indices, color=(0.8, 0.6, 0.2))
+            # scene.mesh(vertices_ground, indices=indices_ground, color=(0.5, 0.5, 0.5), two_sided=True)
+            canvas.scene(scene)
+            window.show()

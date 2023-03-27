@@ -5,20 +5,25 @@ import numpy as np
 
 import taichi as ti
 
+from multitask.robot_design import RobotDesignMassSpring3D
+
 
 @ti.data_oriented
-class Cloth:
-    def __init__(self, N, dim=2):
+class ImplictMassSpringSolver:
+    def __init__(self, robot_builder: RobotDesignMassSpring3D, dim=3):
         self.dim = dim
-        self.N = N
-        # self.NF = self.dim * N**self.dim  # number of faces
-        self.NV = (N + 1)**self.dim  # number of vertices
-        self.NE = 2 * N * (N + 1)**(self.dim-1) + 2 * N * N  # number of edges
-        self.NE = 2 * N * (N + 1)**(self.dim-1) # No diagonal edges currently
+        _vertices, _springs_data, _faces = robot_builder.get_objects()
+        self.vertices = np.array(_vertices) # [NV, 3]
+        self.springs_data = np.array(_springs_data) # [NE, (a, b, length, stiffness, actuation)]
+        self.faces = np.array(_faces) # [NF, 3]
+        print(f"Vertices {self.vertices.shape}, Springs {self.springs_data.shape}, Faces {self.faces.shape}")
+        self.NF = self.faces.shape[0]  # number of faces
+        self.NV = self.vertices.shape[0]  # number of vertices
+        self.NE = self.springs.shape[0]  # number of edges
         self.pos = ti.Vector.field(self.dim, ti.f32, self.NV)
         self.initPos = ti.Vector.field(self.dim, ti.f32, self.NV)
         self.vel = ti.Vector.field(self.dim, ti.f32, self.NV)
-        self.force = ti.Vector.field(self.dim, ti.f32, self.NV, needs_grad=True)
+        self.force = ti.Vector.field(self.dim, ti.f32, self.NV)
         self.mass = ti.field(ti.f32, self.NV)
         self.vel_1D = ti.ndarray(ti.f32, self.dim * self.NV)
         self.force_1D = ti.ndarray(ti.f32, self.dim * self.NV)
@@ -39,7 +44,7 @@ class Cloth:
         self.kd = 0.5  # damping constant
         self.kf = 1.0e5  # fix point stiffness
 
-        self.gravity = ti.Vector([0.0, -2.0])
+        self.gravity = ti.Vector([0.0, -2.0, 0.0])
         self.init_pos()
         self.init_edges()
         self.MassBuilder = ti.linalg.SparseMatrixBuilder(
@@ -52,112 +57,34 @@ class Cloth:
                                                       max_num_triplets=10000)
         self.init_mass_sp(self.MassBuilder)
         self.M = self.MassBuilder.build()
-        self.fix_vertex = [self.N, self.NV - 1]
+        # self.fix_vertex = [self.N, self.NV - 1]
         self.Jf = ti.Matrix.field(self.dim, self.dim, ti.f32, len(
             self.fix_vertex))  # fix constraint hessian
 
-    @ti.kernel
+
     def init_pos(self):
-        for i, j in ti.ndrange(self.N + 1, self.N + 1):
-            k = i * (self.N + 1) + j
-            self.pos[k] = ti.Vector([i, j]) / self.N * 0.5 + ti.Vector(
-                [0.25, 0.25])
-            self.initPos[k] = self.pos[k]
-            self.vel[k] = ti.Vector([0, 0])
-            self.mass[k] = 1.0
+        self.pos.from_numpy(np.array(self.vertices))
+        self.initPos.from_numpy(np.array(self.vertices))
+        self.vel.from_numpy(np.zeros((self.NV, self.dim)))
+        self.mass.from_numpy(np.ones(self.NV))
     
 
-    @ti.kernel
-    def init_pos_3D(self):
-        for i, j, k in ti.ndrange(self.N + 1, self.N + 1, self.N + 1):
-            n = i * (self.N + 1) + j * (self.N + 1) + k
-            self.pos[n] = ti.Vector([i, j, k]) / self.N * 0.5 + ti.Vector(
-                [0.25, 0.25, 0.25])
-            self.initPos[n] = self.pos[n]
-            self.vel[n] = ti.Vector([0, 0, 0])
-            self.mass[n] = 1.0
-
-    @ti.kernel
     def init_edges(self):
-        pos, spring, N, rest_len, spring_color = ti.static(self.pos, self.spring, self.N,
-                                             self.rest_len, self.spring_color)
-        # Vertical springs
-        for i, j in ti.ndrange(N + 1, N):
-            idx, idx1 = i * N + j, i * (N + 1) + j
-            print("first round ", idx, idx1, idx1 + 1)
-            spring[idx] = ti.Vector([idx1, idx1 + 1])
-            spring_color[idx] = ti.Vector([1.0, 0, 0])
-            rest_len[idx] = (pos[idx1] - pos[idx1 + 1]).norm()
-        
-        # Horizontal springs
-        start = N * (N + 1)
-        for i, j in ti.ndrange(N, N + 1):
-            idx, idx1, idx2 = start + i + j * N, i * (N + 1) + j, i * (
-                N + 1) + j + N + 1
-            print("second round ", idx, idx1, idx2)
-            spring[idx] = ti.Vector([idx1, idx2])
-
-            # Only actuate Horizontal springs
-            self.spring_actuation_coef[idx] = 0.2
-            spring_color[idx] = ti.Vector([0, 1.0, 0])
-            rest_len[idx] = (pos[idx1] - pos[idx2]).norm()
-
-        # # diagonal springs
-        # start = 2 * N * (N + 1)
-        # for i, j in ti.ndrange(N, N):
-        #     idx, idx1, idx2 = start + i * N + j, i * (N + 1) + j, (i + 1) * (
-        #         N + 1) + j + 1
-        #     spring[idx] = ti.Vector([idx1, idx2])
-        #     print("third round ", idx, idx1, idx2)
-        #     spring_color[idx] = ti.Vector([0, 0, 1.0])
-        #     rest_len[idx] = (pos[idx1] - pos[idx2]).norm()
-        
-        # # off-diagonal springs
-        # start = 2 * N * (N + 1) + N * N
-        # for i, j in ti.ndrange(N, N):
-        #     idx, idx1, idx2 = start + i * N + j, i * (N + 1) + j + 1, (
-        #         i + 1) * (N + 1) + j
-        #     spring[idx] = ti.Vector([idx1, idx2])
-        #     print("fourth round ", idx, idx1, idx2)
-        #     spring_color[idx] = ti.Vector([0, 1.0, 1.0])
-        #     rest_len[idx] = (pos[idx1] - pos[idx2]).norm()
-    
-    @ti.kernel
-    def init_edges_3D(self):
-        pos, spring, N, rest_len, spring_color = ti.static(self.pos, self.spring, self.N,
-                                             self.rest_len, self.spring_color)
-        # Vertical springs
-        for i, j in ti.ndrange(N + 1, N):
-            idx, idx1 = i * N + j, i * (N + 1) + j
-            print("first round ", idx, idx1, idx1 + 1)
-            spring[idx] = ti.Vector([idx1, idx1 + 1])
-            spring_color[idx] = ti.Vector([1.0, 0, 0])
-            rest_len[idx] = (pos[idx1] - pos[idx1 + 1]).norm()
-        
-        # Horizontal springs
-        start = N * (N + 1)
-        for i, j in ti.ndrange(N, N + 1):
-            idx, idx1, idx2 = start + i + j * N, i * (N + 1) + j, i * (
-                N + 1) + j + N + 1
-            print("second round ", idx, idx1, idx2)
-            spring[idx] = ti.Vector([idx1, idx2])
-
-            # Only actuate Horizontal springs
-            self.spring_actuation_coef[idx] = 0.2
-            spring_color[idx] = ti.Vector([0, 1.0, 0])
-            rest_len[idx] = (pos[idx1] - pos[idx2]).norm()
+        # self.spring.from
+        pass
 
     @ti.kernel
     def init_mass_sp(self, M: ti.types.sparse_matrix_builder()):
         for i in range(self.NV):
             mass = self.mass[i]
-            M[2 * i + 0, 2 * i + 0] += mass
-            M[2 * i + 1, 2 * i + 1] += mass
+            M[3 * i + 0, 3 * i + 0] += mass
+            M[3 * i + 1, 3 * i + 1] += mass
+            M[3 * i + 2, 3 * i + 2] += mass
 
     @ti.func
     def clear_force(self):
         for i in self.force:
-            self.force[i] = ti.Vector([0.0, 0.0])
+            self.force[i] = ti.Vector([0.0, 0.0, 0.0])
 
     @ti.kernel
     def compute_force(self):
@@ -190,9 +117,10 @@ class Cloth:
             idx1, idx2 = self.spring[i][0], self.spring[i][1]
             pos1, pos2 = self.pos[idx1], self.pos[idx2]
             dx = pos1 - pos2
-            I = ti.Matrix([[1.0, 0.0], [0.0, 1.0]])
-            dxtdx = ti.Matrix([[dx[0] * dx[0], dx[0] * dx[1]],
-                               [dx[1] * dx[0], dx[1] * dx[1]]])
+            I = ti.Matrix([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]])
+            dxtdx = ti.Matrix([[dx[0] * dx[0], dx[0] * dx[1], dx[0]*dx[2]],
+                               [dx[1] * dx[0], dx[1] * dx[1], dx[1]*dx[2]],
+                               [dx[2] * dx[0], dx[1] * dx[2], dx[2]*dx[2]]])
             l = dx.norm()
             if l != 0.0:
                 l = 1.0 / l
@@ -202,50 +130,53 @@ class Cloth:
             self.Jv[i] = self.kd * dxtdx
 
         # fix point constraint hessian
-        self.Jf[0] = ti.Matrix([[-self.kf, 0], [0, -self.kf]])
-        self.Jf[1] = ti.Matrix([[-self.kf, 0], [0, -self.kf]])
+        # self.Jf[0] = ti.Matrix([[-self.kf, 0], [0, -self.kf]])
+        # self.Jf[1] = ti.Matrix([[-self.kf, 0], [0, -self.kf]])
+        self.Jf[0] = ti.Matrix([[-self.kf, 0, 0], [0, -self.kf, 0], [0, 0, -self.kf]])
+        self.Jf[1] = ti.Matrix([[-self.kf, 0, 0], [0, -self.kf, 0], [0, 0, -self.kf]])
 
 
     @ti.kernel
     def assemble_K(self, K: ti.types.sparse_matrix_builder()):
         for i in self.spring:
             idx1, idx2 = self.spring[i][0], self.spring[i][1]
-            for m, n in ti.static(ti.ndrange(2, 2)):
-                K[2 * idx1 + m, 2 * idx1 + n] -= self.Jx[i][m, n]
-                K[2 * idx1 + m, 2 * idx2 + n] += self.Jx[i][m, n]
-                K[2 * idx2 + m, 2 * idx1 + n] += self.Jx[i][m, n]
-                K[2 * idx2 + m, 2 * idx2 + n] -= self.Jx[i][m, n]
-        for m, n in ti.static(ti.ndrange(2, 2)):
-            K[2 * self.N + m, 2 * self.N + n] += self.Jf[0][m, n]
-            K[2 * (self.NV - 1) + m, 2 * (self.NV - 1) + n] += self.Jf[1][m, n]
+            for m, n in ti.static(ti.ndrange(self.dim, self.dim)):
+                K[self.dim * idx1 + m, self.dim * idx1 + n] -= self.Jx[i][m, n]
+                K[self.dim * idx1 + m, self.dim * idx2 + n] += self.Jx[i][m, n]
+                K[self.dim * idx2 + m, self.dim * idx1 + n] += self.Jx[i][m, n]
+                K[self.dim * idx2 + m, self.dim * idx2 + n] -= self.Jx[i][m, n]
+        for m, n in ti.static(ti.ndrange(self.dim, self.dim)):
+            K[self.dim * self.N + m, self.dim * self.N + n] += self.Jf[0][m, n]
+            K[self.dim * (self.NV - 1) + m, self.dim * (self.NV - 1) + n] += self.Jf[1][m, n]
 
 
     @ti.kernel
     def assemble_D(self, D: ti.types.sparse_matrix_builder()):
         for i in self.spring:
             idx1, idx2 = self.spring[i][0], self.spring[i][1]
-            for m, n in ti.static(ti.ndrange(2, 2)):
-                D[2 * idx1 + m, 2 * idx1 + n] -= self.Jv[i][m, n]
-                D[2 * idx1 + m, 2 * idx2 + n] += self.Jv[i][m, n]
-                D[2 * idx2 + m, 2 * idx1 + n] += self.Jv[i][m, n]
-                D[2 * idx2 + m, 2 * idx2 + n] -= self.Jv[i][m, n]
+            for m, n in ti.static(ti.ndrange(self.dim, self.dim)):
+                D[self.dim * idx1 + m, self.dim * idx1 + n] -= self.Jv[i][m, n]
+                D[self.dim * idx1 + m, self.dim * idx2 + n] += self.Jv[i][m, n]
+                D[self.dim * idx2 + m, self.dim * idx1 + n] += self.Jv[i][m, n]
+                D[self.dim * idx2 + m, self.dim * idx2 + n] -= self.Jv[i][m, n]
 
     @ti.kernel
     def updatePosVel(self, h: ti.f32, dv: ti.types.ndarray()):
         for i in self.pos:
-            self.vel[i] += ti.Vector([dv[2 * i], dv[2 * i + 1]])
+            self.vel[i] += ti.Vector([dv[self.dim * i], dv[self.dim * i + 1]])
             self.pos[i] += h * self.vel[i]
 
     @ti.kernel
     def copy_to(self, des: ti.types.ndarray(), source: ti.template()):
         for i in range(self.NV):
-            des[2 * i] = source[i][0]
-            des[2 * i + 1] = source[i][1]
+            des[self.dim * i] = source[i][0]
+            des[self.dim * i + 1] = source[i][1]
+            des[self.dim * i + 2] = source[i][2]
 
     @ti.kernel
     def compute_b(self, b: ti.types.ndarray(), f: ti.types.ndarray(),
                   Kv: ti.types.ndarray(), h: ti.f32):
-        for i in range(2 * self.NV):
+        for i in range(self.dim * self.NV):
             b[i] = (f[i] + Kv[i] * h) * h
 
     def update(self, h):
@@ -277,42 +208,18 @@ class Cloth:
         dv = solver.solve(self.b)
         self.updatePosVel(h, dv)
 
-    def display(self, gui, radius=5, color=0xffffff):
-        lines = self.spring.to_numpy()
-        colors = self.spring_color.to_numpy()
-        pos = self.pos.to_numpy()
-        edgeBegin = np.zeros(shape=(lines.shape[0], 2))
-        edgeEnd = np.zeros(shape=(lines.shape[0], 2))
-        for i in range(lines.shape[0]):
-            idx1, idx2 = lines[i][0], lines[i][1]
-            edgeBegin[i] = pos[idx1]
-            edgeEnd[i] = pos[idx2]
-        gui.lines(edgeBegin, edgeEnd, radius=2, color=0x0000ff)
-        gui.circles(self.pos.to_numpy(), radius, color)
 
     @ti.kernel
     def spring2indices(self):
         for i in self.spring:
-            self.indices[2 * i + 0] = self.spring[i][0]
-            self.indices[2 * i + 1] = self.spring[i][1]
-            self.spring_color_draw[2 * i + 0] = self.spring_color[i]
-            self.spring_color_draw[2 * i + 1] = self.spring_color[i]
-
-    def displayGGUI(self, canvas, radius=0.01, color=(1.0, 1.0, 1.0)):
-        # self.spring2indices()
-        # canvas.lines(self.pos,
-        #              width=0.005,
-        #              indices=self.indices,
-        #              color=(0.0, 0.0, 1.0))
-        canvas.lines(self.pos,
-                     width=0.005,
-                     indices=self.indices,
-                     per_vertex_color=self.spring_color_draw)
-        canvas.circles(self.pos, radius, color)
+            self.indices[self.dim * i + 0] = self.spring[i][0]
+            self.indices[self.dim * i + 1] = self.spring[i][1]
+            self.spring_color_draw[self.dim * i + 0] = self.spring_color[i]
+            self.spring_color_draw[self.dim * i + 1] = self.spring_color[i]
 
 
 def main():
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser("implicit mass spring ")
     parser.add_argument('-g',
                         '--use-ggui',
                         action='store_true',
@@ -324,6 +231,18 @@ def main():
                         dest='arch',
                         type=str,
                         help='The arch (backend) to run this example on')
+    
+    parser.add_argument('--robot_design_file',
+                        default='',
+                        help='robot design file')
+    args = parser.parse_args()
+    file_name = args.robot_design_file.split('/')[-1].split('.')[0]
+    robot_design_file = args.robot_design_file
+    robot_builder = RobotDesignMassSpring3D.from_file(robot_design_file)
+    robot_id = robot_builder.robot_id
+    vertices, springs, faces = robot_builder.build()
+    # robot_builder.draw()
+
     args, unknowns = parser.parse_known_args()
     arch = args.arch
     if arch in ["x64", "cpu", "arm64"]:
@@ -335,40 +254,57 @@ def main():
 
     h = 0.01
     pause = False
-    cloth = Cloth(N=5)
+    ms_solver = ImplictMassSpringSolver(robot_builder)
 
     use_ggui = args.use_ggui
-    if not use_ggui:
-        gui = ti.GUI('Implicit Mass Spring System', res=(500, 500))
-        while gui.running:
-            for e in gui.get_events():
-                if e.key == gui.ESCAPE:
-                    gui.running = False
-                elif e.key == gui.SPACE:
-                    pause = not pause
+    window = ti.ui.Window('Implicit Mass Spring System', res=(500, 500), vsync=True)
+    ms_solver.spring2indices()
+    while window.running:
+        if window.get_event(ti.ui.PRESS):
+            if window.event.key == ti.ui.ESCAPE:
+                break
+        if window.is_pressed(ti.ui.SPACE):
+            pause = not pause
 
-            if not pause:
-                cloth.update(h)
+        if not pause:
+            cloth.update(h)
 
-            cloth.display(gui)
-            gui.show()
-    else:
-        window = ti.ui.Window('Implicit Mass Spring System', res=(500, 500), vsync=True)
-        cloth.spring2indices()
+        window = ti.ui.Window("SNMT", (800, 800), vsync=True)
+        canvas = window.get_canvas()
+        scene = ti.ui.Scene()
+        camera = ti.ui.make_camera()
+        camera.position(0.2, 1.1, 1.1)
+        camera.lookat(0.2, 0.1, 0.1)
+        camera.up(0, 1, 0)
+        objects, springs, faces = robot_builder.get_objects()
+
+
+        indices = ti.field(ti.i32, len(faces) * 3)
+        vertices = ti.Vector.field(3, ti.f32, len(objects))
+        indices_ground = ti.field(ti.i32, 6)
+        vertices_ground = ti.Vector.field(3, ti.f32, 4)
+
+        vertices.from_numpy(np.array(objects))
+        vertices_ground[0] = ti.Vector([-1, 0.1, -1])
+        vertices_ground[1] = ti.Vector([-1, 0.1, 1])
+        vertices_ground[2] = ti.Vector([1, 0.1, -1])
+        vertices_ground[3] = ti.Vector([1, 0.1, 1])
+
+        indices.from_numpy(np.array(faces).reshape(-1))
+        indices_ground.from_numpy(np.array([0, 1, 2, 2, 1, 3]))
         while window.running:
-            if window.get_event(ti.ui.PRESS):
-                if window.event.key == ti.ui.ESCAPE:
-                    break
-            if window.is_pressed(ti.ui.SPACE):
-                pause = not pause
+            camera.track_user_inputs(window, movement_speed=0.03, hold_key=ti.ui.RMB)
+            scene.set_camera(camera)
 
-            if not pause:
-                cloth.update(h)
+            scene.point_light(pos=(0, 1, 0), color=(.7, .7, .7))
+            scene.point_light(pos=(-1, 1, 0), color=(.7, .7, .7))
+            scene.ambient_light((0.2, 0.2, 0.2))
 
-            canvas = window.get_canvas()
-            cloth.displayGGUI(canvas)
+            # scene.lines(vertices, width=0.005, indices=indices, color=(0.8, 0.6, 0.2))
+            scene.mesh(vertices, indices=indices, color=(0.8, 0.6, 0.2))
+            # scene.mesh(vertices_ground, indices=indices_ground, color=(0.5, 0.5, 0.5), two_sided=True)
+            canvas.scene(scene)
             window.show()
-
 
 if __name__ == '__main__':
     main()
