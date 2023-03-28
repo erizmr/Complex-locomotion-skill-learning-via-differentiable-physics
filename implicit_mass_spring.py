@@ -41,11 +41,12 @@ class ImplictMassSpringSolver:
         self.Jv = ti.Matrix.field(self.dim, self.dim, ti.f32,
                                   self.NE)  # Jacobian with respect to velocity
         self.rest_len = ti.field(ti.f32, self.NE)
-        self.ks = 1000.0  # spring stiffness
+        self.ks = 1e7  # spring stiffness
         self.kd = 0.5  # damping constant
         self.kf = 1.0e5  # fix point stiffness
 
-        self.gravity = ti.Vector([0.0, -2.0, 0.0])
+        # self.gravity = ti.Vector([0.0, -2.0, 0.0])
+        self.gravity = ti.Vector([0.0, 0.0, 0.0])
         self.init_pos()
         self.init_edges()
         self.MassBuilder = ti.linalg.SparseMatrixBuilder(
@@ -70,8 +71,11 @@ class ImplictMassSpringSolver:
     
     def init_edges(self):
         self.spring.from_numpy(self.springs_data[:, :2])
-        print("spring index ", self.spring)
+        print("spring index len ", self.spring.shape)
         self.rest_len.from_numpy(self.springs_data[:, 2])
+
+        self.spring_actuation_coef.from_numpy(self.springs_data[:, 4])
+        print("spring_actuation_coef ", self.spring_actuation_coef)
 
     @ti.kernel
     def init_mass_sp(self, M: ti.types.sparse_matrix_builder()):
@@ -97,8 +101,9 @@ class ImplictMassSpringSolver:
             pos1, pos2 = self.pos[idx1], self.pos[idx2]
             dis = pos2 - pos1
 
-            # self.actuation[i] = ti.random() * 0.5
-            # self.actuation[i] = ti.sin(i * 1.0)
+            # self.actuation[i] = ti.random()
+            # print(self.actuation[i])
+            self.actuation[i] = ti.sin(i * 3.1415926 / 4)
             # self.actuation[i] = -1.0
             target_length = self.rest_len[i] * (1.0 + self.spring_actuation_coef[i] * self.actuation[i])
             force = self.ks * (dis.norm() -
@@ -124,8 +129,10 @@ class ImplictMassSpringSolver:
             l = dx.norm()
             if l != 0.0:
                 l = 1.0 / l
-            self.Jx[i] = (I - self.rest_len[i] * l *
-                          (I - dxtdx * l**2)) * self.ks
+            # self.Jx[i] = (I - self.rest_len[i] * l * (I - dxtdx * l**2)) * self.ks
+
+            # Clamp the potential negative part to make the hessian positive definite
+            self.Jx[i] = (ti.max(1 - self.rest_len[i] * l, 0) * I + self.rest_len[i] * dxtdx * l**3) * self.ks
             # self.Jv[i] = self.kd * I
             self.Jv[i] = self.kd * dxtdx
 
@@ -163,7 +170,7 @@ class ImplictMassSpringSolver:
     @ti.kernel
     def updatePosVel(self, h: ti.f32, dv: ti.types.ndarray()):
         for i in self.pos:
-            self.vel[i] += ti.Vector([dv[self.dim * i], dv[self.dim * i + 1]])
+            self.vel[i] += ti.Vector([dv[self.dim * i], dv[self.dim * i + 1], dv[self.dim * i + 2]])
             self.pos[i] += h * self.vel[i]
 
     @ti.kernel
@@ -188,25 +195,26 @@ class ImplictMassSpringSolver:
         self.assemble_D(self.DBuilder)
         D = self.DBuilder.build()
 
-        # self.assemble_K(self.KBuilder)
-        # K = self.KBuilder.build()
+        self.assemble_K(self.KBuilder)
+        K = self.KBuilder.build()
 
-        # A = self.M - h * D - h**2 * K
+        A = self.M - h * D - h**2 * K
 
-        # self.copy_to(self.vel_1D, self.vel)
-        # self.copy_to(self.force_1D, self.force)
+        self.copy_to(self.vel_1D, self.vel)
+        self.copy_to(self.force_1D, self.force)
 
-        # # b = (force + h * K @ vel) * h
-        # Kv = K @ self.vel_1D
-        # self.compute_b(self.b, self.force_1D, Kv, h)
+        # b = (force + h * K @ vel) * h
+        Kv = K @ self.vel_1D
+        self.compute_b(self.b, self.force_1D, Kv, h)
 
-        # # Sparse solver
-        # solver = ti.linalg.SparseSolver(solver_type="LDLT")
-        # solver.analyze_pattern(A)
-        # solver.factorize(A)
-        # # Solve the linear system
-        # dv = solver.solve(self.b)
-        # self.updatePosVel(h, dv)
+        # Sparse solver
+        solver = ti.linalg.SparseSolver(solver_type="LDLT")
+        solver.analyze_pattern(A)
+        solver.factorize(A)
+        # Solve the linear system
+        dv = solver.solve(self.b)
+        # print(solver.info())
+        self.updatePosVel(h, dv)
 
 
     @ti.kernel
@@ -278,7 +286,13 @@ def main():
 
     indices.from_numpy(np.array(faces).reshape(-1))
     indices_ground.from_numpy(np.array([0, 1, 2, 2, 1, 3]))
+
+    actuation_mask = np.where(np.array(springs)[:, 4] > 0)[0]
+    actuator_pos_index = np.unique(np.array(springs)[actuation_mask,:2].flatten()).astype(int)
+    actuator_pos = ti.Vector.field(3, ti.f32, len(actuator_pos_index))
+    print(actuator_pos_index)
     while window.running:
+
         if window.get_event(ti.ui.PRESS):
             if window.event.key == ti.ui.ESCAPE:
                 break
@@ -295,8 +309,12 @@ def main():
         scene.point_light(pos=(-1, 1, 0), color=(.7, .7, .7))
         scene.ambient_light((0.2, 0.2, 0.2))
 
-        # scene.lines(vertices, width=0.005, indices=indices, color=(0.8, 0.6, 0.2))
-        scene.mesh(vertices, indices=indices, color=(0.8, 0.6, 0.2))
+
+        actuation = ms_solver.pos.to_numpy()[actuator_pos_index]
+        actuator_pos.from_numpy(actuation)
+
+        scene.particles(actuator_pos, radius=0.005, color=(0.0, 0.0, 0.5))
+        scene.mesh(ms_solver.pos, indices=indices, color=(0.8, 0.6, 0.2))
         # scene.mesh(vertices_ground, indices=indices_ground, color=(0.5, 0.5, 0.5), two_sided=True)
         canvas.scene(scene)
         window.show()
