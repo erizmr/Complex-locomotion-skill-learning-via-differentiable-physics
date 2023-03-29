@@ -73,7 +73,6 @@ class ImplictMassSpringSolver:
         self.spring.from_numpy(self.springs_data[:, :2])
         print("spring index len ", self.spring.shape)
         self.rest_len.from_numpy(self.springs_data[:, 2])
-
         self.spring_actuation_coef.from_numpy(self.springs_data[:, 4])
         print("spring_actuation_coef ", self.spring_actuation_coef)
 
