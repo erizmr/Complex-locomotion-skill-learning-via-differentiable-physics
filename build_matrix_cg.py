@@ -109,7 +109,7 @@ class ImplictMassSpringSolver:
 
             # self.actuation[i] = ti.random()
             # print(self.actuation[i])
-            self.actuation[i] = ti.sin(i * 3.1415926 / 4)
+            # self.actuation[i] = ti.sin(i * 3.1415926 / 4)
             # self.actuation[i] = -1.0
             target_length = self.rest_len[i] * (1.0 + self.spring_actuation_coef[i] * self.actuation[i])
             force = self.ks * (dis.norm() -
@@ -216,14 +216,16 @@ class ImplictMassSpringSolver:
 
         self.compute_Jacobians()
         # Assemble global system
-
+        print(self.Jx[20].to_numpy())
+        print(" ")
         self.assemble_D(self.DBuilder)
         D = self.DBuilder.build()
 
         self.assemble_K(self.KBuilder)
         K = self.KBuilder.build()
 
-        A = self.M - h * D - h**2 * K
+        # A = self.M - h * D - h**2 * K
+        A = self.M - h**2 * K
 
         self.copy_to(self.vel_1D, self.vel)
         self.copy_to(self.force_1D, self.force)
@@ -231,6 +233,8 @@ class ImplictMassSpringSolver:
         # b = (force + h * K @ vel) * h
         Kv = K @ self.vel_1D
         self.compute_b(self.b, self.force_1D, Kv, h)
+        print("f ", self.force.to_numpy())
+        print("b ", self.b.to_numpy())
 
         # # Sparse solver
         # solver = ti.linalg.SparseSolver(solver_type="LDLT")
@@ -255,7 +259,7 @@ class ImplictMassSpringSolver:
             self.add(self.dv, self.dv, alpha, self.p0)
             self.add(self.r1, self.r0, -alpha, q)
             r_2_new = self.dot(self.r1, self.r1)
-            print(f"Iteration: {i} Residual: {r_2_new}")
+            # print(f"Iteration: {i} Residual: {r_2_new}")
             if r_2_new < epsilon * r_2_init:
                 break
             beta = r_2_new / r_2

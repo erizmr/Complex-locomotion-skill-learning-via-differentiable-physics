@@ -188,10 +188,14 @@ class ImplictMassSpringSolver:
     def cg_solver(self, h):
         self.compute_force()
         self.compute_jacobian()
+        print(self.Jx[20].to_numpy())
+        print(" ")
         self.matrix_vector_product(h, self.dv)
         # b = (force + h * K @ vel) * h
         self.b.fill(0.0)
         self.compute_b(h)
+        print("f ", self.force.to_numpy())
+        print("b ", self.b.to_numpy())
         self.add(self.r0, self.b, -1.0, self.Adv)
         self.copy(self.p0, self.r0)
         r_2 = self.dot(self.r0, self.r0)
@@ -200,7 +204,7 @@ class ImplictMassSpringSolver:
         n_iter = 10
         epsilon = 1e-6
         for i in range(n_iter):
-            print(f"Iteration: {i} Residual: {r_2_new}")
+            # print(f"Iteration: {i} Residual: {r_2_new}")
             self.matrix_vector_product(h, self.p0)
             alpha = r_2 / self.dot(self.p0, self.Adv)
             self.add(self.dv, self.dv, alpha, self.p0)
