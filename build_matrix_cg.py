@@ -24,16 +24,18 @@ class ImplictMassSpringSolver:
         self.pos = ti.Vector.field(self.dim, ti.f32, self.NV)
         self.initPos = ti.Vector.field(self.dim, ti.f32, self.NV)
         self.vel = ti.Vector.field(self.dim, ti.f32, self.NV)
-        self.dv = ti.Vector.field(self.dim, ti.f32, self.NV)
-        self.Adv = ti.Vector.field(self.dim, ti.f32, self.NV)
-
         self.force = ti.Vector.field(self.dim, ti.f32, self.NV)
         self.mass = ti.field(ti.f32, self.NV)
-        self.b = ti.Vector.field(self.dim, ti.f32, self.NV)
-        self.r0 = ti.Vector.field(self.dim, ti.f32, self.NV)
-        self.r1 = ti.Vector.field(self.dim, ti.f32, self.NV)
-        self.p0 = ti.Vector.field(self.dim, ti.f32, self.NV)
-        self.p1 = ti.Vector.field(self.dim, ti.f32, self.NV)
+        self.vel_1D = ti.ndarray(ti.f32, self.dim * self.NV)
+        self.force_1D = ti.ndarray(ti.f32, self.dim * self.NV)
+        self.b = ti.ndarray(ti.f32, self.dim * self.NV)
+        self.dv = ti.ndarray(ti.f32, self.dim * self.NV)
+
+        self.r0 = ti.ndarray(ti.f32, self.dim * self.NV)
+        self.r1 = ti.ndarray(ti.f32, self.dim * self.NV)
+        self.p0 = ti.ndarray(ti.f32, self.dim * self.NV)
+        self.p1 = ti.ndarray(ti.f32, self.dim * self.NV)
+
 
         self.spring = ti.Vector.field(2, ti.i32, self.NE)
         self.spring_actuation_coef = ti.field(ti.f32, self.NE)
@@ -54,16 +56,16 @@ class ImplictMassSpringSolver:
         self.gravity = ti.Vector([0.0, 0.0, 0.0])
         self.init_pos()
         self.init_edges()
-        # self.MassBuilder = ti.linalg.SparseMatrixBuilder(
-        #     self.dim * self.NV, self.dim * self.NV, max_num_triplets=10000)
-        # self.DBuilder = ti.linalg.SparseMatrixBuilder(self.dim * self.NV,
-        #                                               self.dim * self.NV,
-        #                                               max_num_triplets=10000)
-        # self.KBuilder = ti.linalg.SparseMatrixBuilder(self.dim * self.NV,
-        #                                               self.dim * self.NV,
-        #                                               max_num_triplets=10000)
-        # self.init_mass_sp(self.MassBuilder)
-        # self.M = self.MassBuilder.build()
+        self.MassBuilder = ti.linalg.SparseMatrixBuilder(
+            self.dim * self.NV, self.dim * self.NV, max_num_triplets=10000)
+        self.DBuilder = ti.linalg.SparseMatrixBuilder(self.dim * self.NV,
+                                                      self.dim * self.NV,
+                                                      max_num_triplets=10000)
+        self.KBuilder = ti.linalg.SparseMatrixBuilder(self.dim * self.NV,
+                                                      self.dim * self.NV,
+                                                      max_num_triplets=10000)
+        self.init_mass_sp(self.MassBuilder)
+        self.M = self.MassBuilder.build()
         # self.fix_vertex = [self.N, self.NV - 1]
         # self.Jf = ti.Matrix.field(self.dim, self.dim, ti.f32, len(self.fix_vertex))  # fix constraint hessian
 
@@ -81,6 +83,14 @@ class ImplictMassSpringSolver:
         self.spring_actuation_coef.from_numpy(self.springs_data[:, 4])
         print("spring_actuation_coef ", self.spring_actuation_coef)
 
+    @ti.kernel
+    def init_mass_sp(self, M: ti.types.sparse_matrix_builder()):
+        for i in range(self.NV):
+            mass = self.mass[i]
+            M[3 * i + 0, 3 * i + 0] += mass
+            M[3 * i + 1, 3 * i + 1] += mass
+            M[3 * i + 2, 3 * i + 2] += mass
+
     @ti.func
     def clear_force(self):
         for i in self.force:
@@ -95,29 +105,25 @@ class ImplictMassSpringSolver:
         for i in self.spring:
             idx1, idx2 = self.spring[i][0], self.spring[i][1]
             pos1, pos2 = self.pos[idx1], self.pos[idx2]
-            dis = pos1 - pos2
+            dis = pos2 - pos1
 
             # self.actuation[i] = ti.random()
             # print(self.actuation[i])
-            # self.actuation[i] = ti.sin(i * 3.1415926 / 4)
+            self.actuation[i] = ti.sin(i * 3.1415926 / 4)
             # self.actuation[i] = -1.0
             target_length = self.rest_len[i] * (1.0 + self.spring_actuation_coef[i] * self.actuation[i])
-            force = -self.ks * (dis.norm() -
+            force = self.ks * (dis.norm() -
                                target_length) * dis.normalized()
             self.force[idx1] += force
             self.force[idx2] -= force
+        # fix constraint gradient
+        # self.force[self.N] += self.kf * (self.initPos[self.N] -
+        #                                  self.pos[self.N])
+        # self.force[self.NV - 1] += self.kf * (self.initPos[self.NV - 1] -
+        #                                       self.pos[self.NV - 1])
 
     @ti.kernel
-    def _matrix_vector_product(self, h: ti.f32, vec: ti.template()):
-        for i in self.spring:
-            idx1, idx2 = self.spring[i][0], self.spring[i][1]
-            val = self.Jx[i]@(vec[idx1] - vec[idx2])
-            self.Adv[idx1] -= -val * h**2
-            self.Adv[idx2] -= val * h**2
-
-    
-    @ti.kernel
-    def compute_jacobian(self):
+    def compute_Jacobians(self):
         for i in self.spring:
             idx1, idx2 = self.spring[i][0], self.spring[i][1]
             pos1, pos2 = self.pos[idx1], self.pos[idx2]
@@ -127,85 +133,129 @@ class ImplictMassSpringSolver:
                                [dx[1] * dx[0], dx[1] * dx[1], dx[1]*dx[2]],
                                [dx[2] * dx[0], dx[1] * dx[2], dx[2]*dx[2]]])
             l = dx.norm()
-            l_inv = 0.0
             if l != 0.0:
-                l_inv = 1.0 / l
+                l = 1.0 / l
+            # self.Jx[i] = (I - self.rest_len[i] * l * (I - dxtdx * l**2)) * self.ks
+
             # Clamp the potential negative part to make the hessian positive definite
-            self.Jx[i] = (ti.max(1 - self.rest_len[i] * l_inv, 0) * I + self.rest_len[i] * dxtdx * l_inv**3) * self.ks
+            self.Jx[i] = (ti.max(1 - self.rest_len[i] * l, 0) * I + self.rest_len[i] * dxtdx * l**3) * self.ks
+            # self.Jv[i] = self.kd * I
+            self.Jv[i] = self.kd * dxtdx
+
+        # fix point constraint hessian
+        # self.Jf[0] = ti.Matrix([[-self.kf, 0], [0, -self.kf]])
+        # self.Jf[1] = ti.Matrix([[-self.kf, 0], [0, -self.kf]])
+        # self.Jf[0] = ti.Matrix([[-self.kf, 0, 0], [0, -self.kf, 0], [0, 0, -self.kf]])
+        # self.Jf[1] = ti.Matrix([[-self.kf, 0, 0], [0, -self.kf, 0], [0, 0, -self.kf]])
 
 
     @ti.kernel
-    def add_mass(self, vec: ti.template()):
-        for i in self.Adv:
-            self.Adv[i] = self.mass[i] * vec[i]
-
-
-    def matrix_vector_product(self, h, vec):
-        self.add_mass(vec)
-        self._matrix_vector_product(h, vec)
-
-
-    @ti.kernel
-    def updatePosVel(self, h: ti.f32):
-        for i in self.pos:
-            self.vel[i] += self.dv[i]
-            self.pos[i] += h * self.vel[i]
-
-
-    @ti.kernel
-    def compute_b(self, h: ti.f32):
+    def assemble_K(self, K: ti.types.sparse_matrix_builder()):
         for i in self.spring:
             idx1, idx2 = self.spring[i][0], self.spring[i][1]
-            val = self.Jx[i]@(self.vel[idx1] - self.vel[idx2]) * h
-            self.b[idx1] += (-val + self.force[idx1]) * h
-            self.b[idx2] += (val + self.force[idx2]) * h
-    
+            for m, n in ti.static(ti.ndrange(self.dim, self.dim)):
+                K[self.dim * idx1 + m, self.dim * idx1 + n] -= self.Jx[i][m, n]
+                K[self.dim * idx1 + m, self.dim * idx2 + n] += self.Jx[i][m, n]
+                K[self.dim * idx2 + m, self.dim * idx1 + n] += self.Jx[i][m, n]
+                K[self.dim * idx2 + m, self.dim * idx2 + n] -= self.Jx[i][m, n]
+        # for m, n in ti.static(ti.ndrange(self.dim, self.dim)):
+        #     K[self.dim * self.N + m, self.dim * self.N + n] += self.Jf[0][m, n]
+        #     K[self.dim * (self.NV - 1) + m, self.dim * (self.NV - 1) + n] += self.Jf[1][m, n]
+
 
     @ti.kernel
-    def add(self, ans: ti.template(), a: ti.template(), k: ti.f32, b: ti.template()):
+    def assemble_D(self, D: ti.types.sparse_matrix_builder()):
+        for i in self.spring:
+            idx1, idx2 = self.spring[i][0], self.spring[i][1]
+            for m, n in ti.static(ti.ndrange(self.dim, self.dim)):
+                D[self.dim * idx1 + m, self.dim * idx1 + n] -= self.Jv[i][m, n]
+                D[self.dim * idx1 + m, self.dim * idx2 + n] += self.Jv[i][m, n]
+                D[self.dim * idx2 + m, self.dim * idx1 + n] += self.Jv[i][m, n]
+                D[self.dim * idx2 + m, self.dim * idx2 + n] -= self.Jv[i][m, n]
+
+    @ti.kernel
+    def updatePosVel(self, h: ti.f32, dv: ti.types.ndarray()):
+        for i in self.pos:
+            self.vel[i] += ti.Vector([dv[self.dim * i], dv[self.dim * i + 1], dv[self.dim * i + 2]])
+            self.pos[i] += h * self.vel[i]
+
+    @ti.kernel
+    def copy_to(self, des: ti.types.ndarray(), source: ti.template()):
+        for i in range(self.NV):
+            des[self.dim * i] = source[i][0]
+            des[self.dim * i + 1] = source[i][1]
+            des[self.dim * i + 2] = source[i][2]
+
+    @ti.kernel
+    def compute_b(self, b: ti.types.ndarray(), f: ti.types.ndarray(),
+                  Kv: ti.types.ndarray(), h: ti.f32):
+        for i in range(self.dim * self.NV):
+            b[i] = (f[i] + Kv[i] * h) * h
+    
+
+
+    @ti.kernel
+    def add(self, ans: ti.types.ndarray(), a: ti.types.ndarray(), k: ti.f32, b: ti.types.ndarray()):
         for i in ans:
             ans[i] = a[i] + k * b[i]
 
-
     @ti.kernel
-    def dot(self, a: ti.template(), b: ti.template()) -> ti.f32:
+    def dot(self, a: ti.types.ndarray(), b: ti.types.ndarray()) -> ti.f32:
         ans = 0.0
-        for i in a:
-            ans += a[i].dot(b[i])
+        for i in range(self.NV):
+            ans += a[self.dim * i] * b[self.dim * i] + a[self.dim * i + 1] * b[self.dim * i + 1] + a[self.dim * i + 2] * b[self.dim * i + 2]
         return ans
     
     @ti.kernel
-    def copy(self, dst: ti.template(), src: ti.template()):
+    def copy(self, dst: ti.types.ndarray(), src: ti.types.ndarray()):
         for i in dst:
             dst[i] = src[i]
 
     def update(self, h):
-        # Solve the linear system
-        self.cg_solver(h)
-        self.updatePosVel(h)
-
-    
-    def cg_solver(self, h):
         self.compute_force()
-        self.compute_jacobian()
-        self.matrix_vector_product(h, self.dv)
+
+        self.compute_Jacobians()
+        # Assemble global system
+
+        self.assemble_D(self.DBuilder)
+        D = self.DBuilder.build()
+
+        self.assemble_K(self.KBuilder)
+        K = self.KBuilder.build()
+
+        A = self.M - h * D - h**2 * K
+
+        self.copy_to(self.vel_1D, self.vel)
+        self.copy_to(self.force_1D, self.force)
+
         # b = (force + h * K @ vel) * h
-        self.b.fill(0.0)
-        self.compute_b(h)
-        self.add(self.r0, self.b, -1.0, self.Adv)
+        Kv = K @ self.vel_1D
+        self.compute_b(self.b, self.force_1D, Kv, h)
+
+        # # Sparse solver
+        # solver = ti.linalg.SparseSolver(solver_type="LDLT")
+        # solver.analyze_pattern(A)
+        # solver.factorize(A)
+        # # Solve the linear system
+        # dv = solver.solve(self.b)
+
+        # CG Solver
+        Adv = A @ self.dv
+        # b = (force + h * K @ vel) * h
+        self.add(self.r0, self.b, -1.0, Adv)
         self.copy(self.p0, self.r0)
         r_2 = self.dot(self.r0, self.r0)
         r_2_init = r_2
         r_2_new = r_2
-        n_iter = 10
+        n_iter = 50
         epsilon = 1e-6
         for i in range(n_iter):
-            print(f"Iteration: {i} Residual: {r_2_new}")
-            self.matrix_vector_product(h, self.p0)
-            alpha = r_2 / self.dot(self.p0, self.Adv)
+            q = A @ self.p0
+            alpha = r_2 / self.dot(self.p0, q)
             self.add(self.dv, self.dv, alpha, self.p0)
-            self.add(self.r1, self.r0, -alpha, self.Adv)
+            self.add(self.r1, self.r0, -alpha, q)
             r_2_new = self.dot(self.r1, self.r1)
+            print(f"Iteration: {i} Residual: {r_2_new}")
             if r_2_new < epsilon * r_2_init:
                 break
             beta = r_2_new / r_2
@@ -213,6 +263,16 @@ class ImplictMassSpringSolver:
             self.copy(self.r0, self.r1)
             self.copy(self.p0, self.p1)
             r_2 = r_2_new
+
+        # print(solver.info())
+        self.updatePosVel(h, self.dv)
+
+
+    @ti.kernel
+    def spring2indices(self):
+        for i in self.spring:
+            self.indices[self.dim * i + 0] = self.spring[i][0]
+            self.indices[self.dim * i + 1] = self.spring[i][1]
 
 
 def main():
@@ -260,6 +320,8 @@ def main():
     camera.position(0.2, 1.1, 1.1)
     camera.lookat(0.2, 0.1, 0.1)
     camera.up(0, 1, 0)
+
+    # ms_solver.spring2indices()
 
     objects, springs, faces = robot_builder.get_objects()
     indices = ti.field(ti.i32, len(faces) * 3)
