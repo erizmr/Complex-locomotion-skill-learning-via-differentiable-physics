@@ -97,7 +97,7 @@ class ImplictMassSpringSolver:
             pos1, pos2 = self.pos[idx1], self.pos[idx2]
             dis = pos1 - pos2
 
-            # self.actuation[i] = ti.random()
+            self.actuation[i] = ti.random()
             # print(self.actuation[i])
             # self.actuation[i] = ti.sin(i * 3.1415926 / 4)
             # self.actuation[i] = -1.0
@@ -150,15 +150,26 @@ class ImplictMassSpringSolver:
         for i in self.pos:
             self.vel[i] += self.dv[i]
             self.pos[i] += h * self.vel[i]
+    
+
+    @ti.kernel
+    def apply_external_force(self, h: ti.f32):
+        for i in self.b:
+            self.b[i] = self.force[i] * h
 
 
     @ti.kernel
-    def compute_b(self, h: ti.f32):
+    def apply_hessian_vel(self, h: ti.f32):
         for i in self.spring:
             idx1, idx2 = self.spring[i][0], self.spring[i][1]
             val = self.Jx[i]@(self.vel[idx1] - self.vel[idx2]) * h
-            self.b[idx1] += (-val + self.force[idx1]) * h
-            self.b[idx2] += (val + self.force[idx2]) * h
+            self.b[idx1] += -val* h
+            self.b[idx2] += val * h
+
+
+    def compute_b(self, h):
+        self.apply_external_force(h)
+        self.apply_hessian_vel(h)
     
 
     @ti.kernel
@@ -188,14 +199,17 @@ class ImplictMassSpringSolver:
     def cg_solver(self, h):
         self.compute_force()
         self.compute_jacobian()
-        print(self.Jx[20].to_numpy())
-        print(" ")
+        # print(" =============== ")
+        # print("jx 20 ", self.Jx[20].to_numpy())
+        # print("jx sum ", np.sqrt((self.Jx.to_numpy())**2).sum())
         self.matrix_vector_product(h, self.dv)
         # b = (force + h * K @ vel) * h
-        self.b.fill(0.0)
+        # print("v ", self.vel.to_numpy().flatten())
+        # self.b.fill(0.0)
         self.compute_b(h)
-        print("f ", self.force.to_numpy())
-        print("b ", self.b.to_numpy())
+        # print("f ", self.force.to_numpy())
+        # print("b ", self.b.to_numpy().flatten())
+        # print("b sum ", self.b.to_numpy().sum())
         self.add(self.r0, self.b, -1.0, self.Adv)
         self.copy(self.p0, self.r0)
         r_2 = self.dot(self.r0, self.r0)
@@ -204,7 +218,7 @@ class ImplictMassSpringSolver:
         n_iter = 10
         epsilon = 1e-6
         for i in range(n_iter):
-            # print(f"Iteration: {i} Residual: {r_2_new}")
+            print(f"Iteration: {i} Residual: {r_2_new} thresold: {epsilon * r_2_init}")
             self.matrix_vector_product(h, self.p0)
             alpha = r_2 / self.dot(self.p0, self.Adv)
             self.add(self.dv, self.dv, alpha, self.p0)

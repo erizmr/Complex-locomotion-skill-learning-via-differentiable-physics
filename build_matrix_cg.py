@@ -29,6 +29,7 @@ class ImplictMassSpringSolver:
         self.vel_1D = ti.ndarray(ti.f32, self.dim * self.NV)
         self.force_1D = ti.ndarray(ti.f32, self.dim * self.NV)
         self.b = ti.ndarray(ti.f32, self.dim * self.NV)
+        self.b_mf = ti.Vector.field(self.dim, ti.f32, self.NV)
         self.dv = ti.ndarray(ti.f32, self.dim * self.NV)
 
         self.r0 = ti.ndarray(ti.f32, self.dim * self.NV)
@@ -107,7 +108,7 @@ class ImplictMassSpringSolver:
             pos1, pos2 = self.pos[idx1], self.pos[idx2]
             dis = pos2 - pos1
 
-            # self.actuation[i] = ti.random()
+            self.actuation[i] = ti.random()
             # print(self.actuation[i])
             # self.actuation[i] = ti.sin(i * 3.1415926 / 4)
             # self.actuation[i] = -1.0
@@ -193,7 +194,6 @@ class ImplictMassSpringSolver:
             b[i] = (f[i] + Kv[i] * h) * h
     
 
-
     @ti.kernel
     def add(self, ans: ti.types.ndarray(), a: ti.types.ndarray(), k: ti.f32, b: ti.types.ndarray()):
         for i in ans:
@@ -210,14 +210,25 @@ class ImplictMassSpringSolver:
     def copy(self, dst: ti.types.ndarray(), src: ti.types.ndarray()):
         for i in dst:
             dst[i] = src[i]
+    
+
+    @ti.kernel
+    def compute_b_matrix_free(self, h: ti.f32):
+        for i in self.spring:
+            idx1, idx2 = self.spring[i][0], self.spring[i][1]
+            val = self.Jx[i]@(self.vel[idx1] - self.vel[idx2]) * h
+            self.b_mf[idx1] += (-val + self.force[idx1]) * h
+            self.b_mf[idx2] += (val + self.force[idx2]) * h
+
 
     def update(self, h):
         self.compute_force()
 
         self.compute_Jacobians()
         # Assemble global system
-        print(self.Jx[20].to_numpy())
-        print(" ")
+        # print(" =============== ")
+        # print("jx 20 ", self.Jx[20].to_numpy())
+        # print("jx sum ", np.sqrt((self.Jx.to_numpy())**2).sum())
         self.assemble_D(self.DBuilder)
         D = self.DBuilder.build()
 
@@ -232,9 +243,16 @@ class ImplictMassSpringSolver:
 
         # b = (force + h * K @ vel) * h
         Kv = K @ self.vel_1D
+        # print("v ", self.vel_1D.to_numpy())
         self.compute_b(self.b, self.force_1D, Kv, h)
-        print("f ", self.force.to_numpy())
-        print("b ", self.b.to_numpy())
+
+        # self.b_mf.fill(0.0)
+        # self.compute_b_matrix_free(h)
+        # self.copy_to(self.b, self.b_mf)
+
+        # print("f ", self.force.to_numpy())
+        # print("b ", self.b.to_numpy())
+        # print("b sum ", self.b.to_numpy().sum())
 
         # # Sparse solver
         # solver = ti.linalg.SparseSolver(solver_type="LDLT")
@@ -251,9 +269,10 @@ class ImplictMassSpringSolver:
         r_2 = self.dot(self.r0, self.r0)
         r_2_init = r_2
         r_2_new = r_2
-        n_iter = 50
+        n_iter = 10
         epsilon = 1e-6
         for i in range(n_iter):
+            print(f"Iteration: {i} Residual: {r_2_new} thresold: {epsilon * r_2_init}")
             q = A @ self.p0
             alpha = r_2 / self.dot(self.p0, q)
             self.add(self.dv, self.dv, alpha, self.p0)
