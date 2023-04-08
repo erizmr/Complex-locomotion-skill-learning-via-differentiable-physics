@@ -47,26 +47,12 @@ class ImplictMassSpringSolver:
                                   self.NE)  # Jacobian with respect to velocity
         self.rest_len = ti.field(ti.f32, self.NE)
         self.ks = 1e7  # spring stiffness
-        self.kd = 0.5  # damping constant
-        self.kf = 1.0e5  # fix point stiffness
+        # self.kd = 0.5  # damping constant
 
-        # self.gravity = ti.Vector([0.0, -2.0, 0.0])
-        self.gravity = ti.Vector([0.0, 0.0, 0.0])
+        self.gravity = ti.Vector([0.0, -2.0, 0.0])
+        self.ground_height = 0.1
         self.init_pos()
         self.init_edges()
-        # self.MassBuilder = ti.linalg.SparseMatrixBuilder(
-        #     self.dim * self.NV, self.dim * self.NV, max_num_triplets=10000)
-        # self.DBuilder = ti.linalg.SparseMatrixBuilder(self.dim * self.NV,
-        #                                               self.dim * self.NV,
-        #                                               max_num_triplets=10000)
-        # self.KBuilder = ti.linalg.SparseMatrixBuilder(self.dim * self.NV,
-        #                                               self.dim * self.NV,
-        #                                               max_num_triplets=10000)
-        # self.init_mass_sp(self.MassBuilder)
-        # self.M = self.MassBuilder.build()
-        # self.fix_vertex = [self.N, self.NV - 1]
-        # self.Jf = ti.Matrix.field(self.dim, self.dim, ti.f32, len(self.fix_vertex))  # fix constraint hessian
-
 
     def init_pos(self):
         self.pos.from_numpy(np.array(self.vertices))
@@ -97,7 +83,7 @@ class ImplictMassSpringSolver:
             pos1, pos2 = self.pos[idx1], self.pos[idx2]
             dis = pos1 - pos2
 
-            self.actuation[i] = ti.random()
+            # self.actuation[i] = ti.random()
             # print(self.actuation[i])
             # self.actuation[i] = ti.sin(i * 3.1415926 / 4)
             # self.actuation[i] = -1.0
@@ -146,10 +132,31 @@ class ImplictMassSpringSolver:
 
 
     @ti.kernel
-    def updatePosVel(self, h: ti.f32):
+    def advect(self, h: ti.f32):
         for i in self.pos:
-            self.vel[i] += self.dv[i]
-            self.pos[i] += h * self.vel[i]
+            old_x = self.pos[i]
+            old_v = self.vel[i] + self.dv[i]
+            new_x = h * old_v + self.pos[i]
+            toi = 0.0
+            new_v = old_v
+            if new_x[1] < self.ground_height and old_v[1] < -1e-4:
+                toi = float(-(old_x[1] - self.ground_height) / old_v[1])
+                # Inf friction
+                new_v = ti.Matrix.zero(ti.f32, self.dim)
+                # Reasonable friction
+                new_v[1] = 0
+                friction = .4
+                if old_v[0] < 0:
+                    new_v[0] = ti.min(0., old_v[0] + friction * (-old_v[1]))
+                else:
+                    new_v[0] = ti.max(0., old_v[0] - friction * (-old_v[1]))
+                if old_v[2] < 0:
+                    new_v[2] = ti.min(0., old_v[2] + friction * (-old_v[1]))
+                else:
+                    new_v[2] = ti.max(0., old_v[2] - friction * (-old_v[1]))
+            new_x = old_x + toi * old_v + (h - toi) * new_v
+            self.vel[i] = new_v
+            self.pos[i] = new_x
     
 
     @ti.kernel
@@ -162,9 +169,9 @@ class ImplictMassSpringSolver:
     def apply_hessian_vel(self, h: ti.f32):
         for i in self.spring:
             idx1, idx2 = self.spring[i][0], self.spring[i][1]
-            val = self.Jx[i]@(self.vel[idx1] - self.vel[idx2]) * h
-            self.b[idx1] += -val* h
-            self.b[idx2] += val * h
+            val = self.Jx[i]@(self.vel[idx1] - self.vel[idx2])
+            self.b[idx1] += -val* h**2
+            self.b[idx2] += val * h**2
 
 
     def compute_b(self, h):
@@ -193,7 +200,7 @@ class ImplictMassSpringSolver:
     def update(self, h):
         # Solve the linear system
         self.cg_solver(h)
-        self.updatePosVel(h)
+        self.advect(h)
 
     
     def cg_solver(self, h):
@@ -218,7 +225,8 @@ class ImplictMassSpringSolver:
         n_iter = 10
         epsilon = 1e-6
         for i in range(n_iter):
-            print(f"Iteration: {i} Residual: {r_2_new} thresold: {epsilon * r_2_init}")
+            if (i+1) % n_iter == 0:
+                print(f"Iteration: {i} Residual: {r_2_new} thresold: {epsilon * r_2_init}")
             self.matrix_vector_product(h, self.p0)
             alpha = r_2 / self.dot(self.p0, self.Adv)
             self.add(self.dv, self.dv, alpha, self.p0)
@@ -322,7 +330,7 @@ def main():
 
         scene.particles(actuator_pos, radius=0.005, color=(0.0, 0.0, 0.5))
         scene.mesh(ms_solver.pos, indices=indices, color=(0.8, 0.6, 0.2))
-        # scene.mesh(vertices_ground, indices=indices_ground, color=(0.5, 0.5, 0.5), two_sided=True)
+        scene.mesh(vertices_ground, indices=indices_ground, color=(0.5, 0.5, 0.5), two_sided=True)
         canvas.scene(scene)
         window.show()
 
