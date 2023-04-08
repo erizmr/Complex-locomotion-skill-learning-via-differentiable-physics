@@ -46,7 +46,7 @@ class ImplictMassSpringSolver:
         self.Jv = ti.Matrix.field(self.dim, self.dim, ti.f32,
                                   self.NE)  # Jacobian with respect to velocity
         self.rest_len = ti.field(ti.f32, self.NE)
-        self.ks = 1e7  # spring stiffness
+        self.ks = 1e5  # spring stiffness
         # self.kd = 0.5  # damping constant
 
         self.gravity = ti.Vector([0.0, -2.0, 0.0])
@@ -198,18 +198,18 @@ class ImplictMassSpringSolver:
             dst[i] = src[i]
 
     def update(self, h):
-        # Solve the linear system
-        self.cg_solver(h)
+        self.compute_force()
+        self.compute_jacobian()
+        # Solve the linear system for dv
+        self.cg_solver(self.dv, h)
         self.advect(h)
 
     
-    def cg_solver(self, h):
-        self.compute_force()
-        self.compute_jacobian()
+    def cg_solver(self, x, h):
         # print(" =============== ")
         # print("jx 20 ", self.Jx[20].to_numpy())
         # print("jx sum ", np.sqrt((self.Jx.to_numpy())**2).sum())
-        self.matrix_vector_product(h, self.dv)
+        self.matrix_vector_product(h, x)
         # b = (force + h * K @ vel) * h
         # print("v ", self.vel.to_numpy().flatten())
         # self.b.fill(0.0)
@@ -229,7 +229,7 @@ class ImplictMassSpringSolver:
                 print(f"Iteration: {i} Residual: {r_2_new} thresold: {epsilon * r_2_init}")
             self.matrix_vector_product(h, self.p0)
             alpha = r_2 / self.dot(self.p0, self.Adv)
-            self.add(self.dv, self.dv, alpha, self.p0)
+            self.add(x, x, alpha, self.p0)
             self.add(self.r1, self.r0, -alpha, self.Adv)
             r_2_new = self.dot(self.r1, self.r1)
             if r_2_new < epsilon * r_2_init:
