@@ -83,7 +83,7 @@ class ImplictMassSpringSolver:
             pos1, pos2 = self.pos[idx1], self.pos[idx2]
             dis = pos1 - pos2
 
-            # self.actuation[i] = ti.random()
+            self.actuation[i] = ti.random()
             # print(self.actuation[i])
             # self.actuation[i] = ti.sin(i * 3.1415926 / 4)
             # self.actuation[i] = -1.0
@@ -197,23 +197,28 @@ class ImplictMassSpringSolver:
         for i in dst:
             dst[i] = src[i]
 
+    @ti.ad.grad_replaced
     def update(self, h):
         self.compute_force()
         self.compute_jacobian()
+        # b = (force + h * K @ vel) * h
+        self.compute_b(h)
         # Solve the linear system for dv
         self.cg_solver(self.dv, h)
         self.advect(h)
-
     
+    @ti.ad.grad_for(update)
+    def update_grad(self, h):
+        self.advect.grad()
+        self.cg_solver_grad(self.dv, h)
+        self.compute_force.grad()
+
+
     def cg_solver(self, x, h):
         # print(" =============== ")
         # print("jx 20 ", self.Jx[20].to_numpy())
         # print("jx sum ", np.sqrt((self.Jx.to_numpy())**2).sum())
         self.matrix_vector_product(h, x)
-        # b = (force + h * K @ vel) * h
-        # print("v ", self.vel.to_numpy().flatten())
-        # self.b.fill(0.0)
-        self.compute_b(h)
         # print("f ", self.force.to_numpy())
         # print("b ", self.b.to_numpy().flatten())
         # print("b sum ", self.b.to_numpy().sum())
@@ -239,6 +244,13 @@ class ImplictMassSpringSolver:
             self.copy(self.r0, self.r1)
             self.copy(self.p0, self.p1)
             r_2 = r_2_new
+
+
+    def cg_solver_grad(self, x, h):
+        # A * adj_b = adj_x
+        self.b = x.grad
+        self.cg_solver(self.b.grad, h)
+
 
 
 def main():
