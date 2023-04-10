@@ -32,9 +32,10 @@ class CGSolver(torch.nn.Module):
             @staticmethod
             def forward(ctx, rhs):
                 self.cnt += 1
-                print("num ", self.cnt)
-                # print("rhs shape ", rhs.contiguous().shape)
+                print("forawrd num ", self.cnt)
                 torch2ti_vec3(self.ms_solver.b, rhs.contiguous())
+                # An initial guess set to zero
+                self.ms_solver.dv.fill(0.0)
                 self.ms_solver.compute_force()
                 self.ms_solver.compute_jacobian()
                 self.ms_solver.cg_solver(self.ms_solver.dv, self.h)
@@ -43,13 +44,16 @@ class CGSolver(torch.nn.Module):
                 return self.output_dv
 
             @staticmethod
-            def backward(ctx, grad_output_dv):                
+            def backward(ctx, grad_output_dv):
+                self.cnt -= 1
+                print("backward num ", self.cnt)           
                 # print(doutput.contiguous().shape)
                 self.zero_grad()
                 # print("grad rhs shape ", self.grad_rhs.contiguous().shape)
                 torch2ti_grad_vec3(self.ms_solver.dv, grad_output_dv.contiguous())
                 self.ms_solver.cg_solver_grad(self.ms_solver.dv, self.h)
                 ti2torch_grad_vec3(self.ms_solver.b, self.grad_rhs.contiguous())
+                print("grad_rhs grad ", self.grad_rhs)
                 return self.grad_rhs
 
         self._module_function = _module_function
@@ -63,7 +67,7 @@ class CGSolver(torch.nn.Module):
         #     torch.autograd.gradcheck(self._module_function.apply, inputs, eps=1e-2, atol=1e-3, rtol=1.e-3, raise_exception=True)
         # except Exception as e:
         #     print(str(self._module_function.__name__) + " failed: " + str(e))
-        torch.autograd.gradcheck(self._module_function.apply, inputs, eps=1e-2, atol=1e-3, rtol=1.e-3, raise_exception=True)
+        return torch.autograd.gradcheck(self._module_function.apply, inputs, eps=1e-6, atol=1e-3, rtol=1.e-3, raise_exception=True)
 
     def forward(self, input_action):
         return self._module_function.apply(input_action)

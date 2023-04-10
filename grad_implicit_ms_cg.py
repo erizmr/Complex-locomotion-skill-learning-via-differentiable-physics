@@ -237,15 +237,16 @@ class ImplictMassSpringSolver:
         # print("jx 20 ", self.Jx[20].to_numpy())
         # print("jx sum ", np.sqrt((self.Jx.to_numpy())**2).sum())
         self.matrix_vector_product(h, x)
+        print("adv ", self.Adv.to_numpy().sum())
         # print("f ", self.force.to_numpy())
-        # print("b ", self.b.to_numpy().flatten())
+        print("b before solve ", self.b.to_numpy())
         # print("b sum ", self.b.to_numpy().sum())
         self.add(self.r0, self.b, -1.0, self.Adv)
         self.copy(self.p0, self.r0)
         r_2 = self.dot(self.r0, self.r0)
         r_2_init = r_2
         r_2_new = r_2
-        n_iter = 10
+        n_iter = 24 # 24 CG iterations can achieve 1e-3 accuray gradient
         epsilon = 1e-6
         for i in range(n_iter):
             # if (i+1) % n_iter == 0:
@@ -262,12 +263,18 @@ class ImplictMassSpringSolver:
             self.copy(self.r0, self.r1)
             self.copy(self.p0, self.p1)
             r_2 = r_2_new
+        
+        print("p0 ", self.p0.to_numpy().sum())
+        print("b ", self.b.to_numpy())
+        print("b grad", self.b.grad.to_numpy())
 
 
     def cg_solver_grad(self, x, h):
         # Solve the adjoint of b
         # A * adj_b = adj_x
         self.copy(self.b, x.grad)
+        # Prevent divide by zero in gradcheck
+        self.b.grad.fill(1e-6)
         self.cg_solver(self.b.grad, h)
 
 
@@ -319,7 +326,7 @@ def main():
     pause = False
     ms_solver = ImplictMassSpringSolver(robot_builder)
 
-    window = ti.ui.Window('Implicit Mass Spring System', res=(800, 800), vsync=True, show_window=False)
+    window = ti.ui.Window('Implicit Mass Spring System', res=(800, 800), vsync=True, show_window=True)
     canvas = window.get_canvas()
     scene = ti.ui.Scene()
     camera = ti.ui.make_camera()
@@ -348,13 +355,13 @@ def main():
     print(actuator_pos_index)
     while window.running:
 
-        # if window.get_event(ti.ui.PRESS):
-        #     if window.event.key == ti.ui.ESCAPE:
-        #         break
-        # if window.is_pressed(ti.ui.SPACE):
-        #     pause = not pause
+        if window.get_event(ti.ui.PRESS):
+            if window.event.key == ti.ui.ESCAPE:
+                break
+        if window.is_pressed(ti.ui.SPACE):
+            pause = not pause
 
-        pause = True
+        # pause = True
         if not pause:
             ms_solver.update(h)
         else:
@@ -382,7 +389,7 @@ def main():
         scene.mesh(ms_solver.pos, indices=indices, color=(0.8, 0.6, 0.2))
         scene.mesh(vertices_ground, indices=indices_ground, color=(0.5, 0.5, 0.5), two_sided=True)
         canvas.scene(scene)
-        # window.show()
+        window.show()
 
 if __name__ == '__main__':
     main()

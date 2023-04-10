@@ -47,7 +47,8 @@ def main():
     cg_solver = CGSolver(robot_builder=robot_builder)
 
     input_b = torch.rand(cg_solver.ms_solver.NV, 3, dtype=torch.float64, requires_grad=True)
-    cg_solver.grad_check(input_b)
+    test_info = cg_solver.grad_check(input_b)
+    print("test info: ", test_info)
 
 
 
