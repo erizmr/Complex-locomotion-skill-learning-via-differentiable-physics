@@ -48,7 +48,7 @@ class ImplictMassSpringSolver:
         self.Jv = ti.Matrix.field(self.dim, self.dim, self.data_type,
                                   self.NE)  # Jacobian with respect to velocity
         self.rest_len = ti.field(self.data_type, self.NE)
-        self.ks = 1e7  # spring stiffness
+        self.ks = 1e5  # spring stiffness
 
         self.gravity = ti.Vector([0.0, -2.0, 0.0])
         self.ground_height = 0.1

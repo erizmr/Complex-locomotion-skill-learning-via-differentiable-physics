@@ -38,7 +38,7 @@ class CGSolver(torch.nn.Module):
                 self.ms_solver.dv.fill(0.0)
                 self.ms_solver.compute_force()
                 self.ms_solver.compute_jacobian()
-                self.ms_solver.cg_solver(self.ms_solver.dv, self.h)
+                self.ms_solver.cg_solver(self.ms_solver.dv)
                 ti2torch_vec3(self.ms_solver.dv, self.output_dv.contiguous())
                 
                 return self.output_dv
@@ -51,9 +51,9 @@ class CGSolver(torch.nn.Module):
                 self.zero_grad()
                 # print("grad rhs shape ", self.grad_rhs.contiguous().shape)
                 torch2ti_grad_vec3(self.ms_solver.dv, grad_output_dv.contiguous())
-                self.ms_solver.cg_solver_grad(self.ms_solver.dv, self.h)
+                self.ms_solver.cg_solver_grad(self.ms_solver.dv)
                 ti2torch_grad_vec3(self.ms_solver.b, self.grad_rhs.contiguous())
-                print("grad_rhs grad ", self.grad_rhs)
+                # print("grad_rhs grad ", self.grad_rhs)
                 return self.grad_rhs
 
         self._module_function = _module_function
