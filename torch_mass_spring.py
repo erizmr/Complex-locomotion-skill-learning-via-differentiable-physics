@@ -9,11 +9,11 @@ from multitask.robot_design import RobotDesignMassSpring3D
 from grad_implicit_ms_cg import ImplictMassSpringSolver
 
 class MassSpringSolver(torch.nn.Module):
-    def __init__(self, robot_builder: RobotDesignMassSpring3D, dim=3):
+    def __init__(self, robot_builder: RobotDesignMassSpring3D, dt=0.01, dim=3):
         super(MassSpringSolver, self).__init__()
 
-        self.ms_solver = ImplictMassSpringSolver(robot_builder)
-        self.h = 0.01
+        self.ms_solver = ImplictMassSpringSolver(robot_builder, dt=dt, dim=dim)
+        self.dt = dt
         self.substeps = 1
         self.cnt = 0
 
@@ -37,7 +37,7 @@ class MassSpringSolver(torch.nn.Module):
                 # An initial guess set to zero
                 self.ms_solver.init_pos()
                 for i in range(self.substeps):
-                    self.ms_solver.update(self.h)
+                    self.ms_solver.update()
                 ti2torch_vec3(self.ms_solver.pos, self.output_pos.contiguous())
                 
                 return self.output_pos
@@ -51,7 +51,7 @@ class MassSpringSolver(torch.nn.Module):
                 # print("grad rhs shape ", self.grad_rhs.contiguous().shape)
                 torch2ti_grad_vec3(self.ms_solver.pos, grad_output_pos.contiguous())
                 for i in reversed(range(self.substeps)):
-                    self.ms_solver.update_grad(self.h)
+                    self.ms_solver.update_grad()
                 ti2torch_grad(self.ms_solver.actuation, self.grad_input_actions.contiguous())
                 # print("grad_input_actions", self.grad_input_actions)
                 return self.grad_input_actions

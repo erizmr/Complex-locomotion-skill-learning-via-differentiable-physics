@@ -32,7 +32,7 @@ def main():
     # args, unknowns = parser.parse_known_args()
     arch = args.arch
     if arch in ["x64", "cpu", "arm64"]:
-        ti.init(arch=ti.cpu)
+        ti.init(arch=ti.cpu, default_fp=ti.f64)
     elif arch in ["cuda", "gpu"]:
         ti.init(arch=ti.cuda)
     else:
