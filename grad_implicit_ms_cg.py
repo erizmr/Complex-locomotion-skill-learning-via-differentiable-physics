@@ -48,7 +48,7 @@ class ImplictMassSpringSolver:
         self.Jv = ti.Matrix.field(self.dim, self.dim, self.data_type,
                                   self.NE)  # Jacobian with respect to velocity
         self.rest_len = ti.field(self.data_type, self.NE)
-        self.ks = 1e5  # spring stiffness
+        self.ks = 1e7  # spring stiffness
 
         self.gravity = ti.Vector([0.0, -2.0, 0.0])
         self.ground_height = 0.1
@@ -86,10 +86,7 @@ class ImplictMassSpringSolver:
             idx1, idx2 = self.spring[i][0], self.spring[i][1]
             pos1, pos2 = self.pos[idx1], self.pos[idx2]
             dis = pos1 - pos2
-            # self.actuation[i] = ti.random()
-            # print(self.actuation[i])
-            # self.actuation[i] = ti.sin(i * 3.1415926 / 6)
-            # self.actuation[i] = -1.0
+
             target_length = self.rest_len[i] * (1.0 + self.spring_actuation_coef[i] * self.actuation[i])
             force = -self.ks * (dis.norm() -
                                target_length) * dis.normalized()
@@ -362,6 +359,8 @@ def main():
             pause = not pause
 
         if not pause:
+            # Apply a random actutation for test
+            ms_solver.actuation.from_numpy(np.random.rand(len(springs)) * 0.5)
             ms_solver.update()
 
         camera.track_user_inputs(window, movement_speed=0.03, hold_key=ti.ui.RMB)
