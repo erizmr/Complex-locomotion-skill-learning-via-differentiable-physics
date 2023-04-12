@@ -10,14 +10,15 @@ from utils import data_type
 
 @ti.data_oriented
 class ImplictMassSpringSolver:
-    def __init__(self, robot_builder: RobotDesignMassSpring3D, data_type=data_type, dim=3):
+    def __init__(self, robot_builder: RobotDesignMassSpring3D, data_type=data_type, dt=0.01, dim=3):
         self.dim = dim
         self.data_type = data_type
+        self.dt = dt
         _vertices, _springs_data, _faces = robot_builder.get_objects()
         self.vertices = np.array(_vertices) # [NV, 3]
         self.springs_data = np.array(_springs_data) # [NE, (a, b, length, stiffness, actuation)]
         self.faces = np.array(_faces) # [NF, 3]
-        print(f"Vertices {self.vertices.shape}, Springs {self.springs_data.shape}, Faces {self.faces.shape}")
+        print(f"Vertices {self.vertices.shape}, Springs {self.springs_data.shape}, Faces {self.faces.shape}, Time step: {self.dt}")
         self.NF = self.faces.shape[0]  # number of faces
         self.NV = self.vertices.shape[0]  # number of vertices
         self.NE = self.springs_data.shape[0]  # number of edges
@@ -62,6 +63,7 @@ class ImplictMassSpringSolver:
         self.initPos.from_numpy(np.array(self.vertices))
         self.vel.from_numpy(np.zeros((self.NV, self.dim)))
         self.mass.from_numpy(np.ones(self.NV))
+        self.dv.fill(0.0)
     
     def init_edges(self):
         self.spring.from_numpy(self.springs_data[:, :2])
@@ -85,7 +87,6 @@ class ImplictMassSpringSolver:
             idx1, idx2 = self.spring[i][0], self.spring[i][1]
             pos1, pos2 = self.pos[idx1], self.pos[idx2]
             dis = pos1 - pos2
-
             # self.actuation[i] = ti.random()
             # print(self.actuation[i])
             # self.actuation[i] = ti.sin(i * 3.1415926 / 6)
@@ -97,12 +98,12 @@ class ImplictMassSpringSolver:
             self.force[idx2] -= force
 
     @ti.kernel
-    def _matrix_vector_product(self, h: ti.f64, vec: ti.template()):
+    def _matrix_vector_product(self, vec: ti.template()):
         for i in self.spring:
             idx1, idx2 = self.spring[i][0], self.spring[i][1]
             val = self.Jx[i]@(vec[idx1] - vec[idx2])
-            self.Adv[idx1] -= -val * h**2
-            self.Adv[idx2] -= val * h**2
+            self.Adv[idx1] -= -val * self.dt**2
+            self.Adv[idx2] -= val * self.dt**2
 
     
     @ti.kernel
@@ -129,17 +130,17 @@ class ImplictMassSpringSolver:
             self.Adv[i] = self.mass[i] * vec[i]
 
 
-    def matrix_vector_product(self, h, vec):
+    def matrix_vector_product(self, vec):
         self.add_mass(vec)
-        self._matrix_vector_product(h, vec)
+        self._matrix_vector_product(vec)
 
 
     @ti.kernel
-    def advect(self, h: ti.f64):
+    def advect(self):
         for i in self.pos:
             old_x = self.pos[i]
             old_v = self.vel[i] + self.dv[i]
-            new_x = h * old_v + self.pos[i]
+            new_x = self.dt * old_v + self.pos[i]
             toi = self.data_type(0.0)
             new_v = old_v
             if new_x[1] < self.ground_height and old_v[1] < -1e-4:
@@ -157,29 +158,29 @@ class ImplictMassSpringSolver:
                     new_v[2] = ti.min(0., old_v[2] + friction * (-old_v[1]))
                 else:
                     new_v[2] = ti.max(0., old_v[2] - friction * (-old_v[1]))
-            new_x = old_x + toi * old_v + (h - toi) * new_v
+            new_x = old_x + toi * old_v + (self.dt - toi) * new_v
             self.vel[i] = new_v
             self.pos[i] = new_x
     
 
     @ti.kernel
-    def apply_external_force(self, h: ti.f64):
+    def apply_external_force(self):
         for i in self.b:
-            self.b[i] = self.force[i] * h
+            self.b[i] = self.force[i] * self.dt
 
 
     @ti.kernel
-    def apply_hessian_vel(self, h: ti.f64):
+    def apply_hessian_vel(self):
         for i in self.spring:
             idx1, idx2 = self.spring[i][0], self.spring[i][1]
             val = self.Jx[i]@(self.vel[idx1] - self.vel[idx2])
-            self.b[idx1] += -val* h**2
-            self.b[idx2] += val * h**2
+            self.b[idx1] += -val* self.dt**2
+            self.b[idx2] += val * self.dt**2
 
 
-    def compute_b(self, h):
-        self.apply_external_force(h)
-        self.apply_hessian_vel(h)
+    def compute_b(self):
+        self.apply_external_force()
+        self.apply_hessian_vel()
     
 
     @ti.kernel
@@ -211,35 +212,35 @@ class ImplictMassSpringSolver:
             dst[i] = src[i]
 
     @ti.ad.grad_replaced
-    def update(self, h):
+    def update(self):
         self.compute_force()
         self.compute_jacobian()
         # b = (force + h * K @ vel) * h
-        self.compute_b(h)
+        self.compute_b()
         # Solve the linear system for dv
-        self.cg_solver(self.dv, h)
-        self.advect(h)
+        self.cg_solver(self.dv)
+        self.advect()
     
     @ti.ad.grad_for(update)
-    def update_grad(self, h):
-        self.advect.grad(h)
+    def update_grad(self):
+        self.advect.grad()
         # print("b grad before", self.b.grad)
-        self.cg_solver_grad(self.dv, h)
-        self.apply_external_force.grad(h)
+        self.cg_solver_grad(self.dv)
+        self.apply_external_force.grad()
         # print("b grad up: ", self.b.grad[5], "force grad ", self.force.grad[5])
         # print("actuation before", self.actuation.grad)
         self.compute_force.grad()
         # print("actuation ", self.actuation.grad)
 
 
-    def cg_solver(self, x, h):
+    def cg_solver(self, x):
         # print(" =============== ")
         # print("jx 20 ", self.Jx[20].to_numpy())
         # print("jx sum ", np.sqrt((self.Jx.to_numpy())**2).sum())
-        self.matrix_vector_product(h, x)
+        self.matrix_vector_product(x)
         print("adv ", self.Adv.to_numpy().sum())
         # print("f ", self.force.to_numpy())
-        print("b before solve ", self.b.to_numpy())
+        # print("b before solve ", self.b.to_numpy().sum())
         # print("b sum ", self.b.to_numpy().sum())
         self.add(self.r0, self.b, -1.0, self.Adv)
         self.copy(self.p0, self.r0)
@@ -251,7 +252,7 @@ class ImplictMassSpringSolver:
         for i in range(n_iter):
             # if (i+1) % n_iter == 0:
             #     print(f"Iteration: {i} Residual: {r_2_new} thresold: {epsilon * r_2_init}")
-            self.matrix_vector_product(h, self.p0)
+            self.matrix_vector_product(self.p0)
             alpha = r_2 / self.dot(self.p0, self.Adv)
             self.add(x, x, alpha, self.p0)
             self.add(self.r1, self.r0, -alpha, self.Adv)
@@ -263,19 +264,19 @@ class ImplictMassSpringSolver:
             self.copy(self.r0, self.r1)
             self.copy(self.p0, self.p1)
             r_2 = r_2_new
-        
-        print("p0 ", self.p0.to_numpy().sum())
-        print("b ", self.b.to_numpy())
-        print("b grad", self.b.grad.to_numpy())
+        print("adv after solve ", self.Adv.to_numpy().sum())
+        # print("p0 ", self.p0.to_numpy().sum())
+        # print("b ", self.b.to_numpy().sum())
+        # print("b grad", self.b.grad.to_numpy().sum())
 
 
-    def cg_solver_grad(self, x, h):
+    def cg_solver_grad(self, x):
         # Solve the adjoint of b
         # A * adj_b = adj_x
         self.copy(self.b, x.grad)
         # Prevent divide by zero in gradcheck
         self.b.grad.fill(1e-6)
-        self.cg_solver(self.b.grad, h)
+        self.cg_solver(self.b.grad)
 
 
     @ti.kernel
@@ -363,10 +364,10 @@ def main():
 
         # pause = True
         if not pause:
-            ms_solver.update(h)
+            ms_solver.update()
         else:
             with ti.ad.Tape(loss=ms_solver.loss):
-                ms_solver.update(h)
+                ms_solver.update()
                 ms_solver.compute_center()
                 ms_solver.compute_loss()
             # print(f"Actuation Grad: {ms_solver.actuation.grad}")

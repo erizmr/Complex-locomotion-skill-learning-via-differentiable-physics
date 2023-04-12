@@ -7,7 +7,6 @@ import numpy as np
 from multitask.robot_design import RobotDesignMassSpring3D
 
 from torch_mass_spring import MassSpringSolver
-from torch_cg import CGSolver
 
 
 
@@ -44,10 +43,11 @@ def main():
     vertices, springs, faces = robot_builder.build()
     # robot_builder.draw()
 
-    cg_solver = CGSolver(robot_builder=robot_builder)
+    ms_solver = MassSpringSolver(robot_builder=robot_builder)
 
-    input_b = torch.rand(cg_solver.ms_solver.NV, 3, dtype=torch.float64, requires_grad=True)
-    test_info = cg_solver.grad_check(input_b)
+    input_actions = torch.rand(ms_solver.ms_solver.NE,dtype=torch.float64, requires_grad=True)
+    print("input_actions: ", input_actions)
+    test_info = ms_solver.grad_check(input_actions)
     print("test info: ", test_info)
 
 

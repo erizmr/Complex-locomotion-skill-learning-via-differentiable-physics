@@ -18,43 +18,43 @@ class MassSpringSolver(torch.nn.Module):
         self.cnt = 0
 
         self.register_buffer(
-            'output_dv',
+            'output_pos',
             torch.zeros(self.ms_solver.NV, 3, dtype=torch_type),
             persistent=False
         )
         self.register_buffer(
-            'grad_rhs',
-            torch.zeros(self.ms_solver.NV, 3, dtype=torch_type),
+            'grad_input_actions',
+            torch.zeros(self.ms_solver.NE, dtype=torch_type),
             persistent=False
         )
         class _module_function(torch.autograd.Function):
 
             @staticmethod
-            def forward(ctx, rhs):
+            def forward(ctx, input_actions):
                 self.cnt += 1
                 print("forawrd num ", self.cnt)
-                torch2ti_vec3(self.ms_solver.b, rhs.contiguous())
+                torch2ti(self.ms_solver.actuation, input_actions.contiguous())
                 # An initial guess set to zero
-                self.ms_solver.dv.fill(0.0)
-                self.ms_solver.compute_force()
-                self.ms_solver.compute_jacobian()
-                self.ms_solver.cg_solver(self.ms_solver.dv, self.h)
-                ti2torch_vec3(self.ms_solver.dv, self.output_dv.contiguous())
+                self.ms_solver.init_pos()
+                for i in range(self.substeps):
+                    self.ms_solver.update(self.h)
+                ti2torch_vec3(self.ms_solver.pos, self.output_pos.contiguous())
                 
-                return self.output_dv
+                return self.output_pos
 
             @staticmethod
-            def backward(ctx, grad_output_dv):
+            def backward(ctx, grad_output_pos):
                 self.cnt -= 1
                 print("backward num ", self.cnt)           
                 # print(doutput.contiguous().shape)
                 self.zero_grad()
                 # print("grad rhs shape ", self.grad_rhs.contiguous().shape)
-                torch2ti_grad_vec3(self.ms_solver.dv, grad_output_dv.contiguous())
-                self.ms_solver.cg_solver_grad(self.ms_solver.dv, self.h)
-                ti2torch_grad_vec3(self.ms_solver.b, self.grad_rhs.contiguous())
-                print("grad_rhs grad ", self.grad_rhs)
-                return self.grad_rhs
+                torch2ti_grad_vec3(self.ms_solver.pos, grad_output_pos.contiguous())
+                for i in reversed(range(self.substeps)):
+                    self.ms_solver.update_grad(self.h)
+                ti2torch_grad(self.ms_solver.actuation, self.grad_input_actions.contiguous())
+                # print("grad_input_actions", self.grad_input_actions)
+                return self.grad_input_actions
 
         self._module_function = _module_function
 

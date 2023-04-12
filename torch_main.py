@@ -6,7 +6,7 @@ import numpy as np
 
 from multitask.robot_design import RobotDesignMassSpring3D
 
-from torch_binding import MassSpringSolver
+from torch_mass_spring import MassSpringSolver
 
 
 
