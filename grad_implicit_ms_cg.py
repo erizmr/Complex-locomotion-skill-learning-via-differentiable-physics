@@ -49,7 +49,6 @@ class ImplictMassSpringSolver:
                                   self.NE)  # Jacobian with respect to velocity
         self.rest_len = ti.field(self.data_type, self.NE)
         self.ks = 1e5  # spring stiffness
-        # self.kd = 0.5  # damping constant
 
         self.gravity = ti.Vector([0.0, -2.0, 0.0])
         self.ground_height = 0.1
@@ -362,18 +361,8 @@ def main():
         if window.is_pressed(ti.ui.SPACE):
             pause = not pause
 
-        # pause = True
         if not pause:
             ms_solver.update()
-        else:
-            with ti.ad.Tape(loss=ms_solver.loss):
-                ms_solver.update()
-                ms_solver.compute_center()
-                ms_solver.compute_loss()
-            # print(f"Actuation Grad: {ms_solver.actuation.grad}")
-            # print(f"force grad: {ms_solver.force.grad}")
-            # print(f"b Grad: {ms_solver.b.grad}")
-            # print(f"Position Grad: {ms_solver.pos.grad}")
 
         camera.track_user_inputs(window, movement_speed=0.03, hold_key=ti.ui.RMB)
         scene.set_camera(camera)
