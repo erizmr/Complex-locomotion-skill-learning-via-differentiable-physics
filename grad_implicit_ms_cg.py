@@ -10,10 +10,13 @@ from utils import data_type
 
 @ti.data_oriented
 class ImplictMassSpringSolver:
-    def __init__(self, robot_builder: RobotDesignMassSpring3D, data_type=data_type, dt=0.01, dim=3):
+    def __init__(self, robot_builder: RobotDesignMassSpring3D, data_type=data_type, batch=1, substeps=1, dt=0.01, dim=3):
         self.dim = dim
         self.data_type = data_type
         self.dt = dt
+        self.batch = batch
+        self.substeps = substeps
+
         _vertices, _springs_data, _faces = robot_builder.get_objects()
         self.vertices = np.array(_vertices) # [NV, 3]
         self.springs_data = np.array(_springs_data) # [NE, (a, b, length, stiffness, actuation)]
@@ -23,37 +26,39 @@ class ImplictMassSpringSolver:
         self.NV = self.vertices.shape[0]  # number of vertices
         self.NE = self.springs_data.shape[0]  # number of edges
 
-        self.pos = ti.Vector.field(self.dim, self.data_type, self.NV, needs_grad=True)
         self.initPos = ti.Vector.field(self.dim, self.data_type, self.NV)
+
+        # [batch, substeps, NV, dim]
+        self.pos = ti.Vector.field(self.dim, self.data_type, self.NV, needs_grad=True)
         self.vel = ti.Vector.field(self.dim, self.data_type, self.NV, needs_grad=True)
         self.dv = ti.Vector.field(self.dim, self.data_type, self.NV, needs_grad=True)
-        self.Adv = ti.Vector.field(self.dim, self.data_type, self.NV)
-
         self.force = ti.Vector.field(self.dim, self.data_type, self.NV, needs_grad=True)
         self.mass = ti.field(self.data_type, self.NV)
+
+        self.Jx = ti.Matrix.field(self.dim, self.dim, self.data_type,
+                                  self.NE)  # Jacobian with respect to position
+        self.Jv = ti.Matrix.field(self.dim, self.dim, self.data_type,
+                                  self.NE)  # Jacobian with respect to velocity
+
+        # [batch, 1, NV, dim]
+        self.Adv = ti.Vector.field(self.dim, self.data_type, self.NV)
         self.b = ti.Vector.field(self.dim, self.data_type, self.NV, needs_grad=True)
         self.r0 = ti.Vector.field(self.dim, self.data_type, self.NV)
         self.r1 = ti.Vector.field(self.dim, self.data_type, self.NV)
         self.p0 = ti.Vector.field(self.dim, self.data_type, self.NV)
         self.p1 = ti.Vector.field(self.dim, self.data_type, self.NV)
 
+        self.actuation = ti.field(self.data_type, self.NE, needs_grad=True)
+
+        # [NV, dim]
         self.spring = ti.Vector.field(2, ti.i32, self.NE)
         self.spring_actuation_coef = ti.field(self.data_type, self.NE)
-        self.actuation = ti.field(self.data_type, self.NE, needs_grad=True) # parameters to optimize
-        self.spring_color = ti.Vector.field(3, self.data_type, self.NE)
-        self.indices = ti.field(ti.i32, 2 * self.NE)
-        self.spring_color_draw = ti.Vector.field(3, self.data_type, 2 * self.NE)
-        self.Jx = ti.Matrix.field(self.dim, self.dim, self.data_type,
-                                  self.NE)  # Jacobian with respect to position
-        self.Jv = ti.Matrix.field(self.dim, self.dim, self.data_type,
-                                  self.NE)  # Jacobian with respect to velocity
         self.rest_len = ti.field(self.data_type, self.NE)
         self.ks = 1e5  # spring stiffness
 
         self.gravity = ti.Vector([0.0, -2.0, 0.0])
         self.ground_height = 0.1
         self.center = ti.Vector.field(self.dim, self.data_type, shape=(), needs_grad=True)
-        self.loss = ti.field(self.data_type, shape=(), needs_grad=True)
         self.init_pos()
         self.init_edges()
 
@@ -182,12 +187,7 @@ class ImplictMassSpringSolver:
     @ti.kernel
     def compute_center(self):
         for i in self.pos:
-            self.center[None] += self.pos[i] / self.NV
-
-    @ti.kernel
-    def compute_loss(self):
-        for i in self.pos:
-            self.loss[None] += (ti.Vector([1.0, 0.0, 0.0]) - self.center[None]).norm_sqr()   
+            self.center[None] += self.pos[i] / self.NV  
 
     @ti.kernel
     def add(self, ans: ti.template(), a: ti.template(), k: ti.f64, b: ti.template()):
