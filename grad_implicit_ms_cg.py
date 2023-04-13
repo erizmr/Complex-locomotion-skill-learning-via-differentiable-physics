@@ -15,7 +15,7 @@ class ImplictMassSpringSolver:
         self.data_type = data_type
         self.dt = dt
         self.batch = batch
-        self.substeps = substeps
+        self.substeps = substeps + 1
 
         _vertices, _springs_data, _faces = robot_builder.get_objects()
         self.vertices = np.array(_vertices) # [NV, 3]
@@ -29,26 +29,39 @@ class ImplictMassSpringSolver:
         self.initPos = ti.Vector.field(self.dim, self.data_type, self.NV)
 
         # [batch, substeps, NV, dim]
-        self.pos = ti.Vector.field(self.dim, self.data_type, self.NV, needs_grad=True)
-        self.vel = ti.Vector.field(self.dim, self.data_type, self.NV, needs_grad=True)
-        self.dv = ti.Vector.field(self.dim, self.data_type, self.NV, needs_grad=True)
-        self.force = ti.Vector.field(self.dim, self.data_type, self.NV, needs_grad=True)
+        self.pos = ti.Vector.field(self.dim, self.data_type, shape=(self.batch, self.substeps, self.NV), needs_grad=True)
+        self.vel = ti.Vector.field(self.dim, self.data_type, shape=(self.batch, self.substeps, self.NV), needs_grad=True)
+        self.dv = ti.Vector.field(self.dim, self.data_type, shape=(self.batch, self.substeps, self.NV), needs_grad=True)
+        self.force = ti.Vector.field(self.dim, self.data_type, shape=(self.batch, self.substeps, self.NV), needs_grad=True)
         self.mass = ti.field(self.data_type, self.NV)
 
+        # [batch, NV, dim]
+        self.dv_one_step = ti.Vector.field(self.dim, self.data_type, shape=(self.batch, self.NV), needs_grad=True)
+
+        # [batch, NE, dim]
         self.Jx = ti.Matrix.field(self.dim, self.dim, self.data_type,
-                                  self.NE)  # Jacobian with respect to position
+                                  shape=(self.batch, self.NE))  # Jacobian with respect to position
         self.Jv = ti.Matrix.field(self.dim, self.dim, self.data_type,
-                                  self.NE)  # Jacobian with respect to velocity
+                                  shape=(self.batch, self.NE))  # Jacobian with respect to velocity
 
-        # [batch, 1, NV, dim]
-        self.Adv = ti.Vector.field(self.dim, self.data_type, self.NV)
-        self.b = ti.Vector.field(self.dim, self.data_type, self.NV, needs_grad=True)
-        self.r0 = ti.Vector.field(self.dim, self.data_type, self.NV)
-        self.r1 = ti.Vector.field(self.dim, self.data_type, self.NV)
-        self.p0 = ti.Vector.field(self.dim, self.data_type, self.NV)
-        self.p1 = ti.Vector.field(self.dim, self.data_type, self.NV)
+        # [batch, NV, dim]
+        self.b = ti.Vector.field(self.dim, self.data_type, shape=(self.batch, self.NV), needs_grad=True)
+        self.Adv = ti.Vector.field(self.dim, self.data_type, shape=(self.batch, self.NV))
+        self.r0 = ti.Vector.field(self.dim, self.data_type, shape=(self.batch, self.NV))
+        self.r1 = ti.Vector.field(self.dim, self.data_type, shape=(self.batch, self.NV))
+        self.p0 = ti.Vector.field(self.dim, self.data_type, shape=(self.batch, self.NV))
+        self.p1 = ti.Vector.field(self.dim, self.data_type, shape=(self.batch, self.NV))
 
-        self.actuation = ti.field(self.data_type, self.NE, needs_grad=True)
+        # [batch] Result buffer for CG
+        self.dot_ans = ti.field(dtype=self.data_type, shape=self.batch)
+        self.r2 = ti.field(dtype=self.data_type, shape=self.batch)
+        self.r2_init = ti.field(dtype=self.data_type, shape=self.batch)
+        self.r2_new = ti.field(dtype=self.data_type, shape=self.batch)
+        self.alpha = ti.field(dtype=self.data_type, shape=self.batch)
+        self.beta = ti.field(dtype=self.data_type, shape=self.batch)
+        
+        # [batch, NE] Keep the actuation for all substeps
+        self.actuation = ti.field(self.data_type, shape=(self.batch, self.NE), needs_grad=True)
 
         # [NV, dim]
         self.spring = ti.Vector.field(2, ti.i32, self.NE)
@@ -58,15 +71,15 @@ class ImplictMassSpringSolver:
 
         self.gravity = ti.Vector([0.0, -2.0, 0.0])
         self.ground_height = 0.1
-        self.center = ti.Vector.field(self.dim, self.data_type, shape=(), needs_grad=True)
         self.init_pos()
         self.init_edges()
 
     def init_pos(self):
-        self.pos.from_numpy(np.array(self.vertices))
         self.initPos.from_numpy(np.array(self.vertices))
-        self.vel.from_numpy(np.zeros((self.NV, self.dim)))
-        self.mass.from_numpy(np.ones(self.NV))
+        pos_arr = np.expand_dims(np.array(self.vertices), axis=(0, 1))
+        self.pos.from_numpy(np.tile(pos_arr, (self.batch, self.substeps, 1, 1)))
+        self.vel.from_numpy(np.zeros((self.batch, self.substeps, self.NV, self.dim))) # assume initial velocity is 0
+        self.mass.from_numpy(np.ones(self.NV)) # assume mass is 1 for all vertices
         self.dv.fill(0.0)
     
     def init_edges(self):
@@ -77,41 +90,41 @@ class ImplictMassSpringSolver:
         print("spring_actuation_coef ", self.spring_actuation_coef)
 
     @ti.func
-    def clear_force(self):
-        for i in self.force:
-            self.force[i] = ti.Vector([0.0, 0.0, 0.0])
+    def clear_force(self, step: ti.i32):
+        for bs, i in ti.ndrange(self.batch, self.NV):
+            self.force[bs, step, i] = ti.Vector([0.0, 0.0, 0.0])
 
     @ti.kernel
-    def compute_force(self):
-        self.clear_force()
-        for i in self.force:
-            self.force[i] += self.gravity * self.mass[i]
+    def compute_force(self, step: ti.i32):
+        self.clear_force(step)
+        for bs, i in ti.ndrange(self.batch, self.NV):
+            self.force[bs, step, i] += self.gravity * self.mass[i]
 
-        for i in self.spring:
+        for bs, i in ti.ndrange(self.batch, self.NE):
             idx1, idx2 = self.spring[i][0], self.spring[i][1]
-            pos1, pos2 = self.pos[idx1], self.pos[idx2]
+            pos1, pos2 = self.pos[bs, step, idx1], self.pos[bs, step, idx2]
             dis = pos1 - pos2
 
-            target_length = self.rest_len[i] * (1.0 + self.spring_actuation_coef[i] * self.actuation[i])
+            target_length = self.rest_len[i] * (1.0 + self.spring_actuation_coef[i] * self.actuation[bs, i])
             force = -self.ks * (dis.norm() -
                                target_length) * dis.normalized()
-            self.force[idx1] += force
-            self.force[idx2] -= force
+            self.force[bs, step, idx1] += force
+            self.force[bs, step, idx2] -= force
 
     @ti.kernel
     def _matrix_vector_product(self, vec: ti.template()):
-        for i in self.spring:
+        for bs, i in ti.ndrange(self.batch, self.NE):
             idx1, idx2 = self.spring[i][0], self.spring[i][1]
-            val = self.Jx[i]@(vec[idx1] - vec[idx2])
-            self.Adv[idx1] -= -val * self.dt**2
-            self.Adv[idx2] -= val * self.dt**2
+            val = self.Jx[bs, i]@(vec[bs, idx1] - vec[bs, idx2])
+            self.Adv[bs, idx1] -= -val * self.dt**2
+            self.Adv[bs, idx2] -= val * self.dt**2
 
     
     @ti.kernel
-    def compute_jacobian(self):
-        for i in self.spring:
+    def compute_jacobian(self, step: ti.i32):
+        for bs, i in ti.ndrange(self.batch, self.NE):
             idx1, idx2 = self.spring[i][0], self.spring[i][1]
-            pos1, pos2 = self.pos[idx1], self.pos[idx2]
+            pos1, pos2 = self.pos[bs, step, idx1], self.pos[bs, step, idx2]
             dx = pos1 - pos2
             I = ti.Matrix([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]])
             dxtdx = ti.Matrix([[dx[0] * dx[0], dx[0] * dx[1], dx[0]*dx[2]],
@@ -122,13 +135,13 @@ class ImplictMassSpringSolver:
             if l != 0.0:
                 l_inv = self.data_type(1.0) / l
             # Clamp the potential negative part to make the hessian positive definite
-            self.Jx[i] = (ti.max(1 - self.rest_len[i] * l_inv, 0) * I + self.rest_len[i] * dxtdx * l_inv**3) * self.ks
+            self.Jx[bs, i] = (ti.max(1 - self.rest_len[i] * l_inv, 0) * I + self.rest_len[i] * dxtdx * l_inv**3) * self.ks
 
 
     @ti.kernel
     def add_mass(self, vec: ti.template()):
-        for i in self.Adv:
-            self.Adv[i] = self.mass[i] * vec[i]
+        for bs, i in ti.ndrange(self.batch, self.NV):
+            self.Adv[bs, i] = self.mass[i] * vec[bs, i]
 
 
     def matrix_vector_product(self, vec):
@@ -137,11 +150,11 @@ class ImplictMassSpringSolver:
 
 
     @ti.kernel
-    def advect(self):
-        for i in self.pos:
-            old_x = self.pos[i]
-            old_v = self.vel[i] + self.dv[i]
-            new_x = self.dt * old_v + self.pos[i]
+    def advect(self, step: ti.i32):
+        for bs, i in ti.ndrange(self.batch, self.NV):
+            old_x = self.pos[bs, step, i]
+            old_v = self.vel[bs, step, i] + self.dv[bs, step, i]
+            new_x = self.dt * old_v + self.pos[bs, step, i]
             toi = self.data_type(0.0)
             new_v = old_v
             if new_x[1] < self.ground_height and old_v[1] < -1e-4:
@@ -160,38 +173,33 @@ class ImplictMassSpringSolver:
                 else:
                     new_v[2] = ti.max(0., old_v[2] - friction * (-old_v[1]))
             new_x = old_x + toi * old_v + (self.dt - toi) * new_v
-            self.vel[i] = new_v
-            self.pos[i] = new_x
+            self.vel[bs, step+1, i] = new_v
+            self.pos[bs, step+1, i] = new_x
     
 
     @ti.kernel
-    def apply_external_force(self):
-        for i in self.b:
-            self.b[i] = self.force[i] * self.dt
+    def apply_external_force(self, step: ti.int32):
+        for bs, i in ti.ndrange(self.batch, self.NV):
+            self.b[bs, i] = self.force[bs, step, i] * self.dt
 
 
     @ti.kernel
-    def apply_hessian_vel(self):
-        for i in self.spring:
+    def apply_hessian_vel(self, step: ti.int32):
+        for bs, i in ti.ndrange(self.batch, self.NV):
             idx1, idx2 = self.spring[i][0], self.spring[i][1]
-            val = self.Jx[i]@(self.vel[idx1] - self.vel[idx2])
-            self.b[idx1] += -val* self.dt**2
-            self.b[idx2] += val * self.dt**2
+            val = self.Jx[bs, i]@(self.vel[bs, step, idx1] - self.vel[bs, step, idx2])
+            self.b[bs, idx1] += -val* self.dt**2
+            self.b[bs, idx2] += val * self.dt**2
 
 
-    def compute_b(self):
-        self.apply_external_force()
-        self.apply_hessian_vel()
-    
+    def compute_b(self, step: int):
+        self.apply_external_force(step)
+        self.apply_hessian_vel(step)
 
-    @ti.kernel
-    def compute_center(self):
-        for i in self.pos:
-            self.center[None] += self.pos[i] / self.NV  
 
     @ti.kernel
     def add(self, ans: ti.template(), a: ti.template(), k: ti.f64, b: ti.template()):
-        for i in ans:
+        for i in ti.grouped(ans):
             ans[i] = a[i] + k * b[i]
 
 
@@ -201,22 +209,69 @@ class ImplictMassSpringSolver:
         for i in a:
             ans += a[i].dot(b[i])
         return ans
+
+
+    @ti.kernel
+    def add_batched(self, ans: ti.template(), a: ti.template(), k: ti.template(), b: ti.template()):
+        for bs, i in ti.ndrange(self.batch, self.NV):
+            ans[bs, i] = a[bs, i] + k[bs] * b[bs, i]
     
+
+    @ti.kernel
+    def substrct_batched(self, ans: ti.template(), a: ti.template(), k: ti.template(), b: ti.template()):
+        for bs, i in ti.ndrange(self.batch, self.NV):
+            ans[bs, i] = a[bs, i] - k[bs] * b[bs, i]
+
+
+    @ti.kernel
+    def dot_batched(self, ans: ti.template(), a: ti.template(), b: ti.template()):
+        for bs in range(self.batch):
+            ans[bs] = 0.0
+        for bs, i in ti.ndrange(self.batch, self.NV):
+            ans[bs] += a[bs, i].dot(b[bs, i])
+    
+
+    @ti.kernel
+    def divide_batched(self, ans: ti.template(), a: ti.template(), b: ti.template()):
+        for bs in range(self.batch):
+            ans[bs] = a[bs] / b[bs]
+
+
     @ti.kernel
     def copy(self, dst: ti.template(), src: ti.template()):
-        for i in dst:
+        for i in ti.grouped(dst):
             dst[i] = src[i]
 
-    @ti.ad.grad_replaced
-    def update(self):
-        self.compute_force()
-        self.compute_jacobian()
-        # b = (force + h * K @ vel) * h
-        self.compute_b()
-        # Solve the linear system for dv
-        self.cg_solver(self.dv)
-        self.advect()
+
+    @ti.kernel
+    def copy_slice(self, dst: ti.template(), src: ti.template(), step: ti.i32):
+        for bs, i in ti.ndrange(self.batch, self.NV):
+            dst[bs, i] = src[bs, step, i]
     
+
+    @ti.kernel
+    def copy_slice_back(self, dst: ti.template(), src: ti.template(), step: ti.i32):
+        for bs, i in ti.ndrange(self.batch, self.NV):
+            dst[bs, step, i] = src[bs, i]
+
+
+    @ti.ad.grad_replaced
+    def update(self, step: int):
+        self.compute_force(step)
+        self.compute_jacobian(step)
+        # b = (force + h * K @ vel) * h
+        self.compute_b(step)
+
+        # Get only one step slice of dv for solving
+        self.copy_slice(self.dv_one_step, self.dv, step)
+        # Solve the linear system for dv
+        self.cg_solver(self.dv_one_step)
+        # Update dv using the solved result
+        self.copy_slice_back(self.dv, self.dv_one_step, step)
+
+        self.advect(step)
+
+
     @ti.ad.grad_for(update)
     def update_grad(self):
         self.advect.grad()
@@ -230,36 +285,44 @@ class ImplictMassSpringSolver:
 
 
     def cg_solver(self, x):
+        # x is a taichi vector field
+
         # print(" =============== ")
         # print("jx 20 ", self.Jx[20].to_numpy())
         # print("jx sum ", np.sqrt((self.Jx.to_numpy())**2).sum())
-        self.matrix_vector_product(x)
+        self.matrix_vector_product(x) # Adv = A @ x
         print("adv ", self.Adv.to_numpy().sum())
         # print("f ", self.force.to_numpy())
         # print("b before solve ", self.b.to_numpy().sum())
         # print("b sum ", self.b.to_numpy().sum())
-        self.add(self.r0, self.b, -1.0, self.Adv)
-        self.copy(self.p0, self.r0)
-        r_2 = self.dot(self.r0, self.r0)
-        r_2_init = r_2
-        r_2_new = r_2
+        self.add(self.r0, self.b, -1.0, self.Adv) # r0 = b - Adv
+        self.copy(self.p0, self.r0) # p0 = r0
+
+        self.dot_batched(self.r2, self.r0, self.r0) # r2 = r0 @ r0
+        self.copy(self.r2_init, self.r2) # r2_init = r2
+        self.copy(self.r2_new, self.r2) # r2_new = r2
         n_iter = 24 # 24 CG iterations can achieve 1e-3 accuray gradient
         epsilon = 1e-6
         for i in range(n_iter):
             # if (i+1) % n_iter == 0:
             #     print(f"Iteration: {i} Residual: {r_2_new} thresold: {epsilon * r_2_init}")
-            self.matrix_vector_product(self.p0)
-            alpha = r_2 / self.dot(self.p0, self.Adv)
-            self.add(x, x, alpha, self.p0)
-            self.add(self.r1, self.r0, -alpha, self.Adv)
-            r_2_new = self.dot(self.r1, self.r1)
-            if r_2_new < epsilon * r_2_init:
-                break
-            beta = r_2_new / r_2
-            self.add(self.p1, self.r1, beta, self.p0)
+            self.matrix_vector_product(self.p0) # Adv = A @ p0
+
+            self.dot_batched(self.alpha, self.p0, self.Adv) # inv_alpha = p0 @ Adv
+            self.divide_batched(self.alpha, self.r2, self.alpha) # alpha = r2 / p0 @ Adv
+
+            self.add_batched(x, x, self.alpha, self.p0) # x = x + alpha * p0
+            self.substrct_batched(self.r1, self.r0, self.alpha, self.Adv) # r1 = r0 - alpha * Adv
+
+            self.dot_batched(self.r2_new, self.r1, self.r1) # r2_new = r1 @ r1
+            # if r_2_new < epsilon * r_2_init:
+            #     break
+            self.divide_batched(self.beta, self.r2_new, self.r2) # beta = r2_new / r2
+            self.add_batched(self.p1, self.p1, self.beta, self.p0) # p1 = r1 + beta * p0
             self.copy(self.r0, self.r1)
             self.copy(self.p0, self.p1)
-            r_2 = r_2_new
+            self.copy(self.r2, self.r2_new)
+
         print("adv after solve ", self.Adv.to_numpy().sum())
         # print("p0 ", self.p0.to_numpy().sum())
         # print("b ", self.b.to_numpy().sum())
@@ -283,6 +346,12 @@ class ImplictMassSpringSolver:
         self.force.grad.fill(0.0)
         self.b.grad.fill(0.0)
         self.actuation.grad.fill(0.0)
+    
+    @ti.kernel
+    def copy_states(self):
+        for bs, i in ti.ndrange(self.batch, self.NV):
+            self.pos[bs, 0, i] = self.pos[bs, self.substeps, i]
+            self.vel[bs, 0, i] = self.vel[bs, self.substeps, i]
 
 
 def main():
@@ -350,6 +419,9 @@ def main():
     actuator_pos_index = np.unique(np.array(springs)[actuation_mask,:2].flatten()).astype(int)
     actuator_pos = ti.Vector.field(3, ti.f32, len(actuator_pos_index))
     print(actuator_pos_index)
+
+    pos_vis_buffer = ti.Vector.field(3, ti.f32, shape=ms_solver.NV)
+
     while window.running:
 
         if window.get_event(ti.ui.PRESS):
@@ -359,9 +431,11 @@ def main():
             pause = not pause
 
         if not pause:
-            # Apply a random actutation for test
-            ms_solver.actuation.from_numpy(np.random.rand(len(springs)) * 0.5)
-            ms_solver.update()
+            for i in range(ms_solver.substeps):
+                # Apply a random actutation for test
+                ms_solver.actuation.from_numpy(np.random.rand(ms_solver.batch, len(springs)) * 0.5)
+                ms_solver.update(i)
+            ms_solver.copy_states()
 
         camera.track_user_inputs(window, movement_speed=0.03, hold_key=ti.ui.RMB)
         scene.set_camera(camera)
@@ -370,12 +444,15 @@ def main():
         scene.point_light(pos=(-1, 1, 0), color=(.7, .7, .7))
         scene.ambient_light((0.2, 0.2, 0.2))
 
+        pos_vis = ms_solver.pos.to_numpy()
+        pos_vis_buffer.from_numpy(pos_vis[0, -1, :])
 
-        actuation = ms_solver.pos.to_numpy()[actuator_pos_index]
+
+        actuation = pos_vis[0, -1, :][actuator_pos_index]
         actuator_pos.from_numpy(actuation)
 
-        scene.particles(actuator_pos, radius=0.005, color=(0.0, 0.0, 0.5))
-        scene.mesh(ms_solver.pos, indices=indices, color=(0.8, 0.6, 0.2))
+        # scene.particles(actuator_pos, radius=0.005, color=(0.0, 0.0, 0.5))
+        scene.mesh(pos_vis_buffer, indices=indices, color=(0.8, 0.6, 0.2))
         scene.mesh(vertices_ground, indices=indices_ground, color=(0.5, 0.5, 0.5), two_sided=True)
         canvas.scene(scene)
         window.show()
