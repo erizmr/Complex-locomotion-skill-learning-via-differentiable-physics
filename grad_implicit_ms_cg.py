@@ -350,8 +350,8 @@ class ImplictMassSpringSolver:
     @ti.kernel
     def copy_states(self):
         for bs, i in ti.ndrange(self.batch, self.NV):
-            self.pos[bs, 0, i] = self.pos[bs, self.substeps, i]
-            self.vel[bs, 0, i] = self.vel[bs, self.substeps, i]
+            self.pos[bs, 0, i] = self.pos[bs, self.substeps-1, i]
+            self.vel[bs, 0, i] = self.vel[bs, self.substeps-1, i]
 
 
 def main():
@@ -431,9 +431,9 @@ def main():
             pause = not pause
 
         if not pause:
+            # Apply a random actutation for test
+            ms_solver.actuation.from_numpy(np.random.rand(ms_solver.batch, len(springs)) * 0.5)
             for i in range(ms_solver.substeps):
-                # Apply a random actutation for test
-                ms_solver.actuation.from_numpy(np.random.rand(ms_solver.batch, len(springs)) * 0.5)
                 ms_solver.update(i)
             ms_solver.copy_states()
 
