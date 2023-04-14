@@ -258,7 +258,6 @@ class ImplictMassSpringSolver:
 
     @ti.ad.grad_replaced
     def update(self, step: int):
-        print(f"step: {step}")
         self.compute_force(step)
         self.compute_jacobian(step)
         # b = (force + h * K @ vel) * h
@@ -266,7 +265,6 @@ class ImplictMassSpringSolver:
 
         # Get only one step slice of dv for solving
         # self.copy_slice(self.dv_one_step, self.dv, step)
-
         self.dv_one_step.fill(0.0)
         # Solve the linear system for dv
         self.cg_solver(self.dv_one_step)
@@ -295,41 +293,32 @@ class ImplictMassSpringSolver:
         # print("jx 20 ", self.Jx[20].to_numpy())
         # print("jx sum ", np.sqrt((self.Jx.to_numpy())**2).sum())
         self.matrix_vector_product(x) # Adv = A @ x
-        print("adv before solve ", self.Adv.to_numpy().sum())
+        # print("adv before solve ", self.Adv.to_numpy().sum())
         # print("f ", self.force.to_numpy())
-        print("b before solve ", self.b.to_numpy().sum())
+        # print("b before solve ", self.b.to_numpy().sum())
         # print("b sum ", self.b.to_numpy().sum())
         self.add(self.r0, self.b, -1.0, self.Adv) # r0 = b - Adv
         self.copy(self.p0, self.r0) # p0 = r0
-        print("p0 before solve ", self.p0.to_numpy().sum())
-        print("r0 before solve ", self.r0.to_numpy().sum())
-
         self.dot_batched(self.r2, self.r0, self.r0) # r2 = r0 @ r0
-        print("r2 before solve ", self.r2.to_numpy().sum())
-        self.copy(self.r2_init, self.r2) # r2_init = r2
+        r2_init = self.r2.to_numpy() # r2_init = r2
         self.copy(self.r2_new, self.r2) # r2_new = r2
-        print("r2 ", self.r2)
-        print("r2 new ", self.r2_new)
         n_iter = 24 # 24 CG iterations can achieve 1e-3 accuray gradient
         epsilon = 1e-6
         for i in range(n_iter):
-            # if (i+1) % n_iter == 0:
-                # print(f"Iteration: {i} Residual: {self.r2_new} thresold: {epsilon * self.r2_init[0]}")
-            # if (i+1) % n_iter == 0:
-            print(f"Iteration: {i} Residual: {self.r2_new} thresold: {epsilon * self.r2_init[0]}")
-            self.matrix_vector_product(self.p0) # Adv = A @ p0
+            if (i+1) % n_iter == 0:
+                print(f"Iteration: {i} Residual: {self.r2_new.to_numpy().sum()} thresold: {epsilon * r2_init.sum()}")
 
+            self.matrix_vector_product(self.p0) # Adv = A @ p0
             self.dot_batched(self.alpha, self.p0, self.Adv) # inv_alpha = p0 @ Adv
-            print(f"Iteration: {i} inv alpha: {self.alpha}, p0: {self.p0}, adv: {self.Adv}")
             self.divide_batched(self.alpha, self.r2, self.alpha) # alpha = r2 / p0 @ Adv
-            print(f"Iteration: {i} alpha: {self.alpha}, p0: {self.p0}, r2: {self.r2}")
+            print(f"Iteration: {i} r_2; {self.r2.to_numpy().sum()} alpha: {self.alpha}, p0: {self.p0.to_numpy().sum()}, adv: {self.Adv.to_numpy().sum()}")
             self.add_batched(x, x, self.alpha, self.p0) # x = x + alpha * p0
             self.substract_batched(self.r1, self.r0, self.alpha, self.Adv) # r1 = r0 - alpha * Adv
-
             self.dot_batched(self.r2_new, self.r1, self.r1) # r2_new = r1 @ r1
-            # print(f"Iteration: {i} alpha: {self.alpha}, r1: {self.r1}, r2_new: {self.r2_new}")
-            # if r_2_new < epsilon * r_2_init:
-            #     break
+
+            if self.r2_new.to_numpy().sum() < epsilon * r2_init.sum():
+                break
+
             self.divide_batched(self.beta, self.r2_new, self.r2) # beta = r2_new / r2
             self.add_batched(self.p1, self.r1, self.beta, self.p0) # p1 = r1 + beta * p0
             self.copy(self.r0, self.r1)
