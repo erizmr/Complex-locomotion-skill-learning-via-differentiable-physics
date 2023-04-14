@@ -235,7 +235,7 @@ class ImplictMassSpringSolver:
     @ti.kernel
     def divide_batched(self, ans: ti.template(), a: ti.template(), b: ti.template()):
         for bs in range(self.batch):
-            ans[bs] = a[bs] / b[bs]
+            ans[bs] = a[bs] / (b[bs] + 1e-6)
 
 
     @ti.kernel
@@ -275,14 +275,16 @@ class ImplictMassSpringSolver:
 
 
     @ti.ad.grad_for(update)
-    def update_grad(self):
-        self.advect.grad()
+    def update_grad(self, step: int):
+        self.advect.grad(step)
         # print("b grad before", self.b.grad)
-        self.cg_solver_grad(self.dv)
-        self.apply_external_force.grad()
+        # Get the corresponding step slice of dv for solving
+        self.copy_slice(self.dv_one_step, self.dv, step)
+        self.cg_solver_grad(self.dv_one_step)
+        self.apply_external_force.grad(step)
         # print("b grad up: ", self.b.grad[5], "force grad ", self.force.grad[5])
         # print("actuation before", self.actuation.grad)
-        self.compute_force.grad()
+        self.compute_force.grad(step)
         # print("actuation ", self.actuation.grad)
 
 
@@ -305,13 +307,13 @@ class ImplictMassSpringSolver:
         n_iter = 24 # 24 CG iterations can achieve 1e-3 accuray gradient
         epsilon = 1e-6
         for i in range(n_iter):
-            if (i+1) % n_iter == 0:
-                print(f"Iteration: {i} Residual: {self.r2_new.to_numpy().sum()} thresold: {epsilon * r2_init.sum()}")
+            # if (i+1) % n_iter == 0:
+            #     print(f"Iteration: {i} Residual: {self.r2_new.to_numpy().sum()} thresold: {epsilon * r2_init.sum()}")
 
             self.matrix_vector_product(self.p0) # Adv = A @ p0
             self.dot_batched(self.alpha, self.p0, self.Adv) # inv_alpha = p0 @ Adv
             self.divide_batched(self.alpha, self.r2, self.alpha) # alpha = r2 / p0 @ Adv
-            print(f"Iteration: {i} r_2; {self.r2.to_numpy().sum()} alpha: {self.alpha}, p0: {self.p0.to_numpy().sum()}, adv: {self.Adv.to_numpy().sum()}")
+            # print(f"Iteration: {i} r_2; {self.r2.to_numpy().sum()} alpha: {self.alpha}, p0: {self.p0.to_numpy().sum()}, adv: {self.Adv.to_numpy().sum()}")
             self.add_batched(x, x, self.alpha, self.p0) # x = x + alpha * p0
             self.substract_batched(self.r1, self.r0, self.alpha, self.Adv) # r1 = r0 - alpha * Adv
             self.dot_batched(self.r2_new, self.r1, self.r1) # r2_new = r1 @ r1
@@ -325,9 +327,9 @@ class ImplictMassSpringSolver:
             self.copy(self.p0, self.p1)
             self.copy(self.r2, self.r2_new)
 
-        print("adv after solve ", self.Adv.to_numpy().sum())
-        print("p0 after solve ", self.p0.to_numpy().sum())
-        print("b after solve ", self.b.to_numpy().sum())
+        # print("adv after solve ", self.Adv.to_numpy().sum())
+        # print("p0 after solve ", self.p0.to_numpy().sum())
+        # print("b after solve ", self.b.to_numpy().sum())
         # print("b grad", self.b.grad.to_numpy().sum())
 
 
@@ -391,8 +393,11 @@ def main():
     # robot_builder.draw()
 
     h = 0.01
+    BATCH_SIZE = 8
+    VIS_BATCH = 0
+    SUBSTEPS = 10
     pause = False
-    ms_solver = ImplictMassSpringSolver(robot_builder)
+    ms_solver = ImplictMassSpringSolver(robot_builder, batch=BATCH_SIZE, substeps=SUBSTEPS)
 
     window = ti.ui.Window('Implicit Mass Spring System', res=(800, 800), vsync=True, show_window=True)
     canvas = window.get_canvas()
@@ -434,7 +439,7 @@ def main():
 
         if not pause:
             # Apply a random actutation for test
-            # ms_solver.actuation.from_numpy(np.random.rand(ms_solver.batch, len(springs)) * 0.5)
+            ms_solver.actuation.from_numpy(np.random.rand(ms_solver.batch, len(springs)) * 0.5)
             for i in range(ms_solver.substeps):
                 ms_solver.update(i)
             ms_solver.copy_states()
@@ -447,13 +452,13 @@ def main():
         scene.ambient_light((0.2, 0.2, 0.2))
 
         pos_vis = ms_solver.pos.to_numpy()
-        pos_vis_buffer.from_numpy(pos_vis[0, -1, :])
+        pos_vis_buffer.from_numpy(pos_vis[VIS_BATCH, -1, :])
 
 
-        actuation = pos_vis[0, -1, :][actuator_pos_index]
+        actuation = pos_vis[VIS_BATCH, -1, :][actuator_pos_index]
         actuator_pos.from_numpy(actuation)
 
-        # scene.particles(actuator_pos, radius=0.005, color=(0.0, 0.0, 0.5))
+        scene.particles(actuator_pos, radius=0.005, color=(0.0, 0.0, 0.5))
         scene.mesh(pos_vis_buffer, indices=indices, color=(0.8, 0.6, 0.2))
         scene.mesh(vertices_ground, indices=indices_ground, color=(0.5, 0.5, 0.5), two_sided=True)
         canvas.scene(scene)

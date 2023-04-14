@@ -58,7 +58,7 @@ def torch2ti_grad_vec(field: ti.template(), grad: ti.types.ndarray()):
 
 @ti.kernel
 def torch2ti_vec3(field: ti.template(), data: ti.types.ndarray()):
-    for i in field:
+    for i in ti.grouped(field):
         field[i][0] = data[i, 0]
         field[i][1] = data[i, 1]
         field[i][2] = data[i, 2]
@@ -66,7 +66,7 @@ def torch2ti_vec3(field: ti.template(), data: ti.types.ndarray()):
 
 @ti.kernel
 def ti2torch_vec3(field: ti.template(), data: ti.types.ndarray()):
-    for i in field:
+    for i in ti.grouped(field):
         data[i, 0] = field[i][0]
         data[i, 1] = field[i][1]
         data[i, 2] = field[i][2]
@@ -74,7 +74,7 @@ def ti2torch_vec3(field: ti.template(), data: ti.types.ndarray()):
 
 @ti.kernel
 def torch2ti_grad_vec3(field: ti.template(), grad: ti.types.ndarray()):
-    for i in field:
+    for i in ti.grouped(field):
         field.grad[i][0] = grad[i, 0]
         field.grad[i][1] = grad[i, 1]
         field.grad[i][2] = grad[i, 2]
@@ -82,7 +82,7 @@ def torch2ti_grad_vec3(field: ti.template(), grad: ti.types.ndarray()):
 
 @ti.kernel
 def ti2torch_grad_vec3(field: ti.template(), grad: ti.types.ndarray()):
-    for i in field:
+    for i in ti.grouped(field):
         grad[i, 0] = field.grad[i][0]
         grad[i, 1] = field.grad[i][1]
         grad[i, 2] = field.grad[i][2]
