@@ -16,7 +16,7 @@ class ImplictMassSpringSolver:
         self.dt = dt
         self.batch = batch
         self.substeps = substeps + 1
-
+        print(f"Batch: {self.batch}, Substep: {self.substeps-1}, dt: {self.dt}, data type: {self.data_type}")
         _vertices, _springs_data, _faces = robot_builder.get_objects()
         self.vertices = np.array(_vertices) # [NV, 3]
         self.springs_data = np.array(_springs_data) # [NE, (a, b, length, stiffness, actuation)]
@@ -154,7 +154,7 @@ class ImplictMassSpringSolver:
         for bs, i in ti.ndrange(self.batch, self.NV):
             old_x = self.pos[bs, step, i]
             old_v = self.vel[bs, step, i] + self.dv[bs, step, i]
-            new_x = self.dt * old_v + self.pos[bs, step, i]
+            new_x = self.dt * old_v + old_x
             toi = self.data_type(0.0)
             new_v = old_v
             if new_x[1] < self.ground_height and old_v[1] < -1e-4:
@@ -218,7 +218,7 @@ class ImplictMassSpringSolver:
     
 
     @ti.kernel
-    def substrct_batched(self, ans: ti.template(), a: ti.template(), k: ti.template(), b: ti.template()):
+    def substract_batched(self, ans: ti.template(), a: ti.template(), k: ti.template(), b: ti.template()):
         for bs, i in ti.ndrange(self.batch, self.NV):
             ans[bs, i] = a[bs, i] - k[bs] * b[bs, i]
 
@@ -257,6 +257,7 @@ class ImplictMassSpringSolver:
 
     @ti.ad.grad_replaced
     def update(self, step: int):
+        print(f"step: {step}")
         self.compute_force(step)
         self.compute_jacobian(step)
         # b = (force + h * K @ vel) * h
@@ -312,7 +313,7 @@ class ImplictMassSpringSolver:
             self.divide_batched(self.alpha, self.r2, self.alpha) # alpha = r2 / p0 @ Adv
 
             self.add_batched(x, x, self.alpha, self.p0) # x = x + alpha * p0
-            self.substrct_batched(self.r1, self.r0, self.alpha, self.Adv) # r1 = r0 - alpha * Adv
+            self.substract_batched(self.r1, self.r0, self.alpha, self.Adv) # r1 = r0 - alpha * Adv
 
             self.dot_batched(self.r2_new, self.r1, self.r1) # r2_new = r1 @ r1
             # if r_2_new < epsilon * r_2_init:
