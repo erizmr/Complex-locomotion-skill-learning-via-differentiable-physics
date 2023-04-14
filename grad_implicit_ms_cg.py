@@ -15,8 +15,9 @@ class ImplictMassSpringSolver:
         self.data_type = data_type
         self.dt = dt
         self.batch = batch
-        self.substeps = substeps + 1
-        print(f"Batch: {self.batch}, Substep: {self.substeps-1}, dt: {self.dt}, data type: {self.data_type}")
+        self.substeps = substeps
+        self.substeps_offset = substeps + 1
+        print(f"Batch: {self.batch}, Substep: {self.substeps}, dt: {self.dt}, data type: {self.data_type}")
         _vertices, _springs_data, _faces = robot_builder.get_objects()
         self.vertices = np.array(_vertices) # [NV, 3]
         self.springs_data = np.array(_springs_data) # [NE, (a, b, length, stiffness, actuation)]
@@ -29,10 +30,10 @@ class ImplictMassSpringSolver:
         self.initPos = ti.Vector.field(self.dim, self.data_type, self.NV)
 
         # [batch, substeps, NV, dim]
-        self.pos = ti.Vector.field(self.dim, self.data_type, shape=(self.batch, self.substeps, self.NV), needs_grad=True)
-        self.vel = ti.Vector.field(self.dim, self.data_type, shape=(self.batch, self.substeps, self.NV), needs_grad=True)
-        self.dv = ti.Vector.field(self.dim, self.data_type, shape=(self.batch, self.substeps, self.NV), needs_grad=True)
-        self.force = ti.Vector.field(self.dim, self.data_type, shape=(self.batch, self.substeps, self.NV), needs_grad=True)
+        self.pos = ti.Vector.field(self.dim, self.data_type, shape=(self.batch, self.substeps_offset, self.NV), needs_grad=True)
+        self.vel = ti.Vector.field(self.dim, self.data_type, shape=(self.batch, self.substeps_offset, self.NV), needs_grad=True)
+        self.dv = ti.Vector.field(self.dim, self.data_type, shape=(self.batch, self.substeps_offset, self.NV), needs_grad=True)
+        self.force = ti.Vector.field(self.dim, self.data_type, shape=(self.batch, self.substeps_offset, self.NV), needs_grad=True)
         self.mass = ti.field(self.data_type, self.NV)
 
         # [batch, NV, dim]
@@ -77,8 +78,8 @@ class ImplictMassSpringSolver:
     def init_pos(self):
         self.initPos.from_numpy(np.array(self.vertices))
         pos_arr = np.expand_dims(np.array(self.vertices), axis=(0, 1))
-        self.pos.from_numpy(np.tile(pos_arr, (self.batch, self.substeps, 1, 1)))
-        self.vel.from_numpy(np.zeros((self.batch, self.substeps, self.NV, self.dim))) # assume initial velocity is 0
+        self.pos.from_numpy(np.tile(pos_arr, (self.batch, self.substeps_offset, 1, 1)))
+        self.vel.from_numpy(np.zeros((self.batch, self.substeps_offset, self.NV, self.dim))) # assume initial velocity is 0
         self.mass.from_numpy(np.ones(self.NV)) # assume mass is 1 for all vertices
         self.dv.fill(0.0)
     
@@ -185,7 +186,7 @@ class ImplictMassSpringSolver:
 
     @ti.kernel
     def apply_hessian_vel(self, step: ti.int32):
-        for bs, i in ti.ndrange(self.batch, self.NV):
+        for bs, i in ti.ndrange(self.batch, self.NE):
             idx1, idx2 = self.spring[i][0], self.spring[i][1]
             val = self.Jx[bs, i]@(self.vel[bs, step, idx1] - self.vel[bs, step, idx2])
             self.b[bs, idx1] += -val* self.dt**2
@@ -226,7 +227,7 @@ class ImplictMassSpringSolver:
     @ti.kernel
     def dot_batched(self, ans: ti.template(), a: ti.template(), b: ti.template()):
         for bs in range(self.batch):
-            ans[bs] = 0.0
+            ans[bs] = self.data_type(0.0)
         for bs, i in ti.ndrange(self.batch, self.NV):
             ans[bs] += a[bs, i].dot(b[bs, i])
     
@@ -264,7 +265,9 @@ class ImplictMassSpringSolver:
         self.compute_b(step)
 
         # Get only one step slice of dv for solving
-        self.copy_slice(self.dv_one_step, self.dv, step)
+        # self.copy_slice(self.dv_one_step, self.dv, step)
+
+        self.dv_one_step.fill(0.0)
         # Solve the linear system for dv
         self.cg_solver(self.dv_one_step)
         # Update dv using the solved result
@@ -292,41 +295,50 @@ class ImplictMassSpringSolver:
         # print("jx 20 ", self.Jx[20].to_numpy())
         # print("jx sum ", np.sqrt((self.Jx.to_numpy())**2).sum())
         self.matrix_vector_product(x) # Adv = A @ x
-        print("adv ", self.Adv.to_numpy().sum())
+        print("adv before solve ", self.Adv.to_numpy().sum())
         # print("f ", self.force.to_numpy())
-        # print("b before solve ", self.b.to_numpy().sum())
+        print("b before solve ", self.b.to_numpy().sum())
         # print("b sum ", self.b.to_numpy().sum())
         self.add(self.r0, self.b, -1.0, self.Adv) # r0 = b - Adv
         self.copy(self.p0, self.r0) # p0 = r0
+        print("p0 before solve ", self.p0.to_numpy().sum())
+        print("r0 before solve ", self.r0.to_numpy().sum())
 
         self.dot_batched(self.r2, self.r0, self.r0) # r2 = r0 @ r0
+        print("r2 before solve ", self.r2.to_numpy().sum())
         self.copy(self.r2_init, self.r2) # r2_init = r2
         self.copy(self.r2_new, self.r2) # r2_new = r2
+        print("r2 ", self.r2)
+        print("r2 new ", self.r2_new)
         n_iter = 24 # 24 CG iterations can achieve 1e-3 accuray gradient
         epsilon = 1e-6
         for i in range(n_iter):
             # if (i+1) % n_iter == 0:
-            #     print(f"Iteration: {i} Residual: {r_2_new} thresold: {epsilon * r_2_init}")
+                # print(f"Iteration: {i} Residual: {self.r2_new} thresold: {epsilon * self.r2_init[0]}")
+            # if (i+1) % n_iter == 0:
+            print(f"Iteration: {i} Residual: {self.r2_new} thresold: {epsilon * self.r2_init[0]}")
             self.matrix_vector_product(self.p0) # Adv = A @ p0
 
             self.dot_batched(self.alpha, self.p0, self.Adv) # inv_alpha = p0 @ Adv
+            print(f"Iteration: {i} inv alpha: {self.alpha}, p0: {self.p0}, adv: {self.Adv}")
             self.divide_batched(self.alpha, self.r2, self.alpha) # alpha = r2 / p0 @ Adv
-
+            print(f"Iteration: {i} alpha: {self.alpha}, p0: {self.p0}, r2: {self.r2}")
             self.add_batched(x, x, self.alpha, self.p0) # x = x + alpha * p0
             self.substract_batched(self.r1, self.r0, self.alpha, self.Adv) # r1 = r0 - alpha * Adv
 
             self.dot_batched(self.r2_new, self.r1, self.r1) # r2_new = r1 @ r1
+            # print(f"Iteration: {i} alpha: {self.alpha}, r1: {self.r1}, r2_new: {self.r2_new}")
             # if r_2_new < epsilon * r_2_init:
             #     break
             self.divide_batched(self.beta, self.r2_new, self.r2) # beta = r2_new / r2
-            self.add_batched(self.p1, self.p1, self.beta, self.p0) # p1 = r1 + beta * p0
+            self.add_batched(self.p1, self.r1, self.beta, self.p0) # p1 = r1 + beta * p0
             self.copy(self.r0, self.r1)
             self.copy(self.p0, self.p1)
             self.copy(self.r2, self.r2_new)
 
         print("adv after solve ", self.Adv.to_numpy().sum())
-        # print("p0 ", self.p0.to_numpy().sum())
-        # print("b ", self.b.to_numpy().sum())
+        print("p0 after solve ", self.p0.to_numpy().sum())
+        print("b after solve ", self.b.to_numpy().sum())
         # print("b grad", self.b.grad.to_numpy().sum())
 
 
@@ -351,8 +363,8 @@ class ImplictMassSpringSolver:
     @ti.kernel
     def copy_states(self):
         for bs, i in ti.ndrange(self.batch, self.NV):
-            self.pos[bs, 0, i] = self.pos[bs, self.substeps-1, i]
-            self.vel[bs, 0, i] = self.vel[bs, self.substeps-1, i]
+            self.pos[bs, 0, i] = self.pos[bs, self.substeps, i]
+            self.vel[bs, 0, i] = self.vel[bs, self.substeps, i]
 
 
 def main():
@@ -376,7 +388,7 @@ def main():
     # args, unknowns = parser.parse_known_args()
     arch = args.arch
     if arch in ["x64", "cpu", "arm64"]:
-        ti.init(arch=ti.cpu)
+        ti.init(arch=ti.cpu, debug=True)
     elif arch in ["cuda", "gpu"]:
         ti.init(arch=ti.cuda)
     else:
@@ -433,7 +445,7 @@ def main():
 
         if not pause:
             # Apply a random actutation for test
-            ms_solver.actuation.from_numpy(np.random.rand(ms_solver.batch, len(springs)) * 0.5)
+            # ms_solver.actuation.from_numpy(np.random.rand(ms_solver.batch, len(springs)) * 0.5)
             for i in range(ms_solver.substeps):
                 ms_solver.update(i)
             ms_solver.copy_states()
