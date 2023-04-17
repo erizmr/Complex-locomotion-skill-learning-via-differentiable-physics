@@ -47,7 +47,7 @@ def main():
 
     BATCH_SIZE = 1
     VIS_BATCH = 0
-    SUBSTEPS = 10
+    SUBSTEPS = 5
     STEP_NUM = 1
     dt = 0.01
     pause = False
@@ -110,7 +110,7 @@ def main():
             for s in range(STEP_NUM):
                 # input_actions = torch.rand(BATCH_SIZE, ms_solver.ms_solver.NE, dtype=torch.float64, requires_grad=True)
                 sin_features = torch.sin(2 * math.pi * s + 2 * math.pi / N_SIN_WAVES * torch.arange(N_SIN_WAVES, dtype=torch_type)) * torch.ones(BATCH_SIZE, N_SIN_WAVES, dtype=torch_type, requires_grad=True)
-                state_features = (ms_solver.ms_solver.pos.to_torch()[:,s,:] - ms_solver.ms_solver.pos.to_torch()[:,s,:].mean(axis=1)).reshape(BATCH_SIZE, ms_solver.ms_solver.NV * 3)
+                state_features = (ms_solver.ms_solver.pos.to_torch()[:,-1,:] - ms_solver.ms_solver.pos.to_torch()[:,-1,:].mean(axis=1)).reshape(BATCH_SIZE, ms_solver.ms_solver.NV * 3)
                 # print(f"sin_features shape: {sin_features.shape}, state_features shape: {state_features.shape}")
                 input_features = torch.cat([sin_features, state_features], dim=1).to(device)
                 input_actions = controller(input_features)

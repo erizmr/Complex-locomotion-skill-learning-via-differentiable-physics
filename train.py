@@ -49,7 +49,7 @@ def main():
 
     BATCH_SIZE = 1
     VIS_BATCH = 0
-    SUBSTEPS = 10
+    SUBSTEPS = 5
     dt = 0.01
     pause = False
     device = "cuda"
@@ -63,12 +63,12 @@ def main():
     target_pos = torch.tensor([[1.0, 0.1, 0.1] for _ in range(BATCH_SIZE)], requires_grad=True).to(device)
     print("target shape ", target_pos.shape)
     # Training pipeline
-    EPOCHS = 50
+    EPOCHS = 100
     STEP_NUM = 1
     for epoch in range(EPOCHS):
         for s in range(STEP_NUM):
             sin_features = torch.sin(2 * math.pi * s + 2 * math.pi / N_SIN_WAVES * torch.arange(N_SIN_WAVES, dtype=torch_type)) * torch.ones(BATCH_SIZE, N_SIN_WAVES, dtype=torch_type, requires_grad=True)
-            state_features = (ms_solver.ms_solver.pos.to_torch()[:,s,:] - ms_solver.ms_solver.pos.to_torch()[:,s,:].mean(axis=1)).reshape(BATCH_SIZE, ms_solver.ms_solver.NV * 3)
+            state_features = (ms_solver.ms_solver.pos.to_torch()[:,-1,:] - ms_solver.ms_solver.pos.to_torch()[:,-1,:].mean(axis=1)).reshape(BATCH_SIZE, ms_solver.ms_solver.NV * 3)
             # print(f"sin_features shape: {sin_features.shape}, state_features shape: {state_features.shape}")
             input_features = torch.cat([sin_features, state_features], dim=1).to(device)
             # print(f"sin_features shape: {sin_features.shape}, state_features shape: {state_features.shape}, input_features shape: {input_features.shape}")
