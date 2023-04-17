@@ -265,7 +265,7 @@ class ImplictMassSpringSolver:
 
         # Get only one step slice of dv for solving
         # self.copy_slice(self.dv_one_step, self.dv, step)
-        self.dv_one_step.fill(0.0)
+        # self.dv_one_step.fill(0.0) # The initial guess is not important to CG
         # Solve the linear system for dv
         self.cg_solver(self.dv_one_step)
         # Update dv using the solved result

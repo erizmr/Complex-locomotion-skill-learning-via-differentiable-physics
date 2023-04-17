@@ -44,15 +44,16 @@ def main():
     vertices, springs, faces = robot_builder.build()
     # robot_builder.draw()
 
-    ms_solver = MassSpringSolver(robot_builder=robot_builder)
+    BATCH_SIZE = 8
+    VIS_BATCH = 5
+    SUBSTEPS = 10
+    dt = 0.01
+    pause = False
+    ms_solver = MassSpringSolver(robot_builder=robot_builder, batch_size=BATCH_SIZE, substeps=SUBSTEPS, dt=dt)
 
-    input_actions = torch.rand(ms_solver.ms_solver.NE, dtype=torch.float64, requires_grad=True)
-    # ms_solver.grad_check(input_actions)
-
-    h = 0.01
     pause = False
 
-    window = ti.ui.Window('Implicit Mass Spring System', res=(800, 800), vsync=True)
+    window = ti.ui.Window('Implicit Mass Spring System', res=(800, 800), vsync=True, show_window=True)
     canvas = window.get_canvas()
     scene = ti.ui.Scene()
     camera = ti.ui.make_camera()
@@ -79,6 +80,8 @@ def main():
     actuator_pos_index = np.unique(np.array(springs)[actuation_mask,:2].flatten()).astype(int)
     actuator_pos = ti.Vector.field(3, ti.f32, len(actuator_pos_index))
     print(actuator_pos_index)
+
+    pos_vis_buffer = ti.Vector.field(3, ti.f32, shape=ms_solver.NV)
     while window.running:
 
         if window.get_event(ti.ui.PRESS):
@@ -88,7 +91,7 @@ def main():
             pause = not pause
 
         if not pause:
-            input_actions = torch.rand(ms_solver.ms_solver.NE, dtype=torch.float64, requires_grad=True)
+            input_actions = torch.rand(BATCH_SIZE, ms_solver.ms_solver.NE, dtype=torch.float64, requires_grad=True)
             ms_solver(input_actions)
 
         camera.track_user_inputs(window, movement_speed=0.03, hold_key=ti.ui.RMB)
@@ -99,14 +102,19 @@ def main():
         scene.ambient_light((0.2, 0.2, 0.2))
 
 
-        actuation = ms_solver.ms_solver.pos.to_numpy()[actuator_pos_index]
+        pos_vis = ms_solver.pos.to_numpy()
+        pos_vis_buffer.from_numpy(pos_vis[VIS_BATCH, -1, :])
+
+
+        actuation = pos_vis[VIS_BATCH, -1, :][actuator_pos_index]
         actuator_pos.from_numpy(actuation)
 
         scene.particles(actuator_pos, radius=0.005, color=(0.0, 0.0, 0.5))
-        scene.mesh(ms_solver.ms_solver.pos, indices=indices, color=(0.8, 0.6, 0.2))
+        scene.mesh(pos_vis_buffer, indices=indices, color=(0.8, 0.6, 0.2))
         scene.mesh(vertices_ground, indices=indices_ground, color=(0.5, 0.5, 0.5), two_sided=True)
         canvas.scene(scene)
         window.show()
+
 
 
 if __name__ == '__main__':

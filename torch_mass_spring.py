@@ -9,22 +9,25 @@ from multitask.robot_design import RobotDesignMassSpring3D
 from grad_implicit_ms_cg import ImplictMassSpringSolver
 
 class MassSpringSolver(torch.nn.Module):
-    def __init__(self, robot_builder: RobotDesignMassSpring3D, dt=0.01, dim=3):
+    def __init__(self, robot_builder: RobotDesignMassSpring3D, batch_size=1, substeps=1, dt=0.01, dim=3):
         super(MassSpringSolver, self).__init__()
-
-        self.ms_solver = ImplictMassSpringSolver(robot_builder, dt=dt, dim=dim)
+        self.batch_size = batch_size
         self.dt = dt
-        self.substeps = 1
+        self.substeps = substeps
         self.cnt = 0
+        self.ms_solver = ImplictMassSpringSolver(robot_builder, batch=batch_size, substeps=self.substeps, dt=dt, dim=dim)
+        self.NV = self.ms_solver.NV
+        self.NE = self.ms_solver.NE
+        self.pos = self.ms_solver.pos
 
         self.register_buffer(
             'output_pos',
-            torch.zeros(self.ms_solver.NV, 3, dtype=torch_type),
+            torch.zeros(self.batch_size, self.substeps, self.NV, 3, dtype=torch_type),
             persistent=False
         )
         self.register_buffer(
             'grad_input_actions',
-            torch.zeros(self.ms_solver.NE, dtype=torch_type),
+            torch.zeros(self.batch_size, self.NE, dtype=torch_type),
             persistent=False
         )
         class _module_function(torch.autograd.Function):
@@ -32,12 +35,13 @@ class MassSpringSolver(torch.nn.Module):
             @staticmethod
             def forward(ctx, input_actions):
                 self.cnt += 1
-                print("forawrd num ", self.cnt)
+                # print("forawrd num ", self.cnt)
                 torch2ti(self.ms_solver.actuation, input_actions.contiguous())
                 # An initial guess set to zero
-                self.ms_solver.init_pos()
+                # self.ms_solver.init_pos()
                 for i in range(self.substeps):
-                    self.ms_solver.update()
+                    self.ms_solver.update(i)
+                self.ms_solver.copy_states()
                 ti2torch_vec3(self.ms_solver.pos, self.output_pos.contiguous())
                 
                 return self.output_pos
@@ -45,13 +49,13 @@ class MassSpringSolver(torch.nn.Module):
             @staticmethod
             def backward(ctx, grad_output_pos):
                 self.cnt -= 1
-                print("backward num ", self.cnt)           
+                # print("backward num ", self.cnt)          
                 # print(doutput.contiguous().shape)
                 self.zero_grad()
                 # print("grad rhs shape ", self.grad_rhs.contiguous().shape)
                 torch2ti_grad_vec3(self.ms_solver.pos, grad_output_pos.contiguous())
                 for i in reversed(range(self.substeps)):
-                    self.ms_solver.update_grad()
+                    self.ms_solver.update_grad(i)
                 ti2torch_grad(self.ms_solver.actuation, self.grad_input_actions.contiguous())
                 # print("grad_input_actions", self.grad_input_actions)
                 return self.grad_input_actions
