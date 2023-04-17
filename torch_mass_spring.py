@@ -7,6 +7,29 @@ from utils import (data_type, ti2torch, ti2torch_grad, ti2torch_grad_vec,
 
 from multitask.robot_design import RobotDesignMassSpring3D
 from grad_implicit_ms_cg import ImplictMassSpringSolver
+from torch import nn
+
+
+class ActuationNet(nn.Module):
+    def __init__(self, input_dim, output_dim, dtype=torch.float32):
+        super(ActuationNet, self).__init__()
+        # input_dim = n_sin_wave + n_vertices + target_pos
+        self.input_dim = input_dim
+        # output_dim = n_edges
+        self.output_dim = output_dim
+        self.fc1 = nn.Linear(self.input_dim, 64, dtype=dtype)
+        self.fc2 = nn.Linear(64, self.output_dim, dtype=dtype)
+        self.relu = nn.ReLU()
+        # self.tanh = nn.Tanh()
+
+    def forward(self, x):
+        # x: [batch, input_dim]
+        x = self.fc1(x)
+        x = torch.sin(x)
+        x = self.fc2(x)
+        x = torch.sin(x)
+        return x
+
 
 class MassSpringSolver(torch.nn.Module):
     def __init__(self, robot_builder: RobotDesignMassSpring3D, batch_size=1, substeps=1, dt=0.01, dim=3):
@@ -22,12 +45,12 @@ class MassSpringSolver(torch.nn.Module):
 
         self.register_buffer(
             'output_pos',
-            torch.zeros(self.batch_size, self.substeps, self.NV, 3, dtype=torch_type),
+            torch.zeros(self.batch_size, self.substeps+1, self.ms_solver.NV, 3, dtype=torch_type),
             persistent=False
         )
         self.register_buffer(
             'grad_input_actions',
-            torch.zeros(self.batch_size, self.NE, dtype=torch_type),
+            torch.zeros(self.batch_size, self.ms_solver.NE, dtype=torch_type),
             persistent=False
         )
         class _module_function(torch.autograd.Function):
@@ -37,11 +60,9 @@ class MassSpringSolver(torch.nn.Module):
                 self.cnt += 1
                 # print("forawrd num ", self.cnt)
                 torch2ti(self.ms_solver.actuation, input_actions.contiguous())
-                # An initial guess set to zero
-                # self.ms_solver.init_pos()
-                for i in range(self.substeps):
-                    self.ms_solver.update(i)
                 self.ms_solver.copy_states()
+                for i in range(self.substeps):
+                    self.ms_solver.update(i)                
                 ti2torch_vec3(self.ms_solver.pos, self.output_pos.contiguous())
                 
                 return self.output_pos

@@ -97,7 +97,9 @@ class ImplictMassSpringSolver:
 
     @ti.kernel
     def compute_force(self, step: ti.i32):
-        self.clear_force(step)
+        for bs, i in ti.ndrange(self.batch, self.NV):
+            self.force[bs, step, i] = ti.Vector([0.0, 0.0, 0.0])
+        
         for bs, i in ti.ndrange(self.batch, self.NV):
             self.force[bs, step, i] += self.gravity * self.mass[i]
 
@@ -277,12 +279,15 @@ class ImplictMassSpringSolver:
     @ti.ad.grad_for(update)
     def update_grad(self, step: int):
         self.advect.grad(step)
+        # import IPython
+        # IPython.embed()
         # print("b grad before", self.b.grad)
         # Get the corresponding step slice of dv for solving
-        self.copy_slice(self.dv_one_step, self.dv, step)
+        self.copy_slice(self.dv_one_step.grad, self.dv.grad, step)
+        # print("dv one step grad ", self.dv_one_step.grad.to_numpy())
         self.cg_solver_grad(self.dv_one_step)
         self.apply_external_force.grad(step)
-        # print("b grad up: ", self.b.grad[5], "force grad ", self.force.grad[5])
+        # print("b grad up: ", self.b.grad, "force grad ", self.force.grad)
         # print("actuation before", self.actuation.grad)
         self.compute_force.grad(step)
         # print("actuation ", self.actuation.grad)
