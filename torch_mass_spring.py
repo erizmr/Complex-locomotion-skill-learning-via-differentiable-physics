@@ -49,37 +49,73 @@ class MassSpringSolver(torch.nn.Module):
             persistent=False
         )
         self.register_buffer(
+            'output_vel',
+            torch.zeros(self.batch_size, self.substeps+1, self.ms_solver.NV, 3, dtype=torch_type),
+            persistent=False
+        )
+        self.register_buffer(
             'grad_input_actions',
             torch.zeros(self.batch_size, self.ms_solver.NE, dtype=torch_type),
+            persistent=False
+        )
+        self.register_buffer(
+            'grad_input_pos',
+            torch.zeros(self.batch_size, self.ms_solver.NV, 3, dtype=torch_type),
+            persistent=False
+        )
+        self.register_buffer(
+            'grad_input_vel',
+            torch.zeros(self.batch_size, self.ms_solver.NV, 3, dtype=torch_type),
             persistent=False
         )
         class _module_function(torch.autograd.Function):
 
             @staticmethod
-            def forward(ctx, input_actions):
+            def forward(ctx, input_actions: torch.Tensor, input_pos: torch.Tensor, input_vel: torch.Tensor):
                 self.cnt += 1
                 # print("forawrd num ", self.cnt)
                 torch2ti(self.ms_solver.actuation, input_actions.contiguous())
-                self.ms_solver.copy_states()
+                self.ms_solver.initialize(input_pos=input_pos, input_vel=input_vel)
                 for i in range(self.substeps):
                     self.ms_solver.update(i)                
                 ti2torch_vec3(self.ms_solver.pos, self.output_pos.contiguous())
-                
-                return self.output_pos
+                ti2torch_vec3(self.ms_solver.vel, self.output_vel.contiguous())
+
+                # Save the whole trajectory for backward use
+                ctx.save_for_backward(self.output_pos, self.output_vel, self.ms_solver.dv.to_torch())
+
+                return self.output_pos, self.output_vel
 
             @staticmethod
-            def backward(ctx, grad_output_pos):
+            def backward(ctx, grad_output_pos: torch.Tensor, grad_output_vel: torch.Tensor):
                 self.cnt -= 1
                 # print("backward num ", self.cnt)          
-                # print(doutput.contiguous().shape)
                 self.zero_grad()
-                # print("grad rhs shape ", self.grad_rhs.contiguous().shape)
+
+                # Restore the saved trajectory
+                cached_pos, cached_vel, cached_dv = ctx.saved_tensors
+                torch2ti_vec3(self.ms_solver.pos, cached_pos.contiguous())
+                torch2ti_vec3(self.ms_solver.vel, cached_vel.contiguous())
+                torch2ti_vec3(self.ms_solver.dv, cached_dv.contiguous())
+
+                print(f"cnt {self.cnt} grad output pos {grad_output_pos[:, -1, :].sum()}")
+                # print("grad output pos shape ", grad_output_pos.shape, " grad output vel shape ", grad_output_vel.shape)
+                # Restore the gradient computed from last torch function
                 torch2ti_grad_vec3(self.ms_solver.pos, grad_output_pos.contiguous())
+                torch2ti_grad_vec3(self.ms_solver.vel, grad_output_vel.contiguous())
+                
                 for i in reversed(range(self.substeps)):
+                    # We only need the actuation gradient of the initial step
+                    self.ms_solver.actuation.grad.fill(0.0)
                     self.ms_solver.update_grad(i)
+                
                 ti2torch_grad(self.ms_solver.actuation, self.grad_input_actions.contiguous())
+                # Copy the gradient that has been backpropated to the initial step to outputs
+                self.ms_solver.copy_grad(self.grad_input_pos, self.grad_input_vel)
                 # print("grad_input_actions", self.grad_input_actions)
-                return self.grad_input_actions
+
+                print(f"cnt {self.cnt} grad input pos {self.grad_input_pos.sum()}")
+                return self.grad_input_actions, self.grad_input_pos, self.grad_input_vel
 
         self._module_function = _module_function
 
@@ -94,5 +130,5 @@ class MassSpringSolver(torch.nn.Module):
         #     print(str(self._module_function.__name__) + " failed: " + str(e))
         return torch.autograd.gradcheck(self._module_function.apply, inputs, eps=1e-6, atol=1e-3, rtol=1.e-3, raise_exception=True)
 
-    def forward(self, input_action):
-        return self._module_function.apply(input_action)
+    def forward(self, input_action: torch.Tensor, input_pos: torch.Tensor, input_vel: torch.Tensor):
+        return self._module_function.apply(input_action, input_pos, input_vel)

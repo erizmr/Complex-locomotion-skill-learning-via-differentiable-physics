@@ -89,6 +89,14 @@ class ImplictMassSpringSolver:
         self.rest_len.from_numpy(self.springs_data[:, 2])
         self.spring_actuation_coef.from_numpy(self.springs_data[:, 4])
         print("spring_actuation_coef ", self.spring_actuation_coef)
+    
+
+    @ti.kernel
+    def initialize(self, input_pos: ti.types.ndarray(), input_vel: ti.types.ndarray()):
+        for bs, i in ti.ndrange(self.batch, self.NV):
+            for j in ti.static(range(3)):
+                self.pos[bs, 0, i][j] = input_pos[bs, i, j]
+                self.vel[bs, 0, i][j] = input_vel[bs, i, j]
 
     @ti.func
     def clear_force(self, step: ti.i32):
@@ -282,11 +290,15 @@ class ImplictMassSpringSolver:
         # import IPython
         # IPython.embed()
         # print("b grad before", self.b.grad)
+
+        # Recover the jacobian at the current step (because Jacobian depends on positions)
+        self.compute_jacobian(step)
         # Get the corresponding step slice of dv for solving
         self.copy_slice(self.dv_one_step.grad, self.dv.grad, step)
         # print("dv one step grad ", self.dv_one_step.grad.to_numpy())
         self.cg_solver_grad(self.dv_one_step)
         self.apply_external_force.grad(step)
+
         # print("b grad up: ", self.b.grad, "force grad ", self.force.grad)
         # print("actuation before", self.actuation.grad)
         self.compute_force.grad(step)
@@ -354,13 +366,22 @@ class ImplictMassSpringSolver:
         self.dv.grad.fill(0.0)
         self.force.grad.fill(0.0)
         self.b.grad.fill(0.0)
-        self.actuation.grad.fill(0.0)
-    
+        # self.actuation.grad.fill(0.0)
+
+
     @ti.kernel
     def copy_states(self):
         for bs, i in ti.ndrange(self.batch, self.NV):
             self.pos[bs, 0, i] = self.pos[bs, self.substeps, i]
             self.vel[bs, 0, i] = self.vel[bs, self.substeps, i]
+
+
+    @ti.kernel
+    def copy_grad(self, grad_pos: ti.types.ndarray(), grad_vel: ti.types.ndarray()):
+        for bs, i in ti.ndrange(self.batch, self.NV):
+            for j in ti.static(range(self.dim)):
+                grad_pos[bs, i, j] = self.pos.grad[bs, 0, i][j]
+                grad_vel[bs, i, j] = self.vel.grad[bs, 0, i][j]
 
 
 def main():
@@ -372,13 +393,13 @@ def main():
     parser.add_argument('-a',
                         '--arch',
                         required=False,
-                        default="cpu",
+                        default="cuda",
                         dest='arch',
                         type=str,
                         help='The arch (backend) to run this example on')
     
     parser.add_argument('--robot_design_file',
-                        default='',
+                        default='./cfg3d/sim_quad.json',
                         help='robot design file')
     args = parser.parse_args()
     # args, unknowns = parser.parse_known_args()
@@ -398,9 +419,9 @@ def main():
     # robot_builder.draw()
 
     h = 0.01
-    BATCH_SIZE = 8
+    BATCH_SIZE = 256
     VIS_BATCH = 0
-    SUBSTEPS = 10
+    SUBSTEPS = 100
     pause = False
     ms_solver = ImplictMassSpringSolver(robot_builder, batch=BATCH_SIZE, substeps=SUBSTEPS)
 
