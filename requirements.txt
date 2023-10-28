@@ -1,0 +1,7 @@
+taichi>=1.4.0
+matplotlib
+numpy
+scipy
+pandas
+tensorboard==2.9.1
+tensorboardx==2.6

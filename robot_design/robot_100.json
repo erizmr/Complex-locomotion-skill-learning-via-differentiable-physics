@@ -1,0 +1,9 @@
+{
+  "robot": {
+    "name": "ljcc",
+    "id": 100,
+    "spring_stiffness": 2e4,
+    "spring_actuation": 0.2,
+    "solver": "mass_spring"
+  }
+}

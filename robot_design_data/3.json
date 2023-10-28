@@ -1,0 +1,495 @@
+{
+    "solver": "mass_spring",
+    "objects": [
+        {
+            "x": 0.1,
+            "y": 0.1
+        },
+        {
+            "x": 0.1,
+            "y": 0.15000000000000002
+        },
+        {
+            "x": 0.15000000000000002,
+            "y": 0.1
+        },
+        {
+            "x": 0.15000000000000002,
+            "y": 0.15000000000000002
+        },
+        {
+            "x": 0.1,
+            "y": 0.2
+        },
+        {
+            "x": 0.15000000000000002,
+            "y": 0.2
+        },
+        {
+            "x": 0.1,
+            "y": 0.25
+        },
+        {
+            "x": 0.15000000000000002,
+            "y": 0.25
+        },
+        {
+            "x": 0.2,
+            "y": 0.2
+        },
+        {
+            "x": 0.2,
+            "y": 0.25
+        },
+        {
+            "x": 0.2,
+            "y": 0.15000000000000002
+        },
+        {
+            "x": 0.25,
+            "y": 0.15000000000000002
+        },
+        {
+            "x": 0.25,
+            "y": 0.2
+        },
+        {
+            "x": 0.25,
+            "y": 0.25
+        },
+        {
+            "x": 0.2,
+            "y": 0.30000000000000004
+        },
+        {
+            "x": 0.25,
+            "y": 0.30000000000000004
+        },
+        {
+            "x": 0.2,
+            "y": 0.35
+        },
+        {
+            "x": 0.25,
+            "y": 0.35
+        },
+        {
+            "x": 0.30000000000000004,
+            "y": 0.15000000000000002
+        },
+        {
+            "x": 0.30000000000000004,
+            "y": 0.2
+        },
+        {
+            "x": 0.30000000000000004,
+            "y": 0.1
+        },
+        {
+            "x": 0.35,
+            "y": 0.1
+        },
+        {
+            "x": 0.35,
+            "y": 0.15000000000000002
+        },
+        {
+            "x": 0.35,
+            "y": 0.2
+        }
+    ],
+    "springs": [
+        {
+            "vertex_1": 0,
+            "vertex_2": 1,
+            "length": 0.05000000000000002,
+            "stiffness": 30000.0,
+            "actuation": 0.2
+        },
+        {
+            "vertex_1": 0,
+            "vertex_2": 2,
+            "length": 0.05000000000000002,
+            "stiffness": 30000.0,
+            "actuation": 0.0
+        },
+        {
+            "vertex_1": 0,
+            "vertex_2": 3,
+            "length": 0.07071067811865478,
+            "stiffness": 30000.0,
+            "actuation": 0.0
+        },
+        {
+            "vertex_1": 1,
+            "vertex_2": 2,
+            "length": 0.07071067811865478,
+            "stiffness": 30000.0,
+            "actuation": 0.0
+        },
+        {
+            "vertex_1": 1,
+            "vertex_2": 3,
+            "length": 0.05000000000000002,
+            "stiffness": 30000.0,
+            "actuation": 0.0
+        },
+        {
+            "vertex_1": 2,
+            "vertex_2": 3,
+            "length": 0.05000000000000002,
+            "stiffness": 30000.0,
+            "actuation": 0.2
+        },
+        {
+            "vertex_1": 1,
+            "vertex_2": 4,
+            "length": 0.04999999999999999,
+            "stiffness": 30000.0,
+            "actuation": 0.2
+        },
+        {
+            "vertex_1": 1,
+            "vertex_2": 5,
+            "length": 0.07071067811865477,
+            "stiffness": 30000.0,
+            "actuation": 0.0
+        },
+        {
+            "vertex_1": 4,
+            "vertex_2": 3,
+            "length": 0.07071067811865477,
+            "stiffness": 30000.0,
+            "actuation": 0.0
+        },
+        {
+            "vertex_1": 4,
+            "vertex_2": 5,
+            "length": 0.05000000000000002,
+            "stiffness": 30000.0,
+            "actuation": 0.0
+        },
+        {
+            "vertex_1": 3,
+            "vertex_2": 5,
+            "length": 0.04999999999999999,
+            "stiffness": 30000.0,
+            "actuation": 0.2
+        },
+        {
+            "vertex_1": 4,
+            "vertex_2": 6,
+            "length": 0.04999999999999999,
+            "stiffness": 30000.0,
+            "actuation": 0.0
+        },
+        {
+            "vertex_1": 4,
+            "vertex_2": 7,
+            "length": 0.07071067811865477,
+            "stiffness": 30000.0,
+            "actuation": 0.0
+        },
+        {
+            "vertex_1": 6,
+            "vertex_2": 5,
+            "length": 0.07071067811865477,
+            "stiffness": 30000.0,
+            "actuation": 0.0
+        },
+        {
+            "vertex_1": 6,
+            "vertex_2": 7,
+            "length": 0.05000000000000002,
+            "stiffness": 30000.0,
+            "actuation": 0.0
+        },
+        {
+            "vertex_1": 5,
+            "vertex_2": 7,
+            "length": 0.04999999999999999,
+            "stiffness": 30000.0,
+            "actuation": 0.0
+        },
+        {
+            "vertex_1": 5,
+            "vertex_2": 8,
+            "length": 0.04999999999999999,
+            "stiffness": 30000.0,
+            "actuation": 0.0
+        },
+        {
+            "vertex_1": 5,
+            "vertex_2": 9,
+            "length": 0.07071067811865474,
+            "stiffness": 30000.0,
+            "actuation": 0.0
+        },
+        {
+            "vertex_1": 7,
+            "vertex_2": 8,
+            "length": 0.07071067811865474,
+            "stiffness": 30000.0,
+            "actuation": 0.0
+        },
+        {
+            "vertex_1": 7,
+            "vertex_2": 9,
+            "length": 0.04999999999999999,
+            "stiffness": 30000.0,
+            "actuation": 0.0
+        },
+        {
+            "vertex_1": 8,
+            "vertex_2": 9,
+            "length": 0.04999999999999999,
+            "stiffness": 30000.0,
+            "actuation": 0.0
+        },
+        {
+            "vertex_1": 10,
+            "vertex_2": 8,
+            "length": 0.04999999999999999,
+            "stiffness": 30000.0,
+            "actuation": 0.2
+        },
+        {
+            "vertex_1": 10,
+            "vertex_2": 11,
+            "length": 0.04999999999999999,
+            "stiffness": 30000.0,
+            "actuation": 0.0
+        },
+        {
+            "vertex_1": 10,
+            "vertex_2": 12,
+            "length": 0.07071067811865474,
+            "stiffness": 30000.0,
+            "actuation": 0.0
+        },
+        {
+            "vertex_1": 8,
+            "vertex_2": 11,
+            "length": 0.07071067811865474,
+            "stiffness": 30000.0,
+            "actuation": 0.0
+        },
+        {
+            "vertex_1": 8,
+            "vertex_2": 12,
+            "length": 0.04999999999999999,
+            "stiffness": 30000.0,
+            "actuation": 0.0
+        },
+        {
+            "vertex_1": 11,
+            "vertex_2": 12,
+            "length": 0.04999999999999999,
+            "stiffness": 30000.0,
+            "actuation": 0.2
+        },
+        {
+            "vertex_1": 8,
+            "vertex_2": 13,
+            "length": 0.07071067811865474,
+            "stiffness": 30000.0,
+            "actuation": 0.0
+        },
+        {
+            "vertex_1": 9,
+            "vertex_2": 12,
+            "length": 0.07071067811865474,
+            "stiffness": 30000.0,
+            "actuation": 0.0
+        },
+        {
+            "vertex_1": 9,
+            "vertex_2": 13,
+            "length": 0.04999999999999999,
+            "stiffness": 30000.0,
+            "actuation": 0.0
+        },
+        {
+            "vertex_1": 12,
+            "vertex_2": 13,
+            "length": 0.04999999999999999,
+            "stiffness": 30000.0,
+            "actuation": 0.0
+        },
+        {
+            "vertex_1": 9,
+            "vertex_2": 14,
+            "length": 0.050000000000000044,
+            "stiffness": 30000.0,
+            "actuation": 0.0
+        },
+        {
+            "vertex_1": 9,
+            "vertex_2": 15,
+            "length": 0.07071067811865477,
+            "stiffness": 30000.0,
+            "actuation": 0.0
+        },
+        {
+            "vertex_1": 14,
+            "vertex_2": 13,
+            "length": 0.07071067811865477,
+            "stiffness": 30000.0,
+            "actuation": 0.0
+        },
+        {
+            "vertex_1": 14,
+            "vertex_2": 15,
+            "length": 0.04999999999999999,
+            "stiffness": 30000.0,
+            "actuation": 0.0
+        },
+        {
+            "vertex_1": 13,
+            "vertex_2": 15,
+            "length": 0.050000000000000044,
+            "stiffness": 30000.0,
+            "actuation": 0.0
+        },
+        {
+            "vertex_1": 14,
+            "vertex_2": 16,
+            "length": 0.04999999999999993,
+            "stiffness": 30000.0,
+            "actuation": 0.0
+        },
+        {
+            "vertex_1": 14,
+            "vertex_2": 17,
+            "length": 0.0707106781186547,
+            "stiffness": 30000.0,
+            "actuation": 0.0
+        },
+        {
+            "vertex_1": 16,
+            "vertex_2": 15,
+            "length": 0.0707106781186547,
+            "stiffness": 30000.0,
+            "actuation": 0.0
+        },
+        {
+            "vertex_1": 16,
+            "vertex_2": 17,
+            "length": 0.04999999999999999,
+            "stiffness": 30000.0,
+            "actuation": 0.0
+        },
+        {
+            "vertex_1": 15,
+            "vertex_2": 17,
+            "length": 0.04999999999999993,
+            "stiffness": 30000.0,
+            "actuation": 0.0
+        },
+        {
+            "vertex_1": 11,
+            "vertex_2": 18,
+            "length": 0.050000000000000044,
+            "stiffness": 30000.0,
+            "actuation": 0.0
+        },
+        {
+            "vertex_1": 11,
+            "vertex_2": 19,
+            "length": 0.07071067811865477,
+            "stiffness": 30000.0,
+            "actuation": 0.0
+        },
+        {
+            "vertex_1": 12,
+            "vertex_2": 18,
+            "length": 0.07071067811865477,
+            "stiffness": 30000.0,
+            "actuation": 0.0
+        },
+        {
+            "vertex_1": 12,
+            "vertex_2": 19,
+            "length": 0.050000000000000044,
+            "stiffness": 30000.0,
+            "actuation": 0.0
+        },
+        {
+            "vertex_1": 18,
+            "vertex_2": 19,
+            "length": 0.04999999999999999,
+            "stiffness": 30000.0,
+            "actuation": 0.0
+        },
+        {
+            "vertex_1": 20,
+            "vertex_2": 18,
+            "length": 0.05000000000000002,
+            "stiffness": 30000.0,
+            "actuation": 0.2
+        },
+        {
+            "vertex_1": 20,
+            "vertex_2": 21,
+            "length": 0.04999999999999993,
+            "stiffness": 30000.0,
+            "actuation": 0.0
+        },
+        {
+            "vertex_1": 20,
+            "vertex_2": 22,
+            "length": 0.07071067811865472,
+            "stiffness": 30000.0,
+            "actuation": 0.0
+        },
+        {
+            "vertex_1": 18,
+            "vertex_2": 21,
+            "length": 0.07071067811865472,
+            "stiffness": 30000.0,
+            "actuation": 0.0
+        },
+        {
+            "vertex_1": 18,
+            "vertex_2": 22,
+            "length": 0.04999999999999993,
+            "stiffness": 30000.0,
+            "actuation": 0.0
+        },
+        {
+            "vertex_1": 21,
+            "vertex_2": 22,
+            "length": 0.05000000000000002,
+            "stiffness": 30000.0,
+            "actuation": 0.2
+        },
+        {
+            "vertex_1": 18,
+            "vertex_2": 23,
+            "length": 0.0707106781186547,
+            "stiffness": 30000.0,
+            "actuation": 0.0
+        },
+        {
+            "vertex_1": 19,
+            "vertex_2": 22,
+            "length": 0.0707106781186547,
+            "stiffness": 30000.0,
+            "actuation": 0.0
+        },
+        {
+            "vertex_1": 19,
+            "vertex_2": 23,
+            "length": 0.04999999999999993,
+            "stiffness": 30000.0,
+            "actuation": 0.0
+        },
+        {
+            "vertex_1": 22,
+            "vertex_2": 23,
+            "length": 0.04999999999999999,
+            "stiffness": 30000.0,
+            "actuation": 0.2
+        }
+    ]
+}
