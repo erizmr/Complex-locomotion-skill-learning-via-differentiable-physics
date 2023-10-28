@@ -1,4 +1,4 @@
-# SNMT
+# Complex locomotion skill learning via differentiable physics
 ![Agents](./imgs/3d_collection.png)
 
 ## Installation
