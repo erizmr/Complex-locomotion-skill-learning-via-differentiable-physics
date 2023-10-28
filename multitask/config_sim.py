@@ -1,16 +1,20 @@
 import os
 import json
 import time
-import math
-import logging
-
 from datetime import datetime
 from pathlib import Path
-from multitask.robot_config import robots
-from multitask.robot3d_config import robots3d
-from multitask.robot_mpm import robots_mpm, n_grid, dx, n_squ
+
+from multitask.robot_mpm import robots_mpm, n_grid, dx
 from multitask.robot_design import RobotDesignBase, RobotDesignMassSpring, RobotDesignMassSpring3D, RobotDesignMPM
+
+# from robot_config import robots
+# from robot3d_config import robots3d
+# from robot_mpm import robots_mpm, n_grid, dx
+
 from util import read_json, write_json
+import sys
+import math
+import logging
 from logger import setup_logging
 
 
@@ -76,7 +80,6 @@ class ConfigSim:
         elif solver_type == "mpm":
             self.robot_builder = RobotDesignMPM.from_file(file_name=robot_design_file)
             objects, springs, n_springs = self.robot_builder.build()
-            # objects, springs, n_springs = robots_mpm[0]()
         else:
             raise NotImplementedError(f"{solver_type} not implemented.")
 
@@ -105,10 +108,6 @@ class ConfigSim:
         self._config["robot"]["n_objects"] = n_objects
         self._config["robot"]["n_springs"] = n_springs
 
-        if solver_type == "mpm":
-            self._config["robot"]["n_squ"] = n_squ
-            self._config["robot"]["n_squares"] = n_objects // (n_squ ** 2)
-
         # Process
         self._config["process"]["dt"] = 0.004 if self._config["robot"][
             "simulator"] == "mass_spring" else 0.001
@@ -129,35 +128,22 @@ class ConfigSim:
         self._config["simulator"]["mpm"][
             "inv_dx"] = 1 / self._config["simulator"]["mpm"]["dx"]
 
-        # NN
-        if self._config["robot"]["dim"] == 3:
-            self._config["nn"]["duplicate_v"] = 1
-            self._config["nn"]["duplicate_h"] = 0
-
         n_sin_waves = self._config["nn"]["n_sin_waves"]
         dim = self._config["robot"]["dim"]
         n_objects = self._config["robot"]["n_objects"]
         duplicate_h = self._config["nn"]["duplicate_h"]
         duplicate_v = self._config["nn"]["duplicate_v"]
         duplicate_c = self._config["nn"]["duplicate_c"]
-        duplicate_o = self._config["nn"]["duplicate_o"] if "duplicate_o" in self._config["nn"] else 0
 
-        if solver_type == "mass_spring":
-            self._config["nn"][
-                "n_input_states"] = n_sin_waves + dim * 2 * n_objects + duplicate_v * (
-                    dim - 1) + duplicate_h + duplicate_c
-        elif solver_type == "mpm":
-            n_squares = self._config["robot"]["n_squares"]
-            # self._config["nn"]["n_input_states"] = n_sin_waves + dim * 2 * n_squares + duplicate_v * (dim - 1) + duplicate_h + duplicate_c
-            self._config["nn"]["n_input_states"] = n_sin_waves + dim * 2 * n_squares + duplicate_v * (
-                        dim - 1) + duplicate_h + duplicate_c + duplicate_o * dim
-        else:
-            raise NotImplementedError(f"Solver {solver_type} not implemented.")
+        self._config["nn"][
+            "n_input_states"] = n_sin_waves + dim * 2 * n_objects + duplicate_v * (
+                dim - 1) + duplicate_h + duplicate_c
 
         self._config["nn"]["adam_a"] = self._config["nn"]["learning_rate"]
 
+        self._config["train"]["random_seed"] = int(time.time() * 1e6) % 10000
+
         if self._args:
-            self._config["train"]["random_seed"] = self._args.seed
             self._config["train"]["num_processes"] = self._args.num_processes
 
     @classmethod

@@ -1,9 +1,5 @@
-n_grid = 40
-# n_grid = 64
+n_grid = 32
 dx = 1 / n_grid
-squ = 0.05
-n_squ = int(squ * n_grid)
-
 
 class Scene:
     def __init__(self):
@@ -16,14 +12,6 @@ class Scene:
         self.offset_y = 0
 
     def add_rect(self, x, y, w, h, actuation, ptype=1):
-        if w > squ or h > squ:
-            dw = int(w / squ + 1e-6)
-            dh = int(h / squ + 1e-6)
-            for i in range(dw):
-                for j in range(dh):
-                    self.add_rect(x + i * squ, y + j * squ, squ, squ, actuation, ptype)
-            return
-
         if ptype == 0:
             assert actuation == -1
         global n_particles

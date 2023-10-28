@@ -1,4 +1,3 @@
-import os
 from multitask.utils import real
 import taichi as ti
 import time
@@ -8,20 +7,13 @@ from multitask.diffphy_trainer import DiffPhyTrainer
 
 
 if __name__ == "__main__":
+    # random_seed = int(time.time() * 1e6) % 10000
+    # ti.init(arch=ti.gpu, default_fp=real, random_seed=random_seed)
     args = get_args()
     print('args', args)
     config_file = args.config_file
-    os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu_id
-
-    # Init taichi
-    if args.random:
-        args.seed = int(time.time() * 1e6) % 10000
-    print(f"Random seed: {args.seed}")
-    ti.init(arch=ti.gpu, default_fp=real,
-            random_seed=args.seed, packed=args.packed, device_memory_GB=args.memory, debug=args.debug)
-
     if args.train:
-        config = ConfigSim.from_args_and_file(args, config_file)
+        config = ConfigSim.from_file(config_file)
         print(config)
         diffphy_trainer = DiffPhyTrainer(args, config=config)
         ti.root.lazy_grad()
@@ -30,7 +22,7 @@ if __name__ == "__main__":
         # diffphy_trainer.optimize(iters=35000, loss_enable={"velocity", "height", "actuation"}, root_dir="/home/mingrui/difftaichi/difftaichi2/saved_results")
     if args.evaluate:
         load_path = args.evaluate_path
-        config = ConfigSim.from_args_and_file(args, config_file, if_mkdir=False)
+        config = ConfigSim.from_file(config_file, if_mkdir=False)
         print(config)
         batch_required = 1
         for k, v in config.get_config()["validation"].items():
@@ -40,8 +32,5 @@ if __name__ == "__main__":
         print(f"Batch required {batch_required}")
         config._config["nn"]["batch_size"] = batch_required
         diffphy_trainer = DiffPhyTrainer(args, config=config)
-        diffphy_trainer.evaluate(load_path=load_path,
-                                 custom_loss_enable={"velocity", "height", "crawl"},
-                                 write_to_tensorboard=not args.no_tensorboard_evaluate,
-                                 evaluate_from_value=args.evaluate_from_value)
+        diffphy_trainer.evaluate(load_path=load_path, custom_loss_enable={"velocity", "height", "crawl"})
         # diffphy_trainer.evaluate(load_path=load_path, custom_loss_enable={"velocity", "height"})

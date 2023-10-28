@@ -25,19 +25,6 @@ def compute_TNS(w: ti.template(), s: ti.template()):
 #         w[I] -= w.grad[I] * learning_rate
 
 
-@ti.func
-def relu(x):
-    return ti.max(x, 0.0)
-
-@ti.func
-def sigmoid(x):
-    return 1 / (1 + ti.exp(-x))
-
-@ti.func
-def gelu(x):
-    return 0.5 * x * (1 + ti.tanh(ti.sqrt(2 / math.pi) * (x + 0.044715 * x ** 3)))
-
-
 @ti.data_oriented
 class Model:
 
@@ -48,10 +35,10 @@ class Model:
         self.weights2 = scalar()
         self.bias2 = scalar()
 
-        self.weights1_node.place(self.weights1)
-        self.n_hidden_node.place(self.bias1)
-        self.weights2_node.place(self.weights2)
-        self.n_output_node.place(self.bias2)
+        ti.root.dense(ti.ij, (self.n_hidden, self.n_input)).place(self.weights1)
+        ti.root.dense(ti.i, self.n_hidden).place(self.bias1)
+        ti.root.dense(ti.ij, (self.n_output, self.n_hidden)).place(self.weights2)
+        ti.root.dense(ti.i, self.n_output).place(self.bias2)
 
         self.weights = [self.weights1, self.weights2, self.bias1, self.bias2]
 
@@ -61,23 +48,23 @@ class Model:
         self.m_weights2, self.v_weights2 = scalar(), scalar()
         self.m_bias2, self.v_bias2 = scalar(), scalar()
 
-        self.weights1_node.place(self.m_weights1, self.v_weights1)
-        self.n_hidden_node.place(self.m_bias1, self.v_bias1)
-        self.weights2_node.place(self.m_weights2, self.v_weights2)
-        self.n_output_node.place(self.m_bias2, self.v_bias2)
+        ti.root.dense(ti.ij, (self.n_hidden, self.n_input)).place(self.m_weights1, self.v_weights1)
+        ti.root.dense(ti.i, self.n_hidden).place(self.m_bias1, self.v_bias1)
+        ti.root.dense(ti.ij, (self.n_output, self.n_hidden)).place(self.m_weights2, self.v_weights2)
+        ti.root.dense(ti.i, self.n_output).place(self.m_bias2, self.v_bias2)
 
         self.adam_weights = [self.m_weights1, self.v_weights1, self.m_bias1, self.v_bias1, \
                              self.m_weights2, self.v_weights2, self.m_bias2, self.v_bias2]
 
     @ti.kernel
     def weights_init(self):
-        q1 = math.sqrt(6 / self.n_input)
-        for model_id, i, j in ti.ndrange(self.n_models, self.n_hidden, self.n_input):
-            self.weights1[model_id, i, j] = (ti.random() * 2 - 1) * q1
+        q1 = ti.sqrt(6 / self.n_input)
+        for i, j in ti.ndrange(self.n_hidden, self.n_input):
+            self.weights1[i, j] = (ti.random() * 2 - 1) * q1
 
-        q2 = math.sqrt(6 / self.n_hidden)
-        for model_id, i, j in ti.ndrange(self.n_models, self.n_output, self.n_hidden):
-            self.weights2[model_id, i, j] = (ti.random() * 2 - 1) * q2
+        q2 = ti.sqrt(6 / self.n_hidden)
+        for i, j in ti.ndrange(self.n_output, self.n_hidden):
+            self.weights2[i, j] = (ti.random() * 2 - 1) * q2
         '''
         for i, j in ti.ndrange(n_hidden, n_input):
             weights1[i, j] = np.random.randn() * math.sqrt(
@@ -90,20 +77,12 @@ class Model:
         '''
 
     def __init__(self, config, steps, batch_size, n_input, n_output, \
-                 input, output, n_models, n_hidden = 64, method = "adam", activation="sin"):
+                 input, output, n_hidden = 64, method = "adam"):
 
         self.adam_b1 = config.get_config()["nn"]["adam_b1"]
         self.adam_b2 = config.get_config()["nn"]["adam_b2"]
         self.learning_rate = config.get_config()["nn"]["learning_rate"]
         self.dim = config.get_config()["robot"]["dim"]
-        self.activation = config.get_config()["nn"]["activation"] if "activation" in config.get_config()["nn"] else activation
-        self.activation_output = config.get_config()["nn"]["activation_output"] if "activation_output" in config.get_config()[
-            "nn"] else activation
-
-        self.n_models = n_models
-        
-        self.default_model_id = 0
-
         self.steps = steps
         self.batch_size = batch_size
         self.n_input = n_input
@@ -120,17 +99,10 @@ class Model:
         self.output = scalar()
         self.output_act = output
 
-        # array of structs
-        self.batch_node = ti.root.dense(ti.i, self.n_models)
-        self.n_hidden_node = self.batch_node.dense(ti.j, self.n_hidden)
-        self.weights1_node = self.n_hidden_node.dense(ti.k, self.n_input)
-        self.n_output_node = self.batch_node.dense(ti.j, self.n_output)
-        self.weights2_node = self.n_output_node.dense(ti.k, self.n_hidden)
-
         ti.root.place(self.TNS)
 
-        self.batch_node.dense(ti.axes(1, 2, 3), (self.steps, self.batch_size, self.n_hidden)).place(self.hidden, self.hidden_act)
-        self.batch_node.dense(ti.axes(1, 2, 3), (self.steps, self.batch_size, self.n_output)).place(self.output)
+        ti.root.dense(ti.ijk, (self.steps, self.batch_size, self.n_hidden)).place(self.hidden, self.hidden_act)
+        ti.root.dense(ti.ijk, (self.steps, self.batch_size, self.n_output)).place(self.output)
 
         self.weights_allocate()
         if self.method == "adam":
@@ -150,83 +122,43 @@ class Model:
 
     @ti.kernel
     def clear_single(self, t: ti.i32):
-        for model_id, k, i in ti.ndrange(self.n_models, self.batch_size, self.n_hidden):
-            self.hidden[model_id, t, k, i] = 0.
-        for model_id, k, i in ti.ndrange(self.n_models, self.batch_size, self.n_output):
-            self.output[model_id, t, k, i] = 0.
+        for k, i in ti.ndrange(self.batch_size, self.n_hidden):
+            self.hidden[t, k, i] = 0.
+        for k, i in ti.ndrange(self.batch_size, self.n_output):
+            self.output[t, k, i] = 0.
 
     @ti.kernel
     def nn1(self, t: ti.i32):
         if ti.static(self.dim == 2):
-            for model_id, k, i, j in ti.ndrange(self.n_models, self.batch_size, self.n_hidden, self.n_input):
-                self.hidden[model_id, t, k, i] += self.weights1[model_id, i, j] * self.input[model_id, t, k, j]
+            for k, i, j in ti.ndrange(self.batch_size, self.n_hidden, self.n_input):
+                self.hidden[t, k, i] += self.weights1[i, j] * self.input[t, k, j]
         else:
-            for model_id, k, i, j in ti.ndrange(self.n_models, self.batch_size, self.n_hidden, self.n_input):
-                self.hidden[model_id, t, k, i] += self.weights1[model_id, i, j] * self.input[model_id, t, k, j]
-        if ti.static(self.activation == "sin"):
-            for model_id, k, i in ti.ndrange(self.n_models, self.batch_size, self.n_hidden):
-                self.hidden_act[model_id, t, k, i] = ti.sin(self.hidden[model_id, t, k, i] + self.bias1[model_id, i])
-        elif ti.static(self.activation == "tanh"):
-            for model_id, k, i in ti.ndrange(self.n_models, self.batch_size, self.n_hidden):
-                self.hidden_act[model_id, t, k, i] = ti.tanh(self.hidden[model_id, t, k, i] + self.bias1[model_id, i])
-        elif ti.static(self.activation == "relu"):
-            for model_id, k, i in ti.ndrange(self.n_models, self.batch_size, self.n_hidden):
-                self.hidden_act[model_id, t, k, i] = relu(self.hidden[model_id, t, k, i] + self.bias1[model_id, i])
-        elif ti.static(self.activation == "sigmoid"):
-            for model_id, k, i in ti.ndrange(self.n_models, self.batch_size, self.n_hidden):
-                self.hidden_act[model_id, t, k, i] = sigmoid(self.hidden[model_id, t, k, i] + self.bias1[model_id, i])
-        elif ti.static(self.activation == "gelu"):
-            for model_id, k, i in ti.ndrange(self.n_models, self.batch_size, self.n_hidden):
-                self.hidden_act[model_id, t, k, i] = gelu(self.hidden[model_id, t, k, i] + self.bias1[model_id, i])
+            for k, i, j in ti.ndrange(self.batch_size, self.n_hidden, self.n_input):
+                self.hidden[t, k, i] += self.weights1[i, j] * self.input[t, k, j]
+        for k, i in ti.ndrange(self.batch_size, self.n_hidden):
+            self.hidden_act[t, k, i] = ti.sin(self.hidden[t, k, i] + self.bias1[i])
 
     @ti.kernel
     def nn2(self, t: ti.i32):
-        for model_id, k, i, j in ti.ndrange(self.n_models, self.batch_size, self.n_output, self.n_hidden):
-            self.output[model_id, t, k, i] += self.weights2[model_id, i, j] * self.hidden_act[model_id, t, k, j]
-
-        if ti.static(self.activation_output == "sin"):
-            for model_id, k, i in ti.ndrange(self.n_models, self.batch_size, self.n_output):
-                self.output_act[model_id, t, k, i] = ti.sin(self.output[model_id, t, k, i] + self.bias2[model_id, i])
-        elif ti.static(self.activation_output == "tanh"):
-            for model_id, k, i in ti.ndrange(self.n_models, self.batch_size, self.n_output):
-                self.output_act[model_id, t, k, i] = ti.tanh(self.output[model_id, t, k, i] + self.bias2[model_id, i])
-        elif ti.static(self.activation_output == "relu"):
-            for model_id, k, i in ti.ndrange(self.n_models, self.batch_size, self.n_output):
-                self.output_act[model_id, t, k, i] = relu(self.output[model_id, t, k, i] + self.bias2[model_id, i]) - 1.0
-        elif ti.static(self.activation_output == "sigmoid"):
-            for model_id, k, i in ti.ndrange(self.n_models, self.batch_size, self.n_output):
-                self.output_act[model_id, t, k, i] = sigmoid(self.output[model_id, t, k, i] + self.bias2[model_id, i]) * 2 - 1.0
-        elif ti.static(self.activation_output == "gelu"):
-            for model_id, k, i in ti.ndrange(self.n_models, self.batch_size, self.n_output):
-                self.output_act[model_id, t, k, i] = gelu(self.output[model_id, t, k, i] + self.bias2[model_id, i]) - 1.0
-
-
+        for k, i, j in ti.ndrange(self.batch_size, self.n_output, self.n_hidden):
+            self.output[t, k, i] += self.weights2[i, j] * self.hidden_act[t, k, j]
+        for k, i in ti.ndrange(self.batch_size, self.n_output):
+            self.output_act[t, k, i] = ti.sin(self.output[t, k, i] + self.bias2[i])
 
     def forward(self, t):
         self.nn1(t)
         self.nn2(t)
 
-    def dump_weights(self, name="save.pkl"):
+    def dump_weights(self, name = "save.pkl"):
         w_val = []
         for w in self.weights:
-            w = w.to_numpy()
-            w_val.append(w[self.default_model_id])
+            w_val.append(w.to_numpy())
         pkl.dump(w_val, open(name, "wb"))
-    
-    @ti.kernel
-    def copy_from_numpy(self, dst: ti.template(), src: ti.ext_arr(), model_id: ti.i32):
-        for I in ti.grouped(src):
-            dst[model_id, I] = src[I]
 
-    def load_weights(self, name="save.pkl", model_id=0):
+    def load_weights(self, name = "save.pkl"):
         w_val = pkl.load(open(name, 'rb'))
-        self.load_weights_from_value(w_val, model_id)
-
-    def load_weights_from_value(self, w_val, model_id=0):
         for w, val in zip(self.weights, w_val):
-            if val.shape[0] == 1:
-                val = val[0]
-            self.copy_from_numpy(w, val, model_id)
+            w.from_numpy(val)
 
     def gradient_update(self, iter = 0):
         if self.method == "adam":

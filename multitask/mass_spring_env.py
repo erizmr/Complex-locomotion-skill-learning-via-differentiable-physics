@@ -114,21 +114,21 @@ class MassSpringEnv(gym.Env):
             target_v = self.taichi_env.target_v[self.t, k][0]
             target_h = self.taichi_env.target_h[self.t, k]
 
-            post = self.taichi_env.solver.center[0, self.t, k][0]
-            post_ = self.taichi_env.solver.center[0, self.t - 1, k][0]
+            post = self.taichi_env.solver.center[self.t, k][0]
+            post_ = self.taichi_env.solver.center[self.t - 1, k][0]
             for i in range(max(self.t - 100, d), self.t):
-                tar = self.taichi_env.solver.center[0, i, k][0] + target_v
+                tar = self.taichi_env.solver.center[i, k][0] + target_v
                 pre_r = -(post_ - tar) ** 2
                 now_r = -(post - tar) ** 2
                 reward_v[k] += (now_r - pre_r) / (self.max_speed ** 2) / 400.
-            if "height" in self.task:
-                # Reward for jumping
-                height = self.taichi_env.solver.height[0, self.t, k]
-                # if height > self.last_height[k]:
-                d_reward = ((height - target_h) ** 2 - (self.last_height[k] - target_h) ** 2) / (target_h ** 2) * 10.0
-                reward_h[k] -= d_reward
-                if height > self.last_height[k]:
-                    self.last_height[k] = height
+
+            # Reward for jumping
+            height = self.taichi_env.solver.height[self.t, k]
+            # if height > self.last_height[k]:
+            d_reward = ((height - target_h) ** 2 - (self.last_height[k] - target_h) ** 2) / (target_h ** 2) * 10.0
+            reward_h[k] -= d_reward
+            if height > self.last_height[k]:
+                self.last_height[k] = height
             reward[k] += reward_v[k] + reward_h[k]
 
         return sum(reward) / self.batch_size, sum(reward_v) / self.batch_size, sum(reward_h) / self.batch_size
@@ -147,7 +147,7 @@ class MassSpringEnv(gym.Env):
 
 
     def get_state(self, t):
-        np_state = self.taichi_env.input_state.to_numpy()[0, t]
+        np_state = self.taichi_env.input_state.to_numpy()[t]
         if np.amax(np_state) > 1. or np.amin(np_state) < -1.:
             # print('action range error, try to clip')
             np_state = np.clip(np_state, a_min=-1., a_max=1.)
@@ -163,10 +163,10 @@ class MassSpringEnv(gym.Env):
 
         # Clear all batch losses
         for k in range(self.batch_size):
-            self.taichi_env.loss_batch[0, k] = 0.
+            self.taichi_env.loss_batch[k] = 0.
         for l in self.taichi_env.losses_batch:
             for k in range(self.batch_size):
-                l[0, k] = 0.
+                l[k] = 0.
 
     def compute_losses(self):
         self.taichi_env.get_loss(self.max_steps+1, loss_enable=self.task)
@@ -213,7 +213,7 @@ class MassSpringEnv(gym.Env):
         self.taichi_env.solver.clear_states(self.rollout_length)
         self.taichi_env.solver.compute_center(self.t)
         self.taichi_env.solver.compute_height(self.t)
-        self.las_pos = self.taichi_env.solver.center[0, 0, 0][0]
+        self.las_pos = self.taichi_env.solver.center[0, 0][0]
         self.taichi_env.nn_input(self.t, 0, self.max_speed, self.max_height)
         observation = self.get_state(self.t)
         return observation

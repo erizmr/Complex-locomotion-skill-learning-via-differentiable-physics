@@ -1,6 +1,6 @@
 {
   "robot": {
-    "name": "Monster",
+    "name": "Crawl",
     "id": 3,
     "solver": "mass_spring"
   },

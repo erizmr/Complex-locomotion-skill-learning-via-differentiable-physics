@@ -2,6 +2,7 @@ from util import read_json, write_json
 from multitask.config_util import dump_to_json
 
 import numpy as np
+import json
 
 
 class RobotDesignBase:
@@ -62,7 +63,7 @@ class RobotDesignMPM(RobotDesignBase):
         self.built = False
 
     def add_particle(self, pos, act_id):
-        assert act_id >= -2 and act_id < self.actuator_num
+        assert act_id >= -1 and act_id < self.actuator_num
         self.pos.append(self.offset + pos)
         self.actuator_id.append(act_id)
         self.n_particles += 1
@@ -85,8 +86,7 @@ class RobotDesignMPM(RobotDesignBase):
 
     def get_objects(self):
         assert self.built
-
-        return [list(x) for x in self.pos], self.actuator_id, self.actuator_num
+        return self.pos, self.actuator_id, self.actuator_num
 
     def build(self):
         positions = self.config["design"]["anchor"]
@@ -109,32 +109,12 @@ class RobotDesignMPM(RobotDesignBase):
         self.n_solid_particles = 0
         self.built = False
 
-    def draw(self):
-        assert self.built
-        import taichi as ti
-        default_res = 512
-        gui = ti.GUI(self.robot_name, background_color=0xFFFFFF)
-
-        def circle(x, y, color):
-            gui.circle((x, y + 0.1), ti.rgb_to_hex(color), 2)
-        aid = self.actuator_id
-        while gui.running:
-            for i in range(self.n_particles):
-                color = (0.06640625, 0.06640625, 0.06640625)
-                if aid[i] != -1:
-                    # act_applied = self.actuation[t - 1, 0, aid[i]]
-                    act_applied = 0.1
-                    color = (0.5 - act_applied, 0.5 - abs(act_applied), 0.5 + act_applied)
-                circle(self.pos[i][0], self.pos[i][1], color)
-            gui.show()
-
 
 class RobotDesignMassSpring(RobotDesignBase):
     def __init__(self, cfg):
         super(RobotDesignMassSpring, self).__init__(cfg)
         assert self.config["robot"]["solver"] == "mass_spring"
         self.robot_id = self.config["robot"]["id"]
-        self.robot_name = self.config["robot"]["name"]
         self.solver = self.config["robot"]["solver"]
         # design data holders
         self.objects = []
@@ -227,30 +207,22 @@ class RobotDesignMassSpring(RobotDesignBase):
     def draw(self):
         assert self.built
         import taichi as ti
-        default_res = 512
-        gui = ti.GUI(self.robot_name, background_color=0xFFFFFF)
+        gui = ti.GUI(background_color=0xFFFFFF)
 
-        scale = 2.0
-        write_to_png = False
-        compute_center_done = False
-        left_point = 1.0
-        right_point = 0.0
-        offset = 0.0
         def circle(x, y, color):
-            gui.circle((x * scale + offset, y * scale), ti.rgb_to_hex(color), 7 * scale )
+            gui.circle((x, y), ti.rgb_to_hex(color), 7)
         while gui.running:
             # draw segments
             for i in range(len(self.springs)):
                 def get_pt(x):
-                    return x[0] * scale + offset, x[1] * scale
-                r = 2 * scale * 0.85
+                    return x[0], x[1]
+                r = 2
                 c = 0x222222
                 # Show active spring in red
-                a = self.springs[i][4] * 0.35
+                a = self.springs[i][4] * 1.8
                 if a > 0.:
-                    r = 4 * scale * 0.85
-                    # c = ti.rgb_to_hex((0.5 + a, 0.5 - abs(a), 0.5 - a))
-                    c = ti.rgb_to_hex((0.5 - a, 0.5 - abs(a), 0.5 + a))
+                    r = 4
+                    c = ti.rgb_to_hex((0.5 + a, 0.5 - abs(a), 0.5 - a))
                 gui.line(get_pt(self.objects[self.springs[i][0]]),
                          get_pt(self.objects[self.springs[i][1]]),
                          color=c,
@@ -259,20 +231,7 @@ class RobotDesignMassSpring(RobotDesignBase):
             for i in range(len(self.objects)):
                 color = (0.06640625, 0.06640625, 0.06640625)
                 circle(self.objects[i][0], self.objects[i][1], color)
-                if not compute_center_done:
-                    x_val = self.objects[i][0] * scale
-                    if x_val < left_point:
-                        left_point = x_val
-                    if x_val > right_point:
-                        right_point = x_val
-            if not compute_center_done:
-                offset = 0.5 - (left_point + right_point) / 2
-            compute_center_done = True
-            if not write_to_png:
-                gui.show(f"./robot_design_data/{self.robot_id}_{self.robot_name}.png")
-                write_to_png = True
-            else:
-                gui.show()
+            gui.show()
 
     def add_object(self, x):
         self.objects.append(x)
@@ -357,13 +316,16 @@ class RobotDesignMassSpring(RobotDesignBase):
     #                          actuation=actuation,
     #                          active_spring=active_spring)
 
-
 class RobotDesignMassSpring3D(RobotDesignBase):
     def __init__(self, cfg):
         super(RobotDesignMassSpring3D, self).__init__(cfg)
         assert self.config["robot"]["solver"] == "mass_spring"
         self.robot_id = self.config["robot"]["id"]
         self.solver = self.config["robot"]["solver"]
+        self.spring_stiffness = self.config["robot"]["spring_stiffness"]
+        self.spring_actuation = self.config["robot"]["spring_actuation"]
+        print("Spring stiffness ", self.spring_stiffness)
+        print("Spring actuation ", self.spring_actuation)
         # design data holders
         self.objects = []
         self.springs = []
@@ -419,25 +381,40 @@ class RobotDesignMassSpring3D(RobotDesignBase):
 
         # b d
         # a c
-        self.add_mesh_spring(a, b, 3e4, actuation)
-        self.add_mesh_spring(c, d, 3e4, actuation)
-        self.add_mesh_spring(e, f, 3e4, actuation)
-        self.add_mesh_spring(g, h, 3e4, actuation)
+        self.add_mesh_spring(a, b, self.spring_stiffness, actuation)
+        self.add_mesh_spring(c, d, self.spring_stiffness, actuation)
+        self.add_mesh_spring(e, f, self.spring_stiffness, actuation)
+        self.add_mesh_spring(g, h, self.spring_stiffness, actuation)
 
-        self.add_mesh_spring(b, d, 3e4, 0)
-        self.add_mesh_spring(a, c, 3e4, 0)
-        self.add_mesh_spring(f, h, 3e4, 0)
-        self.add_mesh_spring(e, g, 3e4, 0)
+        self.add_mesh_spring(b, d, self.spring_stiffness, 0)
+        self.add_mesh_spring(a, c, self.spring_stiffness, 0)
+        self.add_mesh_spring(f, h, self.spring_stiffness, 0)
+        self.add_mesh_spring(e, g, self.spring_stiffness, 0)
 
-        self.add_mesh_spring(b, f, 3e4, 0)
-        self.add_mesh_spring(d, h, 3e4, 0)
-        self.add_mesh_spring(a, e, 3e4, 0)
-        self.add_mesh_spring(c, g, 3e4, 0)
+        self.add_mesh_spring(b, f, self.spring_stiffness, 0)
+        self.add_mesh_spring(d, h, self.spring_stiffness, 0)
+        self.add_mesh_spring(a, e, self.spring_stiffness, 0)
+        self.add_mesh_spring(c, g, self.spring_stiffness, 0)
 
-        self.add_mesh_spring(b, g, 3e4, 0)
-        self.add_mesh_spring(d, e, 3e4, 0)
-        self.add_mesh_spring(f, c, 3e4, 0)
-        self.add_mesh_spring(h, a, 3e4, 0)
+        self.add_mesh_spring(b, g, self.spring_stiffness, 0)
+        self.add_mesh_spring(d, e, self.spring_stiffness, 0)
+        self.add_mesh_spring(f, c, self.spring_stiffness, 0)
+        self.add_mesh_spring(h, a, self.spring_stiffness, 0)
+
+        self.add_mesh_spring(e, c, self.spring_stiffness, 0)
+        self.add_mesh_spring(a, g, self.spring_stiffness, 0)
+        self.add_mesh_spring(h, b, self.spring_stiffness, 0)
+        self.add_mesh_spring(d, f, self.spring_stiffness, 0)
+
+        self.add_mesh_spring(e, b, self.spring_stiffness, actuation)
+        self.add_mesh_spring(a, f, self.spring_stiffness, actuation)
+        self.add_mesh_spring(h, c, self.spring_stiffness, actuation)
+        self.add_mesh_spring(d, g, self.spring_stiffness, actuation)
+
+        self.add_mesh_spring(f, g, self.spring_stiffness, actuation)
+        self.add_mesh_spring(e, h, self.spring_stiffness, actuation)
+        self.add_mesh_spring(a, d, self.spring_stiffness, actuation)
+        self.add_mesh_spring(c, b, self.spring_stiffness, actuation)
 
         def append_square_face(a, b, c, d):
             self.faces.append((a, b, c))
@@ -450,10 +427,10 @@ class RobotDesignMassSpring3D(RobotDesignBase):
         append_square_face(b, a, e, f)
 
     def robotA(self):
-        self.add_mesh_square(0, 0, 0, actuation=0.2)
-        self.add_mesh_square(2, 0, 2, actuation=0.2)
-        self.add_mesh_square(0, 0, 2, actuation=0.2)
-        self.add_mesh_square(2, 0, 0, actuation=0.2)
+        self.add_mesh_square(0, 0, 0, actuation=self.spring_actuation)
+        self.add_mesh_square(2, 0, 2, actuation=self.spring_actuation)
+        self.add_mesh_square(0, 0, 2, actuation=self.spring_actuation)
+        self.add_mesh_square(2, 0, 0, actuation=self.spring_actuation)
 
         self.add_mesh_square(0, 1, 0, actuation=0)
         self.add_mesh_square(0, 1, 1, actuation=0)
@@ -465,9 +442,144 @@ class RobotDesignMassSpring3D(RobotDesignBase):
         self.add_mesh_square(2, 1, 1, actuation=0)
         self.add_mesh_square(2, 1, 2, actuation=0)
 
+    def robotB(self):
+        self.add_mesh_square(0, 0, 1, actuation=self.spring_actuation)
+        self.add_mesh_square(1, 0, 0, actuation=self.spring_actuation)
+        self.add_mesh_square(1, 0, 2, actuation=self.spring_actuation)
+        self.add_mesh_square(2, 0, 1, actuation=self.spring_actuation)
+
+        self.add_mesh_square(0, 1, 1, actuation=0)
+        self.add_mesh_square(1, 1, 0, actuation=0)
+        self.add_mesh_square(1, 1, 2, actuation=0)
+        self.add_mesh_square(2, 1, 1, actuation=0)
+        self.add_mesh_square(1, 1, 1, actuation=0)
+        self.add_mesh_square(1, 2, 1, actuation=0)
+
+    def robotC(self):
+        self.add_mesh_square(0, 0, 0, actuation=self.spring_actuation)
+        self.add_mesh_square(2, 0, 0, actuation=self.spring_actuation)
+        self.add_mesh_square(1, 0, 2, actuation=self.spring_actuation)
+
+        self.add_mesh_square(0, 1, 0, actuation=0)
+        self.add_mesh_square(2, 1, 0, actuation=0)
+        self.add_mesh_square(1, 1, 2, actuation=0)
+        self.add_mesh_square(0, 1, 1, actuation=0)
+        self.add_mesh_square(1, 1, 1, actuation=0)
+        self.add_mesh_square(2, 1, 1, actuation=0)
+
+    def robotD(self):
+        with open('cfg3d/skeleton.json') as json_file:
+            data = json.load(json_file)
+        for v in data['nodes']:
+            pos = data['nodes'][v]
+            pos[0] = pos[0] * 0.05
+            pos[1] = pos[1] * 0.05 + 0.212
+            pos[2] = pos[2] * 0.05 * 0.75
+            self.objects.append(pos)
+
+        motors = {(9, 21), (36, 24), (29, 26), (14, 11),
+            (14, 26), (10, 9), (29, 11), (25, 24), (25, 26), (36, 9), (21, 24), (10, 11)}
+
+        s = set()
+        for e in data['links']:
+            a, b = e
+            s.add((a, b))
+            s.add((b, a))
+            if (a, b) in motors or (b, a) in motors:
+                self.add_mesh_spring(a, b, self.spring_stiffness, self.spring_actuation)
+            else:
+                self.add_mesh_spring(a, b, self.spring_stiffness, 0.)
+
+        for e in list(motors) + [(14, 29), (29, 36), (36, 21), (21, 14), (11, 5), (26, 5), (24, 35), (9, 20), (26, 35), (11, 20), (9, 8), (24, 8), (11, 31), (26, 16), (24, 23), (9, 38)]:
+            a, b = e
+            if (a, b) in motors or (b, a) in motors:
+                self.add_mesh_spring(a, b, self.spring_stiffness, self.spring_actuation)
+            else:
+                self.add_mesh_spring(a, b, self.spring_stiffness, 0.)
+
+        for a in range(len(self.objects)):
+            for b in range(len(self.objects)):
+                for c in range(len(self.objects)):
+                    if a < b < c and (a, b) in s and (b, c) in s and (a, c) in s:
+                        self.faces.append((a, b, c))
+        return self.objects, self.springs, self.faces
+
+    def add_mesh_lying(self, i, j, k, actuation=0.0):
+        a = self.add_mesh_point(i, j, k)
+        b = self.add_mesh_point(i, j + 1, k)
+        c = self.add_mesh_point(i + 1, j, k)
+        d = self.add_mesh_point(i + 1, j + 1, k)
+        e = self.add_mesh_point(i, j, k + 1)
+        f = self.add_mesh_point(i, j + 1, k + 1)
+        g = self.add_mesh_point(i + 1, j, k + 1)
+        h = self.add_mesh_point(i + 1, j + 1, k + 1)
+
+        # b d
+        # a c
+        self.add_mesh_spring(a, b, self.spring_stiffness, 0)
+        self.add_mesh_spring(c, d, self.spring_stiffness, 0)
+        self.add_mesh_spring(e, f, self.spring_stiffness, 0)
+        self.add_mesh_spring(g, h, self.spring_stiffness, 0)
+
+        self.add_mesh_spring(b, d, self.spring_stiffness, 0)
+        self.add_mesh_spring(a, c, self.spring_stiffness, 0)
+        self.add_mesh_spring(f, h, self.spring_stiffness, 0)
+        self.add_mesh_spring(e, g, self.spring_stiffness, 0)
+
+        self.add_mesh_spring(b, f, self.spring_stiffness, actuation)
+        self.add_mesh_spring(d, h, self.spring_stiffness, actuation)
+        self.add_mesh_spring(a, e, self.spring_stiffness, actuation)
+        self.add_mesh_spring(c, g, self.spring_stiffness, actuation)
+
+        self.add_mesh_spring(b, g, self.spring_stiffness, actuation)
+        self.add_mesh_spring(d, e, self.spring_stiffness, actuation)
+        self.add_mesh_spring(f, c, self.spring_stiffness, actuation)
+        self.add_mesh_spring(h, a, self.spring_stiffness, actuation)
+
+        self.add_mesh_spring(e, c, self.spring_stiffness, actuation)
+        self.add_mesh_spring(a, g, self.spring_stiffness, actuation)
+        self.add_mesh_spring(h, b, self.spring_stiffness, actuation)
+        self.add_mesh_spring(d, f, self.spring_stiffness, actuation)
+
+        self.add_mesh_spring(e, b, self.spring_stiffness, actuation)
+        self.add_mesh_spring(a, f, self.spring_stiffness, actuation)
+        self.add_mesh_spring(h, c, self.spring_stiffness, actuation)
+        self.add_mesh_spring(d, g, self.spring_stiffness, actuation)
+
+        self.add_mesh_spring(f, g, self.spring_stiffness, 0)
+        self.add_mesh_spring(e, h, self.spring_stiffness, 0)
+        self.add_mesh_spring(a, d, self.spring_stiffness, 0)
+        self.add_mesh_spring(c, b, self.spring_stiffness, 0)
+
+        def append_square_face(a, b, c, d):
+            self.faces.append((a, b, c))
+            self.faces.append((d, a, c))
+        append_square_face(a, b, d, c)
+        append_square_face(b, f, h, d)
+        append_square_face(f, e, g, h)
+        append_square_face(e, a, c, g)
+        append_square_face(h, g, c, d)
+        append_square_face(b, a, e, f)
+
+    def robotE(self):
+        self.add_mesh_lying(0, 0, 0, actuation=self.spring_actuation)
+        self.add_mesh_lying(0, 0, 1, actuation=self.spring_actuation)
+        self.add_mesh_lying(0, 0, 2, actuation=self.spring_actuation)
+        self.add_mesh_lying(0, 0, 3, actuation=self.spring_actuation)
+        self.add_mesh_lying(0, 0, 4, actuation=self.spring_actuation)
+        self.add_mesh_lying(0, 0, 5, actuation=self.spring_actuation)
+
     def build(self):
         if self.robot_id == 100:
             self.robotA()
+        elif self.robot_id == 101:
+            self.robotB()
+        elif self.robot_id == 102:
+            self.robotC()
+        elif self.robot_id == 103:
+            self.robotD()
+        elif self.robot_id == 104:
+            self.robotE()
         else:
             print("Invalid robot id ", self.robot_id)
             assert False

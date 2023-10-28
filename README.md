@@ -1,50 +1,26 @@
-# DiffTaichi2
+# SNMT
+![Agents](./imgs/3d_collection.png)
 
+## Installation
+```pip install -r requirements.txt```
 
-## RL
+## Train
+```python3 main_diff_phy.py --config_file cfg3d/sim_quad.json --train```
 
-### Train
-`python3 main_rl.py --config_file cfg/sim_config_RL_robot2_vh.json --env-name "RL_Multitask" --algo ppo --use-gae --use-linear-lr-decay --train`
+```python3 main_diff_phy.py --config_file cfg3d/sim_spider.json --train```
 
-### Evaluate 
-`python3 main_rl.py --env-name "RL_Multitask" --algo ppo --use-gae --use-linear-lr-decay --evaluate --evaluate_path "saved_results/sim_config_RL_robot2_vh/DiffTaichi_RL/" `
+## View train statstic
+```tensorboard --logdir saved_results/sim_quad```
 
-## DiffPhy
+```tensorboard --logdir saved_results/sim_spider```
 
-### Train
-`python3 main_diff_phy.py --config_file cfg/sim_config_DiffPhy_robot2_vh.json --train`
+## Interactive control
+```python3 interactive_3d.py --config_file cfg3d/sim_quad.json --no-tensorboard```
 
-### Evaluate
-`python3 main_diff_phy.py --config_file cfg/sim_config_DiffPhy_robot2_vh.json --evaluate --no-tensorboard-train --evaluate_path saved_results/sim_config_DiffPhy_robot2_vh/DiffTaichi_DiffPhy`
+```python3 interactive_3d.py --config_file cfg3d/sim_spider.json --no-tensorboard```
 
-###  Interactive
-`python3 interactive.py --config_file cfg/sim_config_DiffPhy_robot2_vh.json --memory 1.0`
+## Evaluate
+```python3 main_diff_phy.py --config_file cfg3d/sim_quad.json --evaluate --no-tensorboard --evaluate_path saved_results/sim_quad/DiffTaichi_DiffPhy```
 
+```python3 main_diff_phy.py --config_file cfg3d/sim_spider.json --evaluate --no-tensorboard --evaluate_path saved_results/sim_spider/DiffTaichi_DiffPhy```
 
-## Output plots
-
-### DiffPhy Only
-
-#### Multi-Plots
-`python3 scripts/export_tensorboard_data.py --our_file_path saved_results/sim_config_DiffPhy_robot4_vh/DiffTaichi_DiffPhy/ --no-rl --error-bar --task tvh`
-
-#### Single-Plot
-`python3 scripts/export_tensorboard_data.py --our_file_path saved_results/sim_config_DiffPhy_robot4_vh/DiffTaichi_DiffPhy/ --no-rl --error-bar --task tvh --draw-single`
-
-### DiffPhy and RL
-
-#### Multi-Plots
-`python3 scripts/export_tensorboard_data.py --our_file_path saved_results/sim_config_DiffPhy_robot4_vh/DiffTaichi_DiffPhy/ --rl_file_path saved_results/sim_config_RL_robot4_vh/DiffTaichi_RL/ --task tvh`
-
-#### Single-Plot
-`python3 scripts/export_tensorboard_data.py --our_file_path saved_results/sim_config_DiffPhy_robot4_vh/DiffTaichi_DiffPhy/ --rl_file_path saved_results/sim_config_RL_robot4_vh/DiffTaichi_RL/ --task tvh --draw-single --error-bar`
-
-
-## 3D
-python3 main_diff_phy.py --config_file cfg3d/sim_config_DiffPhy_robot2_vh.json --train
-python3 main_diff_phy.py --config_file cfg3d/sim_config_DiffPhy_robot2_vh.json --evaluate --no-tensorboard-train --evaluate_path saved_results/sim_config_DiffPhy_robot2_vh/DiffTaichi_DiffPhy
-
-
-## Generate scripts
-#### Adam grid search
-python3 scripts/json_gen_multiple_robots.py --robots 2 --output-name run_scripts_adam_grid_search_b1_b2_0_9_0_999.sh --adam-grid-search --adam-b1 0.82 0.68 0.43 --adam-b2 0.9 0.999 --gpu-id 0

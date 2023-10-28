@@ -10,7 +10,7 @@
     "active_spring_mechanism": ["vertical","vertical","vertical","vertical","vertical","vertical"],
     "actuation_enable": [1, 1, 1, 1, 1, 1],
     "physical_parameter": {
-                          "actuation": [0.3, 0.3, 0.3, 0.3, 0.3, 0.3],
+                          "actuation": [0.2, 0.2, 0.2, 0.2, 0.2, 0.2],
                           "stiffness": [3e4, 3e4, 3e4, 3e4, 3e4, 3e4]
     }
   },

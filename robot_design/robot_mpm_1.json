@@ -9,8 +9,8 @@
         "particle_in_square_edge": 4,
         "actuator_num": 4,
         "offset":{
-            "x": 0.1,
-            "y": 0.1
+            "x": 0,
+            "y": 0
         }
     },
     "design": {
