@@ -24,3 +24,12 @@
 
 ```python3 main_diff_phy.py --config_file cfg3d/sim_spider.json --evaluate --no-tensorboard --evaluate_path saved_results/sim_spider/DiffTaichi_DiffPhy```
 
+### Cite this work
+```
+@article{fang2022complex,
+  title={Complex locomotion skill learning via differentiable physics},
+  author={Fang, Yu and Liu, Jiancheng and Zhang, Mingrui and Zhang, Jiasheng and Ma, Yidong and Li, Minchen and Hu, Yuanming and Jiang, Chenfanfu and Liu, Tiantian},
+  journal={arXiv preprint arXiv:2206.02341},
+  year={2022}
+}
+```
